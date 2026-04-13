@@ -10,14 +10,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.domain.repository.SettingsRepository
+import com.maestro.app.domain.service.LlmService
 import com.maestro.app.ui.components.CanvasSection
+import com.maestro.app.ui.components.LlmSidebar
 import com.maestro.app.ui.components.TopAppBarSection
-import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.MaestroBackground
 import com.maestro.app.ui.theme.Slate500
 
 @Composable
-fun ViewerScreen(viewModel: ViewerViewModel, onBack: () -> Unit) {
+fun ViewerScreen(
+    viewModel: ViewerViewModel,
+    llmService: LlmService,
+    settingsRepository: SettingsRepository,
+    conversationDataSource: ConversationLocalDataSource,
+    onBack: () -> Unit
+) {
     val drawingState = viewModel.drawingState
     val sidebarVisible by viewModel.sidebarVisible.collectAsState()
 
@@ -98,21 +107,13 @@ fun ViewerScreen(viewModel: ViewerViewModel, onBack: () -> Unit) {
                 drawingState = drawingState,
                 modifier = Modifier.weight(1f)
             )
-            // LLM sidebar placeholder — Phase 3
-            if (sidebarVisible) {
-                Box(
-                    modifier = Modifier
-                        .width(UxConfig.Viewer.SIDEBAR_WIDTH)
-                        .fillMaxHeight()
-                        .background(MaestroBackground),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "LLM Sidebar (Phase 3)",
-                        color = Slate500
-                    )
-                }
-            }
+            LlmSidebar(
+                isVisible = sidebarVisible,
+                onCollapse = { viewModel.toggleSidebar() },
+                llmService = llmService,
+                settingsRepository = settingsRepository,
+                conversationDataSource = conversationDataSource
+            )
         }
     }
 }

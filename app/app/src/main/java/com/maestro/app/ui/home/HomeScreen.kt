@@ -54,7 +54,11 @@ import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.*
 
 @Composable
-fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    onOpenPdf: (PdfDocument) -> Unit,
+    onOpenSettings: () -> Unit = {}
+) {
     val documents by viewModel.documents.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val currentFolderId by viewModel.currentFolderId.collectAsState()

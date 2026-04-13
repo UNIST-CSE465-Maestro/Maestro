@@ -372,6 +372,8 @@ object UxConfig {
     // ── Viewer screen ────────────────────────────────
 
     object Viewer {
-        val SIDEBAR_WIDTH = 320.dp
+        val SIDEBAR_MIN_WIDTH = 250.dp
+        val SIDEBAR_MAX_WIDTH = 600.dp
+        val SIDEBAR_DEFAULT_WIDTH = 350.dp
     }
 }

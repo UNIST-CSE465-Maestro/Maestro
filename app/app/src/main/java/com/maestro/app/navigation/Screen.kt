@@ -6,4 +6,5 @@ sealed class Screen(val route: String) {
         fun createRoute(pdfId: String, pageCount: Int, uriEncoded: String): String =
             "viewer/$pdfId/$pageCount/$uriEncoded"
     }
+    data object Settings : Screen("settings")
 }
