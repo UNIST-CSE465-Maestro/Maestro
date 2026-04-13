@@ -4,6 +4,7 @@ uv.lock
 
 # Android
 app/.gradle/
+app/.kotlin/
 app/build/
 app/app/build/
 app/local.properties
