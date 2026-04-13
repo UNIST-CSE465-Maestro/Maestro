@@ -9,9 +9,18 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+_MODE_BACKEND_MAP = {
+    "standard": "pipeline",
+    "ai": "vlm-auto-engine",
+}
+
+
+def _resolve_backend(mode: str) -> str:
+    return _MODE_BACKEND_MAP.get(mode, "pipeline")
+
 
 @shared_task(bind=True, max_retries=2)
-def process_pdf(self, task_id: str, file_path: str):
+def process_pdf(self, task_id: str, file_path: str, mode: str = "standard"):
     """Run MinerU on uploaded PDF and store results."""
     from .models import AnalysisTask
 
@@ -24,20 +33,27 @@ def process_pdf(self, task_id: str, file_path: str):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Verify SHA256
-        sha256 = hashlib.sha256(input_path.read_bytes()).hexdigest()
+        # Verify SHA256 (chunked, includes mode)
+        hasher = hashlib.sha256()
+        with open(input_path, "rb") as f:
+            while chunk := f.read(8192):
+                hasher.update(chunk)
+        hasher.update(b"|" + mode.encode())
+        sha256 = hasher.hexdigest()
         if sha256 != task.sha256:
             raise ValueError(
-                f"SHA256 mismatch: expected {task.sha256}, got {sha256}"
+                f"SHA256 mismatch: expected {task.sha256}, "
+                f"got {sha256}"
             )
 
         # Run MinerU CLI
         result = subprocess.run(
             [
-                "mineru",
-                str(input_path),
+                str(Path(settings.BASE_DIR).parent / ".venv" / "bin" / "mineru"),
+                "-p", str(input_path),
                 "-o", str(output_dir),
                 "-m", "auto",
+                "-b", _resolve_backend(mode),
             ],
             capture_output=True,
             text=True,
@@ -45,8 +61,16 @@ def process_pdf(self, task_id: str, file_path: str):
         )
 
         if result.returncode != 0:
+            logger.error(
+                "MinerU stderr for task %s:\n%s",
+                task_id, result.stderr
+            )
+            logger.error(
+                "MinerU stdout for task %s:\n%s",
+                task_id, result.stdout
+            )
             raise RuntimeError(
-                f"MinerU failed: {result.stderr[:500]}"
+                f"MinerU failed: {result.stderr[:2000]}"
             )
 
         # Find output files

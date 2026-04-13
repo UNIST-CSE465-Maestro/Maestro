@@ -5,6 +5,10 @@ from django.db import models
 
 
 class AnalysisTask(models.Model):
+    class Mode(models.TextChoices):
+        STANDARD = "standard", "일반 추출"
+        AI = "ai", "AI 추출"
+
     class Status(models.TextChoices):
         QUEUED = "queued", "대기중"
         PROCESSING = "processing", "처리중"
@@ -18,6 +22,11 @@ class AnalysisTask(models.Model):
         related_name="analysis_tasks",
     )
     sha256 = models.CharField(max_length=64, db_index=True)
+    mode = models.CharField(
+        max_length=10,
+        choices=Mode.choices,
+        default=Mode.STANDARD,
+    )
     original_filename = models.CharField(max_length=255)
     status = models.CharField(
         max_length=20,

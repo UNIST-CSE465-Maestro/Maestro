@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-BASE_URL="https://maestro.jwchae.com"
+BASE_URL="${MAESTRO_URL:-https://maestro.jwchae.com}"
 PDF_FILE="${1:?Usage: ./test.sh <pdf_file>}"
 
 if [ ! -f "$PDF_FILE" ]; then
@@ -67,13 +67,25 @@ RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/v1/material-analyzer/"
     -F "sha256=$SHA256")
 BODY=$(echo "$RESP" | head -n -1)
 HTTP_CODE=$(echo "$RESP" | tail -1)
-check "POST /api/v1/material-analyzer/" "$HTTP_CODE" 202
+if [ "$HTTP_CODE" -eq 202 ] || [ "$HTTP_CODE" -eq 200 ]; then
+    green "  PASS  POST /api/v1/material-analyzer/ (HTTP $HTTP_CODE)"
+else
+    red "  FAIL  POST /api/v1/material-analyzer/ (HTTP $HTTP_CODE, expected 200 or 202)"
+    exit 1
+fi
 echo "  $BODY"
 
 TASK_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 echo "  task_id = $TASK_ID"
 
+# If already completed (cache hit), skip polling
+if [ "$HTTP_CODE" -eq 200 ]; then
+    STATUS="completed"
+    green "  Cache hit — already completed"
+fi
+
 # ─── 4. Poll Status ─────────────────────────────────
+if [ "$HTTP_CODE" -ne 200 ]; then
 bold "[4/5] Polling status..."
 for i in $(seq 1 60); do
     sleep 5
@@ -99,19 +111,19 @@ if [ "$STATUS" != "completed" ]; then
     red "  Timeout: task did not complete within 5 minutes"
     exit 1
 fi
+fi  # end polling block
 
 # ─── 5. Fetch Results ───────────────────────────────
 bold "[5/5] Fetch results"
+BASENAME="$(basename "$PDF_FILE" .pdf)"
 
-echo "  --- Markdown (first 500 chars) ---"
 curl -s "$BASE_URL/api/v1/material-analyzer/${TASK_ID}.md" \
-    -H "Authorization: Bearer $ACCESS" | head -c 500
-echo ""
+    -H "Authorization: Bearer $ACCESS" -o "${BASENAME}.md"
+green "  Saved ${BASENAME}.md ($(wc -c < "${BASENAME}.md") bytes)"
 
-echo "  --- JSON (first 500 chars) ---"
 curl -s "$BASE_URL/api/v1/material-analyzer/${TASK_ID}.json" \
-    -H "Authorization: Bearer $ACCESS" | head -c 500
-echo ""
+    -H "Authorization: Bearer $ACCESS" -o "${BASENAME}.json"
+green "  Saved ${BASENAME}.json ($(wc -c < "${BASENAME}.json") bytes)"
 
 bold ""
 green "=== All tests passed ==="

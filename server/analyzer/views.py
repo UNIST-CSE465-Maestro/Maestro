@@ -25,12 +25,23 @@ class MaterialAnalyzerView(APIView):
 
         uploaded_file = serializer.validated_data["file"]
         client_hash = serializer.validated_data["sha256"]
+        mode = serializer.validated_data.get("mode", "standard")
 
-        # Read file and compute server-side SHA256
-        file_bytes = uploaded_file.read()
-        server_hash = hashlib.sha256(file_bytes).hexdigest()
+        # Save to temp file first, then hash in chunks
+        upload_dir = settings.MEDIA_ROOT / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        import uuid as _uuid
+        tmp_path = upload_dir / f"tmp_{_uuid.uuid4()}.pdf"
+        hasher = hashlib.sha256()
+        with open(tmp_path, "wb") as f:
+            for chunk in uploaded_file.chunks(chunk_size=8192):
+                f.write(chunk)
+                hasher.update(chunk)
+        hasher.update(b"|" + mode.encode())
+        server_hash = hasher.hexdigest()
 
         if client_hash != server_hash:
+            tmp_path.unlink(missing_ok=True)
             return Response(
                 {"detail": "SHA256 해시 불일치"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -40,6 +51,7 @@ class MaterialAnalyzerView(APIView):
         cached = (
             AnalysisTask.objects.filter(
                 sha256=server_hash,
+                mode=mode,
                 status=AnalysisTask.Status.COMPLETED,
                 expires_at__gt=timezone.now(),
             )
@@ -55,6 +67,7 @@ class MaterialAnalyzerView(APIView):
         processing = (
             AnalysisTask.objects.filter(
                 sha256=server_hash,
+                mode=mode,
                 status__in=[
                     AnalysisTask.Status.QUEUED,
                     AnalysisTask.Status.PROCESSING,
@@ -75,17 +88,16 @@ class MaterialAnalyzerView(APIView):
         task = AnalysisTask.objects.create(
             user=request.user,
             sha256=server_hash,
+            mode=mode,
             original_filename=uploaded_file.name,
             expires_at=expires_at,
         )
 
-        upload_dir = settings.MEDIA_ROOT / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
         file_path = upload_dir / f"{task.id}.pdf"
-        file_path.write_bytes(file_bytes)
+        tmp_path.rename(file_path)
 
         # Dispatch Celery task
-        process_pdf.delay(str(task.id), str(file_path))
+        process_pdf.delay(str(task.id), str(file_path), mode)
 
         return Response(
             AnalysisTaskSerializer(task).data,

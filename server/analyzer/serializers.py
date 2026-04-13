@@ -10,6 +10,7 @@ class AnalysisTaskSerializer(serializers.ModelSerializer):
             "id",
             "sha256",
             "original_filename",
+            "mode",
             "status",
             "created_at",
             "updated_at",
@@ -21,3 +22,7 @@ class AnalysisTaskSerializer(serializers.ModelSerializer):
 class AnalysisUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
     sha256 = serializers.CharField(max_length=64)
+    mode = serializers.ChoiceField(
+        choices=["standard", "ai"],
+        default="standard",
+    )
