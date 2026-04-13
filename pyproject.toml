@@ -1,0 +1,6 @@
+[project]
+name = "maestro"
+version = "0.1.0"
+description = "CLI Toolkits for Project Maestro (use `uv run *`)"
+requires-python = ">=3.12"
+dependencies = []
