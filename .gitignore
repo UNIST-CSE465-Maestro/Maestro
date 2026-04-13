@@ -13,6 +13,9 @@ app/gradle/wrapper/gradle-wrapper.jar
 # Django
 server/db.sqlite3
 server/media/
+server/staticfiles/
+server/logs/
+server/.env
 __pycache__/
 *.pyc
 
