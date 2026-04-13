@@ -1,13 +1,17 @@
 package com.maestro.app.ui.viewer
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.maestro.app.data.local.PdfTextExtractor
+import com.maestro.app.data.remote.MaterialAnalyzerClient
+import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
+import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,8 +21,10 @@ import kotlinx.coroutines.withContext
 
 class ViewerViewModel(
     private val annotationRepo: AnnotationRepositoryImpl,
-    private val pdfTextExtractor: PdfTextExtractor,
+    private val analyzerClient: MaterialAnalyzerClient,
+    private val settingsRepository: SettingsRepository,
     private val quizService: QuizService,
+    private val appContext: Context,
     val pdfId: String,
     val pageCount: Int,
     val pdfUri: Uri?
@@ -46,35 +52,58 @@ class ViewerViewModel(
         MutableStateFlow(false)
     val isExtracting = _isExtracting.asStateFlow()
 
+    private val _extractionMode =
+        MutableStateFlow("standard")
+    val extractionMode =
+        _extractionMode.asStateFlow()
+
     private var lastSavedVersion = 0
 
     init {
         loadAnnotations()
     }
 
+    fun toggleExtractionMode() {
+        _extractionMode.value =
+            if (_extractionMode.value == "standard") {
+                "ai"
+            } else {
+                "standard"
+            }
+    }
+
     private fun loadAnnotations() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                annotationRepo.loadAll(pdfId, drawingState)
+                annotationRepo.loadAll(
+                    pdfId,
+                    drawingState
+                )
             }
-            lastSavedVersion = drawingState.annotationVersion
+            lastSavedVersion =
+                drawingState.annotationVersion
         }
     }
 
     fun saveIfNeeded() {
-        val currentVersion = drawingState.annotationVersion
+        val currentVersion =
+            drawingState.annotationVersion
         if (currentVersion <= lastSavedVersion) return
         lastSavedVersion = currentVersion
         viewModelScope.launch {
             delay(UxConfig.Timing.AUTOSAVE_DEBOUNCE_MS)
             withContext(Dispatchers.IO) {
-                annotationRepo.saveAll(pdfId, drawingState)
+                annotationRepo.saveAll(
+                    pdfId,
+                    drawingState
+                )
             }
         }
     }
 
     fun toggleSidebar() {
-        _sidebarVisible.value = !_sidebarVisible.value
+        _sidebarVisible.value =
+            !_sidebarVisible.value
     }
 
     fun sendSelectionToLlm(bitmap: ByteArray, prompt: String) {
@@ -94,14 +123,8 @@ class ViewerViewModel(
         _isExtracting.value = true
         viewModelScope.launch {
             try {
-                var content =
-                    pdfTextExtractor.loadContentMd(pdfId)
-                if (content == null) {
-                    content = pdfTextExtractor
-                        .extractText(uri, pageCount)
-                    pdfTextExtractor
-                        .saveContentMd(pdfId, content)
-                }
+                val mode = _extractionMode.value
+                val content = loadOrExtract(uri, mode)
                 val quiz =
                     quizService.generateQuiz(content)
                 _quizResult.value = quiz
@@ -114,5 +137,47 @@ class ViewerViewModel(
                 _isExtracting.value = false
             }
         }
+    }
+
+    private suspend fun loadOrExtract(uri: Uri, mode: String): String {
+        // Check local cache first
+        val cached = loadContentMd(pdfId)
+        if (cached != null) return cached
+
+        // Compute hash and upload
+        val hash = MaterialAnalyzerHash.compute(
+            appContext,
+            uri,
+            mode
+        )
+        val task = analyzerClient.upload(
+            uri,
+            mode,
+            hash
+        )
+        analyzerClient.pollUntilComplete(task.id)
+        val content = analyzerClient.getResultMd(task.id)
+
+        // Cache locally
+        saveContentMd(pdfId, content)
+        return content
+    }
+
+    private suspend fun saveContentMd(documentId: String, text: String) =
+        withContext(Dispatchers.IO) {
+            val dir = File(
+                appContext.filesDir,
+                "documents/$documentId"
+            )
+            dir.mkdirs()
+            File(dir, "content.md").writeText(text)
+        }
+
+    private suspend fun loadContentMd(documentId: String): String? = withContext(Dispatchers.IO) {
+        val file = File(
+            appContext.filesDir,
+            "documents/$documentId/content.md"
+        )
+        if (file.exists()) file.readText() else null
     }
 }

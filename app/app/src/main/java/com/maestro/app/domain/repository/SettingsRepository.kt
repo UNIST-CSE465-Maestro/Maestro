@@ -7,4 +7,14 @@ interface SettingsRepository {
     suspend fun setApiKey(key: String)
     suspend fun clearApiKey()
     suspend fun isApiKeySet(): Boolean
+
+    fun getServerUrl(): Flow<String?>
+    suspend fun setServerUrl(url: String)
+    fun getAccessToken(): Flow<String?>
+    fun getRefreshToken(): Flow<String?>
+    suspend fun setTokens(access: String, refresh: String)
+    suspend fun clearTokens()
+    suspend fun isLoggedIn(): Boolean
+    fun getUsername(): Flow<String?>
+    suspend fun setUsername(name: String)
 }

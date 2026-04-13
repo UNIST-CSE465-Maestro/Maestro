@@ -12,12 +12,14 @@ val appModule = module {
     viewModel { params ->
         ViewerViewModel(
             annotationRepo = get(),
-            pdfTextExtractor = get(),
+            analyzerClient = get(),
+            settingsRepository = get(),
             quizService = get(),
+            appContext = get(),
             pdfId = params.get<String>(),
             pageCount = params.get<Int>(),
             pdfUri = params.get<Uri>()
         )
     }
-    viewModel { SettingsViewModel(get(), get()) }
+    viewModel { SettingsViewModel(get(), get(), get()) }
 }

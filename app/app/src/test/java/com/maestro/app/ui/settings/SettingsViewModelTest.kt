@@ -5,6 +5,7 @@ import com.maestro.app.domain.model.ChatMessage
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.fake.FakeSettingsRepository
 import com.maestro.app.util.MainCoroutineRule
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -47,7 +48,11 @@ class SettingsViewModelTest {
     @Before
     fun setup() {
         settingsRepo = FakeSettingsRepository()
-        viewModel = SettingsViewModel(settingsRepo, stubLlmService)
+        viewModel = SettingsViewModel(
+            settingsRepo,
+            stubLlmService,
+            mockk(relaxed = true)
+        )
     }
 
     @Test
