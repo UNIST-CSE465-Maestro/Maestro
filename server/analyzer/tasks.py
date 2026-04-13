@@ -33,13 +33,14 @@ def process_pdf(self, task_id: str, file_path: str, mode: str = "standard"):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Verify SHA256 (chunked, includes mode)
-        hasher = hashlib.sha256()
+        # Verify SHA256: SHA256(SHA256(file) + mode)
+        file_hasher = hashlib.sha256()
         with open(input_path, "rb") as f:
             while chunk := f.read(8192):
-                hasher.update(chunk)
-        hasher.update(b"|" + mode.encode())
-        sha256 = hasher.hexdigest()
+                file_hasher.update(chunk)
+        sha256 = hashlib.sha256(
+            file_hasher.hexdigest().encode() + mode.encode()
+        ).hexdigest()
         if sha256 != task.sha256:
             raise ValueError(
                 f"SHA256 mismatch: expected {task.sha256}, "

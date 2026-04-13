@@ -32,13 +32,14 @@ class MaterialAnalyzerView(APIView):
         upload_dir.mkdir(parents=True, exist_ok=True)
         import uuid as _uuid
         tmp_path = upload_dir / f"tmp_{_uuid.uuid4()}.pdf"
-        hasher = hashlib.sha256()
+        file_hasher = hashlib.sha256()
         with open(tmp_path, "wb") as f:
             for chunk in uploaded_file.chunks(chunk_size=8192):
                 f.write(chunk)
-                hasher.update(chunk)
-        hasher.update(b"|" + mode.encode())
-        server_hash = hasher.hexdigest()
+                file_hasher.update(chunk)
+        server_hash = hashlib.sha256(
+            file_hasher.hexdigest().encode() + mode.encode()
+        ).hexdigest()
 
         if client_hash != server_hash:
             tmp_path.unlink(missing_ok=True)

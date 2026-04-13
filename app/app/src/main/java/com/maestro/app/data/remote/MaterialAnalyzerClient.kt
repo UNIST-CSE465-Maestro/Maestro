@@ -24,14 +24,20 @@ object MaterialAnalyzerHash {
         uri: Uri,
         mode: String
     ): String = withContext(Dispatchers.IO) {
-        val digest = MessageDigest.getInstance("SHA-256")
+        // Step 1: SHA256(file)
+        val fileDigest = MessageDigest.getInstance("SHA-256")
         context.contentResolver.openInputStream(uri)
-            ?.use { stream -> hashStream(digest, stream) }
+            ?.use { stream -> hashStream(fileDigest, stream) }
             ?: throw IllegalStateException(
                 "Cannot open $uri"
             )
-        digest.update("|$mode".toByteArray())
-        digest.digest().joinToString("") {
+        val fileHash = fileDigest.digest().joinToString("") {
+            "%02x".format(it)
+        }
+        // Step 2: SHA256(fileHash + mode)
+        val finalDigest = MessageDigest.getInstance("SHA-256")
+        finalDigest.update((fileHash + mode).toByteArray())
+        finalDigest.digest().joinToString("") {
             "%02x".format(it)
         }
     }
