@@ -28,6 +28,8 @@ fun TopAppBarSection(
     onBack: () -> Unit = {},
     onUndo: () -> Unit = {},
     onRedo: () -> Unit = {},
+    onInsertImage: () -> Unit = {},
+    onQuiz: () -> Unit = {},
     onToggleSidebar: () -> Unit = {}
 ) {
     Row(
@@ -103,6 +105,19 @@ fun TopAppBarSection(
             )
         }
 
+        IconButton(
+            onClick = onInsertImage,
+            modifier = Modifier.size(
+                UxConfig.TopBar.ICON_BUTTON_SIZE
+            )
+        ) {
+            Icon(
+                Icons.Default.Image,
+                contentDescription = "이미지 삽입",
+                tint = Slate500
+            )
+        }
+
         Box(
             Modifier.width(
                 UxConfig.TopBar.DIVIDER_WIDTH
@@ -169,7 +184,7 @@ fun TopAppBarSection(
         Spacer(Modifier.width(4.dp))
 
         Button(
-            onClick = {},
+            onClick = onQuiz,
             shape = RoundedCornerShape(UxConfig.TopBar.QUIZ_BUTTON_CORNER),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent

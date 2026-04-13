@@ -12,6 +12,8 @@ val appModule = module {
     viewModel { params ->
         ViewerViewModel(
             annotationRepo = get(),
+            pdfTextExtractor = get(),
+            quizService = get(),
             pdfId = params.get<String>(),
             pageCount = params.get<Int>(),
             pdfUri = params.get<Uri>()

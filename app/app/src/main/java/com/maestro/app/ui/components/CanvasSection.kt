@@ -91,7 +91,8 @@ fun CanvasSection(
     pdfUri: Uri?,
     pageCount: Int,
     drawingState: DrawingState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLassoLlm: ((ByteArray) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -314,7 +315,9 @@ fun CanvasSection(
                                 pageIndex = pageIndex,
                                 modifier =
                                 Modifier
-                                    .matchParentSize()
+                                    .matchParentSize(),
+                                onLassoLlm =
+                                    onLassoLlm
                             )
 
                             // Long-press action menu

@@ -1,5 +1,8 @@
 package com.maestro.app.ui.viewer
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
@@ -7,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -16,6 +20,7 @@ import com.maestro.app.domain.service.LlmService
 import com.maestro.app.ui.components.CanvasSection
 import com.maestro.app.ui.components.LlmSidebar
 import com.maestro.app.ui.components.TopAppBarSection
+import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroBackground
 import com.maestro.app.ui.theme.Slate500
 
@@ -28,7 +33,43 @@ fun ViewerScreen(
     onBack: () -> Unit
 ) {
     val drawingState = viewModel.drawingState
-    val sidebarVisible by viewModel.sidebarVisible.collectAsState()
+    val sidebarVisible by viewModel
+        .sidebarVisible.collectAsState()
+    val context = LocalContext.current
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val stream = context.contentResolver
+                .openInputStream(uri)
+            val bitmap = BitmapFactory
+                .decodeStream(stream)
+            stream?.close()
+            if (bitmap != null) {
+                val page = drawingState
+                    .activePageIndex
+                    .coerceAtLeast(0)
+                val imgW = bitmap.width.toFloat()
+                val imgH = bitmap.height.toFloat()
+                val overlay =
+                    DrawingState.ImageOverlay(
+                        bitmap, 100f, 100f,
+                        imgW, imgH
+                    )
+                drawingState.addImage(
+                    page, overlay
+                )
+                drawingState.selectedImage =
+                    overlay
+                drawingState.selectedImagePage =
+                    page
+            }
+        } catch (_: Throwable) {
+            // ignore decode failures
+        }
+    }
 
     val safeUri = remember(viewModel.pdfUri) {
         try {
@@ -97,7 +138,15 @@ fun ViewerScreen(
             onBack = onBack,
             onUndo = { drawingState.undo() },
             onRedo = { drawingState.redo() },
-            onToggleSidebar = { viewModel.toggleSidebar() }
+            onInsertImage = {
+                imagePicker.launch("image/*")
+            },
+            onQuiz = {
+                viewModel.extractAndQuiz()
+            },
+            onToggleSidebar = {
+                viewModel.toggleSidebar()
+            }
         )
 
         Row(modifier = Modifier.weight(1f)) {
@@ -105,7 +154,13 @@ fun ViewerScreen(
                 pdfUri = safeUri,
                 pageCount = safePageCount,
                 drawingState = drawingState,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onLassoLlm = { imageBytes ->
+                    viewModel.sendSelectionToLlm(
+                        imageBytes,
+                        "이 영역에 대해 설명해주세요"
+                    )
+                }
             )
             LlmSidebar(
                 isVisible = sidebarVisible,

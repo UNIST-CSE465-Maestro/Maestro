@@ -81,6 +81,7 @@ private var copyButtonRect: Rect? = null
 private var deleteButtonRect: Rect? = null
 private var cropCopyButtonRect: Rect? = null
 private var cropCancelButtonRect: Rect? = null
+private var llmButtonRect: Rect? = null
 private var imgDeleteRect: Rect? = null
 private var imgCopyRect: Rect? = null
 private var imgCutRect: Rect? = null
@@ -91,7 +92,12 @@ private var imgOriginal: DrawingState.ImageOverlay? = null
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun StylusDrawingCanvas(state: DrawingState, pageIndex: Int, modifier: Modifier = Modifier) {
+fun StylusDrawingCanvas(
+    state: DrawingState,
+    pageIndex: Int,
+    modifier: Modifier = Modifier,
+    onLassoLlm: ((ByteArray) -> Unit)? = null
+) {
     val pageStrokes = state.strokesForPage(pageIndex)
     val view = LocalView.current
     val context = LocalContext.current
@@ -181,6 +187,12 @@ fun StylusDrawingCanvas(state: DrawingState, pageIndex: Int, modifier: Modifier 
                         if (isStylus) {
                             state.sPenButtonPressed = false
                         }
+                        return@pointerInteropFilter false
+                    }
+
+                    // Palm rejection: ignore finger when
+                    // stylus was recently active
+                    if (!isStylus && state.isStylusActive) {
                         return@pointerInteropFilter false
                     }
 
@@ -391,6 +403,22 @@ fun StylusDrawingCanvas(state: DrawingState, pageIndex: Int, modifier: Modifier 
                             )
                             state.deleteSelection()
                             state.isStylusTouching = false
+                            buttonTapConsumed = true
+                            return@pointerInteropFilter true
+                        }
+                        if (llmButtonRect?.contains(
+                                Offset(tx, ty)
+                            ) == true &&
+                            onLassoLlm != null
+                        ) {
+                            captureSelectionBitmap(
+                                state,
+                                pageIndex,
+                                canvasWidth,
+                                onLassoLlm
+                            )
+                            state.isStylusTouching =
+                                false
                             buttonTapConsumed = true
                             return@pointerInteropFilter true
                         }
@@ -1213,6 +1241,7 @@ private fun DrawScope.drawSelectionBox(bounds: Rect) {
 }
 
 private val BtnCut = Color(0xFFFF8F00) // amber
+private val BtnLlm = Color(0xFF7C3AED) // purple
 
 private fun DrawScope.drawSelectionButtons(bounds: Rect) {
     val btnSize = UxConfig.Selection.BUTTON_SIZE
@@ -1328,6 +1357,119 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         Offset(cx3 + 7f, cy3 + 7f),
         style = Stroke(UxConfig.Selection.CUT_CIRCLE_STROKE)
     )
+
+    // LLM / AI button (purple) - far left
+    val llmSize = UxConfig.Selection.LLM_BUTTON_SIZE
+    val llmRect = Rect(
+        cutRect.left - llmSize - gap,
+        btnY,
+        cutRect.left - gap,
+        btnY + llmSize
+    )
+    llmButtonRect = llmRect
+    drawRoundRect(
+        BtnLlm,
+        Offset(llmRect.left, llmRect.top),
+        Size(llmSize, llmSize),
+        CornerRadius(
+            UxConfig.Selection.BUTTON_CORNER_RADIUS
+        ),
+        style = Fill
+    )
+    val cx4 = llmRect.center.x
+    val cy4 = llmRect.center.y
+    // Draw "AI" text via simple lines
+    // Letter A
+    drawLine(
+        Color.White,
+        Offset(cx4 - 10f, cy4 + 8f),
+        Offset(cx4 - 5f, cy4 - 8f),
+        2.5f, StrokeCap.Round
+    )
+    drawLine(
+        Color.White,
+        Offset(cx4 - 5f, cy4 - 8f),
+        Offset(cx4, cy4 + 8f),
+        2.5f, StrokeCap.Round
+    )
+    drawLine(
+        Color.White,
+        Offset(cx4 - 8f, cy4 + 2f),
+        Offset(cx4 - 2f, cy4 + 2f),
+        2f, StrokeCap.Round
+    )
+    // Letter I
+    drawLine(
+        Color.White,
+        Offset(cx4 + 5f, cy4 - 8f),
+        Offset(cx4 + 5f, cy4 + 8f),
+        2.5f, StrokeCap.Round
+    )
+}
+
+/**
+ * Capture the lasso selection bounds as a PNG
+ * ByteArray and invoke the callback.
+ */
+private fun captureSelectionBitmap(
+    state: DrawingState,
+    pageIndex: Int,
+    canvasWidth: Float,
+    callback: (ByteArray) -> Unit
+) {
+    val bounds = state.getSelectionBounds(
+        state.dragOffset
+    ) ?: return
+    val refW = state.getPageRefWidth(pageIndex)
+    val scale = if (refW > 0f && canvasWidth > 0f) {
+        canvasWidth / refW
+    } else {
+        1f
+    }
+    val w = (bounds.width * scale).toInt()
+        .coerceAtLeast(1)
+    val h = (bounds.height * scale).toInt()
+        .coerceAtLeast(1)
+    val bmp = android.graphics.Bitmap.createBitmap(
+        w, h,
+        android.graphics.Bitmap.Config.ARGB_8888
+    )
+    val canvas = android.graphics.Canvas(bmp)
+    canvas.drawColor(
+        android.graphics.Color.WHITE
+    )
+    val paint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        strokeCap =
+            android.graphics.Paint.Cap.ROUND
+        strokeJoin =
+            android.graphics.Paint.Join.ROUND
+        style =
+            android.graphics.Paint.Style.STROKE
+    }
+    for (stroke in state.selectedStrokes) {
+        paint.color = stroke.color.toArgb()
+        paint.strokeWidth =
+            stroke.baseWidth * scale
+        val path = android.graphics.Path()
+        stroke.points.forEachIndexed { i, pt ->
+            val sx =
+                (pt.x - bounds.left) * scale
+            val sy =
+                (pt.y - bounds.top) * scale
+            if (i == 0) path.moveTo(sx, sy)
+            else path.lineTo(sx, sy)
+        }
+        canvas.drawPath(path, paint)
+    }
+    val stream =
+        java.io.ByteArrayOutputStream()
+    bmp.compress(
+        android.graphics.Bitmap.CompressFormat.PNG,
+        90, stream
+    )
+    bmp.recycle()
+    callback(stream.toByteArray())
 }
 
 // ── Selected image overlay drawing ──────────────

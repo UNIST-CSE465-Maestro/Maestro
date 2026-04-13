@@ -193,6 +193,10 @@ object UxConfig {
         const val CUT_CIRCLE_RADIUS = 4.5f
         const val CUT_CIRCLE_STROKE = 2f
         const val CUT_STROKE_WIDTH = 2.5f
+
+        /** LLM / AI button */
+        const val LLM_BUTTON_SIZE = 48f
+        const val LLM_TEXT_SIZE = 16f
     }
 
     // ── Save & timing ────────────────────────────────

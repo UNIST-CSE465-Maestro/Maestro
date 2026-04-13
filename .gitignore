@@ -10,6 +10,12 @@ app/app/build/
 app/local.properties
 app/gradle/wrapper/gradle-wrapper.jar
 
+# Django
+server/db.sqlite3
+server/media/
+__pycache__/
+*.pyc
+
 # IDE
 .idea/
 *.iml
