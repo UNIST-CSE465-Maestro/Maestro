@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.*
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -62,10 +63,13 @@ fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
-            .shadow(6.dp, RoundedCornerShape(2.dp))
+            .shadow(
+                UxConfig.Canvas.PAGE_SHADOW_ELEVATION,
+                RoundedCornerShape(UxConfig.Canvas.PAGE_CORNER_RADIUS)
+            )
             .background(
                 MaestroSurfaceContainerLowest,
-                RoundedCornerShape(2.dp)
+                RoundedCornerShape(UxConfig.Canvas.PAGE_CORNER_RADIUS)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -137,13 +141,13 @@ private fun renderPage(context: Context, uri: Uri, pageIndex: Int): PageResult? 
         if (pageIndex >= renderer.pageCount) return null
         page = renderer.openPage(pageIndex)
 
-        val maxDim = 2000
+        val maxDim = UxConfig.Canvas.PDF_MAX_RENDER_DIM
         val w = page.width
         val h = page.height
         val scale = if (w > maxDim || h > maxDim) {
             maxDim.toFloat() / maxOf(w, h)
         } else {
-            2f
+            UxConfig.Canvas.PDF_DEFAULT_SCALE
         }
         val bmpW = (w * scale).toInt().coerceAtLeast(1)
         val bmpH = (h * scale).toInt().coerceAtLeast(1)
@@ -200,21 +204,26 @@ private fun LoadingDots() {
     val transition =
         rememberInfiniteTransition(label = "dots")
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(
+            UxConfig.Animation.LOADING_DOT_SPACING
+        )
     ) {
         repeat(3) { index ->
             val alpha by transition.animateFloat(
-                initialValue = 0.3f,
-                targetValue = 1f,
+                initialValue = UxConfig.Animation.LOADING_DOT_INITIAL_ALPHA,
+                targetValue = UxConfig.Animation.LOADING_DOT_TARGET_ALPHA,
                 animationSpec = infiniteRepeatable(
-                    tween(600, delayMillis = index * 200),
+                    tween(
+                        UxConfig.Animation.LOADING_DOT_DURATION_MS,
+                        delayMillis = index * UxConfig.Animation.LOADING_DOT_DELAY_MS
+                    ),
                     RepeatMode.Reverse
                 ),
                 label = "dot$index"
             )
             Box(
                 Modifier
-                    .size(8.dp)
+                    .size(UxConfig.Animation.LOADING_DOT_SIZE)
                     .background(
                         MaestroPrimary.copy(alpha = alpha),
                         CircleShape

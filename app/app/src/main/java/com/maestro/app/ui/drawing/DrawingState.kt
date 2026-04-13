@@ -16,6 +16,7 @@ import com.maestro.app.domain.model.EraserMode
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
 import com.maestro.app.domain.model.StrokePoint
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.MaestroError
 import com.maestro.app.ui.theme.MaestroPrimary
 
@@ -26,8 +27,8 @@ val InkColors = listOf(
     Color(0xFF1A1C1F),
     Color(0xFFE65100)
 )
-val PenWidths = listOf(1.5f, 3f, 5f, 8f)
-val EraserWidths = listOf(10f, 20f, 35f, 50f)
+val PenWidths = UxConfig.Drawing.PEN_WIDTHS
+val EraserWidths = UxConfig.Drawing.ERASER_WIDTHS
 
 class DrawingState {
     private val pageStrokesMap =
@@ -40,10 +41,12 @@ class DrawingState {
 
     var activeTool by mutableStateOf(DrawingTool.PEN)
     var activeColor by mutableStateOf(InkColors[0])
-    var activeWidth by mutableFloatStateOf(PenWidths[1])
+    var activeWidth by mutableFloatStateOf(PenWidths[UxConfig.Drawing.DEFAULT_PEN_WIDTH_INDEX])
 
     var eraserMode by mutableStateOf(EraserMode.STROKE)
-    var eraserWidth by mutableFloatStateOf(EraserWidths[1])
+    var eraserWidth by mutableFloatStateOf(
+        EraserWidths[UxConfig.Drawing.DEFAULT_ERASER_WIDTH_INDEX]
+    )
 
     var sPenButtonPressed by mutableStateOf(false)
     var isStylusActive by mutableStateOf(false)
@@ -53,7 +56,7 @@ class DrawingState {
     var annotationVersion by mutableIntStateOf(0)
 
     /** Zoom scale for the PDF viewer (1.0 = normal) */
-    var zoomScale by mutableFloatStateOf(1f)
+    var zoomScale by mutableFloatStateOf(UxConfig.Canvas.ZOOM_MIN)
 
     /** Pen long-press paste request */
     var penPasteRequest by mutableStateOf<Offset?>(null)
@@ -100,8 +103,12 @@ class DrawingState {
     /** Screen crop mode */
     var isCropping by mutableStateOf(false)
     var cropPageIndex by mutableIntStateOf(-1)
-    var cropTopLeft by mutableStateOf(Offset(100f, 100f))
-    var cropBottomRight by mutableStateOf(Offset(400f, 400f))
+    var cropTopLeft by mutableStateOf(
+        Offset(UxConfig.Crop.INITIAL_TOP_LEFT_X, UxConfig.Crop.INITIAL_TOP_LEFT_Y)
+    )
+    var cropBottomRight by mutableStateOf(
+        Offset(UxConfig.Crop.INITIAL_BOTTOM_RIGHT_X, UxConfig.Crop.INITIAL_BOTTOM_RIGHT_Y)
+    )
 
     /** Eraser position for circle visualization */
     var eraserIndicator by mutableStateOf<Offset?>(null)
@@ -298,7 +305,7 @@ class DrawingState {
                 if (y > maxY) maxY = y
             }
         }
-        val pad = 20f
+        val pad = UxConfig.Drawing.SELECTION_BOUNDS_PADDING
         return Rect(minX - pad, minY - pad, maxX + pad, maxY + pad)
     }
 

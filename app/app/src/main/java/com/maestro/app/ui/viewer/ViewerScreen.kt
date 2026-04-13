@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.ui.components.CanvasSection
 import com.maestro.app.ui.components.TopAppBarSection
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.MaestroBackground
 import com.maestro.app.ui.theme.Slate500
 
@@ -101,7 +102,7 @@ fun ViewerScreen(viewModel: ViewerViewModel, onBack: () -> Unit) {
             if (sidebarVisible) {
                 Box(
                     modifier = Modifier
-                        .width(320.dp)
+                        .width(UxConfig.Viewer.SIDEBAR_WIDTH)
                         .fillMaxHeight()
                         .background(MaestroBackground),
                     contentAlignment = Alignment.Center

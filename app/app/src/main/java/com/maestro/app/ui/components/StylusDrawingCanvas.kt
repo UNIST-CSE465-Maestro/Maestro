@@ -42,6 +42,7 @@ import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
 import com.maestro.app.domain.model.StrokePoint
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroError
 import com.maestro.app.ui.theme.MaestroPrimary
@@ -262,7 +263,7 @@ fun StylusDrawingCanvas(state: DrawingState, pageIndex: Int, modifier: Modifier 
                                 val dx = event.x - penDownX
                                 val dy = event.y - penDownY
                                 if (dx * dx + dy * dy >
-                                    30f * 30f
+                                    UxConfig.Gesture.LONG_PRESS_CANCEL_DIST_SQ
                                 ) {
                                     longPressRunnable.value
                                         ?.let {
@@ -551,17 +552,17 @@ fun StylusDrawingCanvas(state: DrawingState, pageIndex: Int, modifier: Modifier 
                     val pos = state.eraserIndicator!!
                     drawCircle(
                         color = EraserCircleColor
-                            .copy(alpha = 0.3f),
+                            .copy(alpha = UxConfig.Drawing.ERASER_FILL_ALPHA),
                         radius = state.eraserWidth,
                         center = pos,
                         style = Fill
                     )
                     drawCircle(
                         color = EraserCircleColor
-                            .copy(alpha = 0.6f),
+                            .copy(alpha = UxConfig.Drawing.ERASER_OUTLINE_ALPHA),
                         radius = state.eraserWidth,
                         center = pos,
-                        style = Stroke(1.5f)
+                        style = Stroke(UxConfig.Drawing.ERASER_OUTLINE_STROKE_WIDTH)
                     )
                 }
             } // scale
@@ -662,7 +663,7 @@ private fun handleCropInput(
             } ?: 999f
             // reuse activePageIndex as corner index
             state.activePageIndex =
-                if (dist < 60f) nearest!!.first else -1
+                if (dist < UxConfig.Crop.CORNER_DRAG_DISTANCE) nearest!!.first else -1
         }
         MotionEvent.ACTION_MOVE -> {
             val cornerIdx = state.activePageIndex
@@ -681,7 +682,7 @@ private fun handleCropInput(
                     }
                 val rx = (ex / rs).coerceIn(0f, maxRefX)
                 val ry = (ey / rs).coerceIn(0f, maxRefY)
-                val minGap = 30f
+                val minGap = UxConfig.Crop.MIN_CORNER_GAP
                 applyCropCornerMove(
                     state,
                     cornerIdx,
@@ -796,7 +797,7 @@ private fun handleSelectedImage(
     // Resize handle = bottom-right corner (50px radius)
     val resizeHit =
         (ex2 - ir) * (ex2 - ir) +
-            (ey2 - ib) * (ey2 - ib) < 50f * 50f
+            (ey2 - ib) * (ey2 - ib) < UxConfig.ImageOverlay.RESIZE_HANDLE_HIT_DIST_SQ
 
     when (event.actionMasked) {
         MotionEvent.ACTION_DOWN -> {
@@ -890,7 +891,7 @@ private fun handleImageDrag(event: MotionEvent, state: DrawingState, pageIndex: 
     ) {
         val dx = (ex2 - imgDragStartX) / rs2
         val newW = (imgOriginal!!.width + dx)
-            .coerceAtLeast(50f)
+            .coerceAtLeast(UxConfig.ImageOverlay.MIN_SIZE)
         val ratio =
             imgOriginal!!.bitmap.height.toFloat() /
                 imgOriginal!!.bitmap.width
@@ -971,7 +972,7 @@ private fun startLongPress(
         }
     }
     longPressRunnable.value = r
-    handler.postDelayed(r, 500L)
+    handler.postDelayed(r, UxConfig.Gesture.LONG_PRESS_CANVAS_MS)
 }
 
 // ── Tool handlers ────────────────────────────────
@@ -1120,10 +1121,10 @@ private fun DrawScope.drawInkStroke(stroke: InkStroke, offset: Offset) {
         val curr = pts[i]
         val w = stroke.baseWidth *
             (
-                0.4f + (
+                UxConfig.Drawing.PRESSURE_BASE + (
                     prev.pressure +
                         curr.pressure
-                    ) / 2f * 1.2f
+                    ) / 2f * UxConfig.Drawing.PRESSURE_MULT
                 )
         val path = Path().apply {
             moveTo(
@@ -1169,10 +1170,10 @@ private fun DrawScope.drawLassoPath(points: List<StrokePoint>) {
         path,
         LassoColor,
         style = Stroke(
-            2.5f,
+            UxConfig.Drawing.LASSO_STROKE_WIDTH,
             cap = StrokeCap.Round,
             pathEffect = PathEffect.dashPathEffect(
-                floatArrayOf(12f, 8f)
+                floatArrayOf(UxConfig.Drawing.LASSO_DASH, UxConfig.Drawing.LASSO_GAP)
             )
         )
     )
@@ -1180,9 +1181,9 @@ private fun DrawScope.drawLassoPath(points: List<StrokePoint>) {
         LassoColor,
         Offset(points.last().x, points.last().y),
         Offset(points[0].x, points[0].y),
-        strokeWidth = 1.5f,
+        strokeWidth = UxConfig.Drawing.LASSO_CLOSE_STROKE_WIDTH,
         pathEffect = PathEffect.dashPathEffect(
-            floatArrayOf(6f, 6f)
+            floatArrayOf(UxConfig.Drawing.LASSO_CLOSE_DASH, UxConfig.Drawing.LASSO_CLOSE_GAP)
         )
     )
 }
@@ -1195,15 +1196,15 @@ private fun DrawScope.drawSelectionBox(bounds: Rect) {
         size = Size(bounds.width, bounds.height),
         cornerRadius = CornerRadius(4f, 4f),
         style = Stroke(
-            2f,
+            UxConfig.Drawing.SELECTION_STROKE_WIDTH,
             pathEffect = PathEffect.dashPathEffect(
-                floatArrayOf(10f, 6f)
+                floatArrayOf(UxConfig.Drawing.SELECTION_DASH, UxConfig.Drawing.SELECTION_GAP)
             )
         )
     )
     // Light fill
     drawRoundRect(
-        color = SelectionBorder.copy(alpha = 0.05f),
+        color = SelectionBorder.copy(alpha = UxConfig.Drawing.SELECTION_FILL_ALPHA),
         topLeft = Offset(bounds.left, bounds.top),
         size = Size(bounds.width, bounds.height),
         cornerRadius = CornerRadius(4f, 4f),
@@ -1214,9 +1215,9 @@ private fun DrawScope.drawSelectionBox(bounds: Rect) {
 private val BtnCut = Color(0xFFFF8F00) // amber
 
 private fun DrawScope.drawSelectionButtons(bounds: Rect) {
-    val btnSize = 48f
-    val gap = 10f
-    val btnY = bounds.top - btnSize - 10f
+    val btnSize = UxConfig.Selection.BUTTON_SIZE
+    val gap = UxConfig.Selection.BUTTON_GAP
+    val btnY = bounds.top - btnSize - UxConfig.Selection.BUTTON_OFFSET_Y
 
     // Delete button (red) - rightmost
     val delRect = Rect(
@@ -1230,24 +1231,24 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         BtnDelete,
         Offset(delRect.left, delRect.top),
         Size(btnSize, btnSize),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.Selection.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx = delRect.center.x
     val cy = delRect.center.y
-    val s = 10f
+    val s = UxConfig.Selection.DELETE_ICON_SIZE
     drawLine(
         Color.White,
         Offset(cx - s, cy - s),
         Offset(cx + s, cy + s),
-        3f,
+        UxConfig.Selection.DELETE_ICON_STROKE,
         StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx + s, cy - s),
         Offset(cx - s, cy + s),
-        3f,
+        UxConfig.Selection.DELETE_ICON_STROKE,
         StrokeCap.Round
     )
 
@@ -1263,25 +1264,25 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         BtnCopy,
         Offset(copyRect.left, copyRect.top),
         Size(btnSize, btnSize),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.Selection.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx2 = copyRect.center.x
     val cy2 = copyRect.center.y
-    val r = 8f
+    val r = UxConfig.Selection.COPY_ICON_SIZE
     drawRoundRect(
         Color.White,
         Offset(cx2 - r + 3, cy2 - r - 1),
-        Size(r * 1.7f, r * 1.7f),
+        Size(r * UxConfig.Selection.COPY_ICON_SCALE, r * UxConfig.Selection.COPY_ICON_SCALE),
         CornerRadius(3f),
-        style = Stroke(2.2f)
+        style = Stroke(UxConfig.Selection.COPY_ICON_STROKE)
     )
     drawRoundRect(
         Color.White,
         Offset(cx2 - r - 1, cy2 - r + 3),
-        Size(r * 1.7f, r * 1.7f),
+        Size(r * UxConfig.Selection.COPY_ICON_SCALE, r * UxConfig.Selection.COPY_ICON_SCALE),
         CornerRadius(3f),
-        style = Stroke(2.2f)
+        style = Stroke(UxConfig.Selection.COPY_ICON_STROKE)
     )
 
     // Cut button (amber) - leftmost (scissors icon)
@@ -1296,7 +1297,7 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         BtnCut,
         Offset(cutRect.left, cutRect.top),
         Size(btnSize, btnSize),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.Selection.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx3 = cutRect.center.x
@@ -1305,27 +1306,27 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         Color.White,
         Offset(cx3 - 8f, cy3 - 10f),
         Offset(cx3 + 6f, cy3 + 4f),
-        2.5f,
+        UxConfig.Selection.CUT_STROKE_WIDTH,
         StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx3 + 8f, cy3 - 10f),
         Offset(cx3 - 6f, cy3 + 4f),
-        2.5f,
+        UxConfig.Selection.CUT_STROKE_WIDTH,
         StrokeCap.Round
     )
     drawCircle(
         Color.White,
-        4.5f,
+        UxConfig.Selection.CUT_CIRCLE_RADIUS,
         Offset(cx3 - 7f, cy3 + 7f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.Selection.CUT_CIRCLE_STROKE)
     )
     drawCircle(
         Color.White,
-        4.5f,
+        UxConfig.Selection.CUT_CIRCLE_RADIUS,
         Offset(cx3 + 7f, cy3 + 7f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.Selection.CUT_CIRCLE_STROKE)
     )
 }
 
@@ -1361,44 +1362,44 @@ private fun DrawScope.drawSelectedImageOverlay(
     // Resize handle (bottom-right)
     drawCircle(
         Color.White,
-        12f,
+        UxConfig.ImageOverlay.RESIZE_HANDLE_RADIUS,
         Offset(ir, ib),
         style = Fill
     )
     drawCircle(
         MaestroPrimary,
-        12f,
+        UxConfig.ImageOverlay.RESIZE_HANDLE_RADIUS,
         Offset(ir, ib),
         style = Stroke(2.5f)
     )
     // Buttons above top-right
-    val bs = 44f
-    val gap = 8f
-    val by = it2 - bs - 10f
+    val bs = UxConfig.ImageOverlay.BUTTON_SIZE
+    val gap = UxConfig.ImageOverlay.BUTTON_GAP
+    val by = it2 - bs - UxConfig.ImageOverlay.BUTTON_OFFSET_Y
     val delR = Rect(ir - bs, by, ir, by + bs)
     imgDeleteRect = delR
     drawRoundRect(
         BtnDelete,
         Offset(delR.left, delR.top),
         Size(bs, bs),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.ImageOverlay.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx = delR.center.x
     val cy = delR.center.y
-    val s = 9f
+    val s = UxConfig.ImageOverlay.DELETE_ICON_SIZE
     drawLine(
         Color.White,
         Offset(cx - s, cy - s),
         Offset(cx + s, cy + s),
-        2.5f,
+        UxConfig.ImageOverlay.DELETE_ICON_STROKE,
         StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx + s, cy - s),
         Offset(cx - s, cy + s),
-        2.5f,
+        UxConfig.ImageOverlay.DELETE_ICON_STROKE,
         StrokeCap.Round
     )
 
@@ -1413,25 +1414,25 @@ private fun DrawScope.drawSelectedImageOverlay(
         BtnCopy,
         Offset(cpR.left, cpR.top),
         Size(bs, bs),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.ImageOverlay.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx2 = cpR.center.x
     val cy2 = cpR.center.y
-    val r = 7f
+    val r = UxConfig.ImageOverlay.COPY_ICON_SIZE
     drawRoundRect(
         Color.White,
         Offset(cx2 - r + 2, cy2 - r - 1),
-        Size(r * 1.6f, r * 1.6f),
+        Size(r * UxConfig.ImageOverlay.COPY_ICON_SCALE, r * UxConfig.ImageOverlay.COPY_ICON_SCALE),
         CornerRadius(2f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.ImageOverlay.COPY_ICON_STROKE)
     )
     drawRoundRect(
         Color.White,
         Offset(cx2 - r - 1, cy2 - r + 2),
-        Size(r * 1.6f, r * 1.6f),
+        Size(r * UxConfig.ImageOverlay.COPY_ICON_SCALE, r * UxConfig.ImageOverlay.COPY_ICON_SCALE),
         CornerRadius(2f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.ImageOverlay.COPY_ICON_STROKE)
     )
 
     val ctR = Rect(
@@ -1445,7 +1446,7 @@ private fun DrawScope.drawSelectedImageOverlay(
         BtnCut,
         Offset(ctR.left, ctR.top),
         Size(bs, bs),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.ImageOverlay.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx3 = ctR.center.x
@@ -1454,27 +1455,27 @@ private fun DrawScope.drawSelectedImageOverlay(
         Color.White,
         Offset(cx3 - 8f, cy3 - 10f),
         Offset(cx3 + 6f, cy3 + 4f),
-        2.5f,
+        UxConfig.ImageOverlay.CUT_STROKE_WIDTH,
         StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx3 + 8f, cy3 - 10f),
         Offset(cx3 - 6f, cy3 + 4f),
-        2.5f,
+        UxConfig.ImageOverlay.CUT_STROKE_WIDTH,
         StrokeCap.Round
     )
     drawCircle(
         Color.White,
-        4f,
+        UxConfig.ImageOverlay.CUT_CIRCLE_RADIUS,
         Offset(cx3 - 6f, cy3 + 7f),
-        style = Stroke(1.8f)
+        style = Stroke(UxConfig.ImageOverlay.CUT_CIRCLE_STROKE)
     )
     drawCircle(
         Color.White,
-        4f,
+        UxConfig.ImageOverlay.CUT_CIRCLE_RADIUS,
         Offset(cx3 + 6f, cy3 + 7f),
-        style = Stroke(1.8f)
+        style = Stroke(UxConfig.ImageOverlay.CUT_CIRCLE_STROKE)
     )
 }
 
@@ -1496,22 +1497,22 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
     )
     // Dim outside crop area
     drawRect(
-        Color.Black.copy(alpha = 0.4f),
+        Color.Black.copy(alpha = UxConfig.Crop.OVERLAY_DIM_ALPHA),
         Offset.Zero,
         Size(size.width, tl.y)
     )
     drawRect(
-        Color.Black.copy(alpha = 0.4f),
+        Color.Black.copy(alpha = UxConfig.Crop.OVERLAY_DIM_ALPHA),
         Offset(0f, br.y),
         Size(size.width, size.height - br.y)
     )
     drawRect(
-        Color.Black.copy(alpha = 0.4f),
+        Color.Black.copy(alpha = UxConfig.Crop.OVERLAY_DIM_ALPHA),
         Offset(0f, tl.y),
         Size(tl.x, br.y - tl.y)
     )
     drawRect(
-        Color.Black.copy(alpha = 0.4f),
+        Color.Black.copy(alpha = UxConfig.Crop.OVERLAY_DIM_ALPHA),
         Offset(br.x, tl.y),
         Size(size.width - br.x, br.y - tl.y)
     )
@@ -1520,10 +1521,10 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
         MaestroPrimary,
         tl,
         Size(br.x - tl.x, br.y - tl.y),
-        style = Stroke(3f)
+        style = Stroke(UxConfig.Crop.BORDER_STROKE_WIDTH)
     )
     // Corner handles
-    val handleR = 10f
+    val handleR = UxConfig.Crop.CORNER_HANDLE_RADIUS
     listOf(
         tl,
         Offset(br.x, tl.y),
@@ -1540,13 +1541,13 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
             MaestroPrimary,
             handleR,
             corner,
-            style = Stroke(2.5f)
+            style = Stroke(UxConfig.Crop.CORNER_HANDLE_STROKE)
         )
     }
     // Copy button above top-right
-    val btnSize = 44f
+    val btnSize = UxConfig.Crop.BUTTON_SIZE
     val btnX = br.x - btnSize
-    val btnY = tl.y - btnSize - 10f
+    val btnY = tl.y - btnSize - UxConfig.Crop.BUTTON_OFFSET_Y
     cropCopyButtonRect = Rect(
         btnX, btnY, btnX + btnSize, btnY + btnSize
     )
@@ -1554,54 +1555,54 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
         MaestroPrimary,
         Offset(btnX, btnY),
         Size(btnSize, btnSize),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.Crop.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx = btnX + btnSize / 2
     val cy = btnY + btnSize / 2
-    val r = 8f
+    val r = UxConfig.Crop.COPY_ICON_SIZE
     drawRoundRect(
         Color.White,
         Offset(cx - r + 2, cy - r - 1),
-        Size(r * 1.6f, r * 1.6f),
+        Size(r * UxConfig.Crop.COPY_ICON_SCALE, r * UxConfig.Crop.COPY_ICON_SCALE),
         CornerRadius(2f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.Crop.COPY_ICON_STROKE)
     )
     drawRoundRect(
         Color.White,
         Offset(cx - r - 1, cy - r + 2),
-        Size(r * 1.6f, r * 1.6f),
+        Size(r * UxConfig.Crop.COPY_ICON_SCALE, r * UxConfig.Crop.COPY_ICON_SCALE),
         CornerRadius(2f),
-        style = Stroke(2f)
+        style = Stroke(UxConfig.Crop.COPY_ICON_STROKE)
     )
     // Cancel button
-    val cancelX = btnX - btnSize - 8f
+    val cancelX = btnX - btnSize - UxConfig.Crop.CANCEL_OFFSET_X
     cropCancelButtonRect = Rect(
         cancelX, btnY,
         cancelX + btnSize, btnY + btnSize
     )
     drawRoundRect(
-        Slate500.copy(alpha = 0.8f),
+        Slate500.copy(alpha = UxConfig.Crop.CANCEL_BG_ALPHA),
         Offset(cancelX, btnY),
         Size(btnSize, btnSize),
-        CornerRadius(10f),
+        CornerRadius(UxConfig.Crop.BUTTON_CORNER_RADIUS),
         style = Fill
     )
     val cx2 = cancelX + btnSize / 2
     val cy2 = btnY + btnSize / 2
-    val s = 9f
+    val s = UxConfig.Crop.CANCEL_ICON_SIZE
     drawLine(
         Color.White,
         Offset(cx2 - s, cy2 - s),
         Offset(cx2 + s, cy2 + s),
-        2.5f,
+        UxConfig.Crop.CANCEL_ICON_STROKE,
         StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx2 + s, cy2 - s),
         Offset(cx2 - s, cy2 + s),
-        2.5f,
+        UxConfig.Crop.CANCEL_ICON_STROKE,
         StrokeCap.Round
     )
 }
@@ -1801,7 +1802,7 @@ private fun pt(event: MotionEvent, iz: Float): StrokePoint {
     return StrokePoint(
         event.x * iz,
         event.y * iz,
-        event.pressure.coerceIn(0.05f, 1f),
+        event.pressure.coerceIn(UxConfig.Drawing.PRESSURE_MIN, UxConfig.Drawing.PRESSURE_MAX),
         true
     )
 }
@@ -1812,7 +1813,7 @@ private fun addHistorical(event: MotionEvent, target: MutableList<StrokePoint>, 
             event.getHistoricalX(h) * iz,
             event.getHistoricalY(h) * iz,
             event.getHistoricalPressure(h)
-                .coerceIn(0.05f, 1f),
+                .coerceIn(UxConfig.Drawing.PRESSURE_MIN, UxConfig.Drawing.PRESSURE_MAX),
             true
         )
     }

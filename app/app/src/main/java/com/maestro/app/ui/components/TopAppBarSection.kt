@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.*
 
@@ -32,14 +33,14 @@ fun TopAppBarSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(UxConfig.TopBar.HEIGHT)
             .background(Slate50)
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = UxConfig.TopBar.HORIZONTAL_PADDING),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
             onClick = onBack,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
@@ -50,7 +51,7 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = {},
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.Default.GridView,
@@ -61,7 +62,7 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = onUndo,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Undo,
@@ -71,7 +72,7 @@ fun TopAppBarSection(
         }
         IconButton(
             onClick = onRedo,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Redo,
@@ -82,7 +83,7 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = {},
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.Default.PushPin,
@@ -93,7 +94,7 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = {},
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.Default.BookmarkBorder,
@@ -103,7 +104,9 @@ fun TopAppBarSection(
         }
 
         Box(
-            Modifier.width(1.dp).height(28.dp).background(Slate200)
+            Modifier.width(
+                UxConfig.TopBar.DIVIDER_WIDTH
+            ).height(UxConfig.TopBar.DIVIDER_HEIGHT).background(Slate200)
         )
 
         Spacer(Modifier.width(4.dp))
@@ -115,7 +118,9 @@ fun TopAppBarSection(
         Spacer(Modifier.width(4.dp))
 
         Box(
-            Modifier.width(1.dp).height(28.dp).background(Slate200)
+            Modifier.width(
+                UxConfig.TopBar.DIVIDER_WIDTH
+            ).height(UxConfig.TopBar.DIVIDER_HEIGHT).background(Slate200)
         )
 
         Spacer(Modifier.width(4.dp))
@@ -132,7 +137,7 @@ fun TopAppBarSection(
                         "검색",
                         fontSize = 11.sp,
                         color = MaestroOnSurfaceVariant.copy(
-                            alpha = 0.7f
+                            alpha = UxConfig.TopBar.SEARCH_PLACEHOLDER_ALPHA
                         )
                     )
                 },
@@ -141,7 +146,7 @@ fun TopAppBarSection(
                         Icons.Default.Search,
                         contentDescription = "검색",
                         tint = MaestroOutline,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(UxConfig.TopBar.SEARCH_ICON_SIZE)
                     )
                 },
                 singleLine = true,
@@ -156,8 +161,8 @@ fun TopAppBarSection(
                     unfocusedIndicatorColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent
                 ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth().height(36.dp)
+                shape = RoundedCornerShape(UxConfig.TopBar.SEARCH_FIELD_CORNER),
+                modifier = Modifier.fillMaxWidth().height(UxConfig.TopBar.SEARCH_FIELD_HEIGHT)
             )
         }
 
@@ -165,13 +170,13 @@ fun TopAppBarSection(
 
         Button(
             onClick = {},
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(UxConfig.TopBar.QUIZ_BUTTON_CORNER),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent
             ),
             contentPadding = PaddingValues(),
             elevation = ButtonDefaults.buttonElevation(
-                defaultElevation = 4.dp
+                defaultElevation = UxConfig.TopBar.QUIZ_BUTTON_ELEVATION
             )
         ) {
             Box(
@@ -183,11 +188,14 @@ fun TopAppBarSection(
                                 MaestroPrimaryContainer
                             ),
                             start = Offset.Zero,
-                            end = Offset(200f, 200f)
+                            end = Offset(UxConfig.TopBar.GRADIENT_END, UxConfig.TopBar.GRADIENT_END)
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(UxConfig.TopBar.QUIZ_BUTTON_CORNER)
                     )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(
+                        horizontal = UxConfig.TopBar.QUIZ_BUTTON_PADDING_H,
+                        vertical = UxConfig.TopBar.QUIZ_BUTTON_PADDING_V
+                    )
             ) {
                 Text(
                     "QUIZ!",
@@ -200,7 +208,7 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = onToggleSidebar,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
                 Icons.Default.SmartToy,

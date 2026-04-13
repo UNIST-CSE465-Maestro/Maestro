@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -44,7 +45,7 @@ class ViewerViewModel(
         if (currentVersion <= lastSavedVersion) return
         lastSavedVersion = currentVersion
         viewModelScope.launch {
-            delay(400)
+            delay(UxConfig.Timing.AUTOSAVE_DEBOUNCE_MS)
             withContext(Dispatchers.IO) {
                 annotationRepo.saveAll(pdfId, drawingState)
             }

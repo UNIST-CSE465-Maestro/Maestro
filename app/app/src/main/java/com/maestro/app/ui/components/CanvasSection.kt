@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
 import com.maestro.app.domain.model.StrokePoint
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroOnSurface
 import com.maestro.app.ui.theme.MaestroPrimary
@@ -136,7 +137,10 @@ fun CanvasSection(
                                         drawingState.zoomScale *
                                             zoomChange
                                         )
-                                        .coerceIn(1f, 5f)
+                                        .coerceIn(
+                                            UxConfig.Canvas.ZOOM_MIN,
+                                            UxConfig.Canvas.ZOOM_MAX
+                                        )
                                 drawingState.zoomScale =
                                     newZoom
                                 if (newZoom > 1f) {
@@ -162,8 +166,8 @@ fun CanvasSection(
                             val absY =
                                 kotlin.math.abs(drag.y)
                             if (
-                                absX > absY * 1.5f &&
-                                absX > 3f
+                                absX > absY * UxConfig.Canvas.PAN_THRESHOLD_MULT &&
+                                absX > UxConfig.Canvas.PAN_MIN_DISTANCE
                             ) {
                                 val maxPanX =
                                     size.width *
@@ -229,9 +233,9 @@ fun CanvasSection(
                     !drawingState.isStylusTouching &&
                         !drawingState.isCropping,
                     contentPadding =
-                    PaddingValues(vertical = 8.dp),
+                    PaddingValues(vertical = UxConfig.Canvas.PAGE_VERTICAL_PADDING),
                     verticalArrangement =
-                    Arrangement.spacedBy(8.dp),
+                    Arrangement.spacedBy(UxConfig.Canvas.PAGE_VERTICAL_SPACING),
                     horizontalAlignment =
                     Alignment.CenterHorizontally
                 ) {
@@ -256,9 +260,9 @@ fun CanvasSection(
                                     (viewWidth - targetWidth) /
                                         2
                                     )
-                                    .coerceAtLeast(4.dp)
+                                    .coerceAtLeast(UxConfig.Canvas.PAGE_MIN_HORIZONTAL_PADDING)
                             } else {
-                                4.dp
+                                UxConfig.Canvas.PAGE_DEFAULT_HORIZONTAL_PADDING
                             }
 
                         Box(
@@ -338,7 +342,7 @@ fun CanvasSection(
                         }
                     }
                     item {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(UxConfig.Canvas.PAGE_VERTICAL_SPACING))
                     }
                 }
             }
@@ -346,7 +350,7 @@ fun CanvasSection(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(32.dp),
+                    .padding(UxConfig.Canvas.PLACEHOLDER_PADDING),
                 contentAlignment =
                 Alignment.TopCenter
             ) {
@@ -355,7 +359,7 @@ fun CanvasSection(
         }
 
         // Zoom indicator
-        if (drawingState.zoomScale > 1.01f) {
+        if (drawingState.zoomScale > UxConfig.Canvas.ZOOM_INDICATOR_THRESHOLD) {
             val pct =
                 (drawingState.zoomScale * 100).toInt()
             Text(
@@ -365,12 +369,12 @@ fun CanvasSection(
                     .padding(12.dp)
                     .background(
                         MaestroOnSurface
-                            .copy(alpha = 0.6f),
-                        RoundedCornerShape(6.dp)
+                            .copy(alpha = UxConfig.Canvas.ZOOM_INDICATOR_BG_ALPHA),
+                        RoundedCornerShape(UxConfig.Canvas.ZOOM_INDICATOR_CORNER)
                     )
                     .padding(
-                        horizontal = 8.dp,
-                        vertical = 4.dp
+                        horizontal = UxConfig.Canvas.ZOOM_INDICATOR_PADDING_H,
+                        vertical = UxConfig.Canvas.ZOOM_INDICATOR_PADDING_V
                     ),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -465,12 +469,12 @@ private fun PageActionMenu(
                     if (rw > 0f) rw else 1000f
                 val maxY = maxX / aspectRatio
                 drawingState.cropTopLeft = Offset(
-                    (cx - 150f).coerceAtLeast(0f),
-                    (cy - 100f).coerceAtLeast(0f)
+                    (cx - UxConfig.Crop.INITIAL_WIDTH).coerceAtLeast(0f),
+                    (cy - UxConfig.Crop.INITIAL_HEIGHT).coerceAtLeast(0f)
                 )
                 drawingState.cropBottomRight = Offset(
-                    (cx + 150f).coerceAtMost(maxX),
-                    (cy + 100f).coerceAtMost(maxY)
+                    (cx + UxConfig.Crop.INITIAL_WIDTH).coerceAtMost(maxX),
+                    (cy + UxConfig.Crop.INITIAL_HEIGHT).coerceAtMost(maxY)
                 )
             },
             leadingIcon = {

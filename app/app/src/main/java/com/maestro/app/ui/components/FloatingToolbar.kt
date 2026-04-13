@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.EraserMode
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.*
 import com.maestro.app.ui.theme.*
 
@@ -54,7 +55,7 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.BUTTON_SPACING)
         ) {
             ToolButton(
                 icon = Icons.Default.Edit,
@@ -111,10 +112,10 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
         DropdownMenu(
             expanded = openPopup == PopupType.PEN,
             onDismissRequest = { openPopup = PopupType.NONE },
-            offset = DpOffset(0.dp, 4.dp),
+            offset = DpOffset(0.dp, UxConfig.Toolbar.POPUP_OFFSET_Y),
             modifier = Modifier.background(
                 MaestroSurfaceContainerLowest,
-                RoundedCornerShape(16.dp)
+                RoundedCornerShape(UxConfig.Toolbar.POPUP_CORNER)
             )
         ) {
             PenPopupContent(state)
@@ -123,10 +124,10 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
         DropdownMenu(
             expanded = openPopup == PopupType.ERASER,
             onDismissRequest = { openPopup = PopupType.NONE },
-            offset = DpOffset(0.dp, 4.dp),
+            offset = DpOffset(0.dp, UxConfig.Toolbar.POPUP_OFFSET_Y),
             modifier = Modifier.background(
                 MaestroSurfaceContainerLowest,
-                RoundedCornerShape(16.dp)
+                RoundedCornerShape(UxConfig.Toolbar.POPUP_CORNER)
             )
         ) {
             EraserPopupContent(state)
@@ -137,7 +138,9 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
 @Composable
 private fun PenPopupContent(state: DrawingState) {
     Column(
-        modifier = Modifier.padding(16.dp).widthIn(min = 240.dp)
+        modifier = Modifier.padding(
+            UxConfig.Toolbar.POPUP_PADDING
+        ).widthIn(min = UxConfig.Toolbar.POPUP_MIN_WIDTH)
     ) {
         if (state.isStylusActive) {
             StylusIndicator(state)
@@ -150,25 +153,27 @@ private fun PenPopupContent(state: DrawingState) {
             color = Slate500
         )
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.COLOR_SWATCH_SPACING)) {
             InkColors.forEach { color ->
                 val isSelected = state.activeColor == color
                 Box(
                     Modifier
-                        .size(28.dp)
+                        .size(UxConfig.Toolbar.COLOR_SWATCH_SIZE)
                         .clip(CircleShape)
                         .background(color)
                         .then(
                             if (isSelected) {
                                 Modifier.border(
-                                    3.dp,
+                                    UxConfig.Toolbar.COLOR_BORDER_SELECTED,
                                     MaestroOnSurface,
                                     CircleShape
                                 )
                             } else {
                                 Modifier.border(
-                                    1.dp,
-                                    MaestroOutlineVariant.copy(0.4f),
+                                    UxConfig.Toolbar.COLOR_BORDER_UNSELECTED,
+                                    MaestroOutlineVariant.copy(
+                                        UxConfig.Toolbar.COLOR_BORDER_UNSELECTED_ALPHA
+                                    ),
                                     CircleShape
                                 )
                             }
@@ -186,14 +191,14 @@ private fun PenPopupContent(state: DrawingState) {
         )
         Spacer(Modifier.height(8.dp))
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.WIDTH_CIRCLE_SPACING),
             verticalAlignment = Alignment.CenterVertically
         ) {
             PenWidths.forEach { width ->
                 val sel = state.activeWidth == width
                 Box(
                     Modifier
-                        .size(36.dp)
+                        .size(UxConfig.Toolbar.WIDTH_CIRCLE_SIZE)
                         .clip(CircleShape)
                         .background(
                             if (sel) Maestro50 else Color.Transparent
@@ -201,7 +206,7 @@ private fun PenPopupContent(state: DrawingState) {
                         .then(
                             if (sel) {
                                 Modifier.border(
-                                    2.dp,
+                                    UxConfig.Toolbar.WIDTH_BORDER_SELECTED,
                                     MaestroPrimary,
                                     CircleShape
                                 )
@@ -214,7 +219,7 @@ private fun PenPopupContent(state: DrawingState) {
                 ) {
                     Box(
                         Modifier
-                            .size((width * 2.5f).dp)
+                            .size((width * UxConfig.Toolbar.PEN_PREVIEW_SCALE).dp)
                             .clip(CircleShape)
                             .background(state.activeColor)
                     )
@@ -223,16 +228,16 @@ private fun PenPopupContent(state: DrawingState) {
         }
         Spacer(Modifier.height(8.dp))
         Box(
-            Modifier.fillMaxWidth().height(20.dp),
+            Modifier.fillMaxWidth().height(UxConfig.Toolbar.PREVIEW_BAR_HEIGHT),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth(0.7f)
+                    .fillMaxWidth(UxConfig.Toolbar.PREVIEW_BAR_WIDTH_FRACTION)
                     .height(state.activeWidth.dp)
                     .background(
                         state.activeColor,
-                        RoundedCornerShape(9999.dp)
+                        RoundedCornerShape(UxConfig.Toolbar.CHIP_CORNER)
                     )
             )
         }
@@ -242,7 +247,9 @@ private fun PenPopupContent(state: DrawingState) {
 @Composable
 private fun EraserPopupContent(state: DrawingState) {
     Column(
-        modifier = Modifier.padding(16.dp).widthIn(min = 240.dp)
+        modifier = Modifier.padding(
+            UxConfig.Toolbar.POPUP_PADDING
+        ).widthIn(min = UxConfig.Toolbar.POPUP_MIN_WIDTH)
     ) {
         Text(
             "지우개 종류",
@@ -251,7 +258,7 @@ private fun EraserPopupContent(state: DrawingState) {
             color = Slate500
         )
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.CHIP_SPACING)) {
             EraserModeChip(
                 "획 지우개",
                 state.eraserMode == EraserMode.STROKE
@@ -270,14 +277,14 @@ private fun EraserPopupContent(state: DrawingState) {
         )
         Spacer(Modifier.height(8.dp))
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.WIDTH_CIRCLE_SPACING),
             verticalAlignment = Alignment.CenterVertically
         ) {
             EraserWidths.forEach { width ->
                 val sel = state.eraserWidth == width
                 Box(
                     Modifier
-                        .size(40.dp)
+                        .size(UxConfig.Toolbar.ERASER_CIRCLE_SIZE)
                         .clip(CircleShape)
                         .background(
                             if (sel) Maestro50 else Color.Transparent
@@ -285,14 +292,16 @@ private fun EraserPopupContent(state: DrawingState) {
                         .then(
                             if (sel) {
                                 Modifier.border(
-                                    2.dp,
+                                    UxConfig.Toolbar.ERASER_BORDER_SELECTED,
                                     MaestroPrimary,
                                     CircleShape
                                 )
                             } else {
                                 Modifier.border(
-                                    1.dp,
-                                    MaestroOutlineVariant.copy(0.3f),
+                                    UxConfig.Toolbar.ERASER_BORDER_UNSELECTED,
+                                    MaestroOutlineVariant.copy(
+                                        UxConfig.Toolbar.ERASER_BORDER_UNSELECTED_ALPHA
+                                    ),
                                     CircleShape
                                 )
                             }
@@ -302,7 +311,7 @@ private fun EraserPopupContent(state: DrawingState) {
                 ) {
                     Box(
                         Modifier
-                            .size((width * 0.45f).dp)
+                            .size((width * UxConfig.Toolbar.ERASER_PREVIEW_SCALE).dp)
                             .clip(CircleShape)
                             .background(Slate400)
                     )
@@ -332,7 +341,7 @@ private fun ToolButton(
     )
     IconButton(
         onClick = onClick,
-        modifier = Modifier.clip(CircleShape).background(bg).size(40.dp)
+        modifier = Modifier.clip(CircleShape).background(bg).size(UxConfig.Toolbar.BUTTON_SIZE)
     ) {
         Icon(
             icon,
@@ -346,7 +355,7 @@ private fun ToolButton(
 private fun EraserModeChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(9999.dp))
+            .clip(RoundedCornerShape(UxConfig.Toolbar.CHIP_CORNER))
             .background(
                 if (isSelected) {
                     MaestroPrimary
@@ -355,7 +364,10 @@ private fun EraserModeChip(label: String, isSelected: Boolean, onClick: () -> Un
                 }
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(
+                horizontal = UxConfig.Toolbar.CHIP_PADDING_H,
+                vertical = UxConfig.Toolbar.CHIP_PADDING_V
+            )
     ) {
         Text(
             label,
@@ -374,18 +386,21 @@ private fun StylusIndicator(state: DrawingState) {
     }
     Row(
         Modifier
-            .background(MaestroPrimary, RoundedCornerShape(9999.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .background(MaestroPrimary, RoundedCornerShape(UxConfig.Toolbar.CHIP_CORNER))
+            .padding(
+                horizontal = UxConfig.Toolbar.STYLUS_PADDING_H,
+                vertical = UxConfig.Toolbar.STYLUS_PADDING_V
+            ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(UxConfig.Toolbar.STYLUS_SPACING)
     ) {
         Box(
-            Modifier.size(5.dp).clip(CircleShape)
+            Modifier.size(UxConfig.Toolbar.STYLUS_DOT_SIZE).clip(CircleShape)
                 .background(Emerald500)
         )
         Text(
             label,
-            fontSize = 9.sp,
+            fontSize = UxConfig.Toolbar.STYLUS_FONT_SIZE,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )

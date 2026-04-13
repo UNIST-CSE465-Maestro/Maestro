@@ -48,9 +48,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
+import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.*
 
 @Composable
@@ -153,15 +153,15 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
             title = { Text("크래시 로그", fontWeight = FontWeight.Bold) },
             text = {
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.heightIn(max = 400.dp)
+                    modifier = Modifier.heightIn(max = UxConfig.Home.DIALOG_LOG_MAX_HEIGHT)
                 ) {
                     item {
                         androidx.compose.foundation.text.selection.SelectionContainer {
                             Text(
                                 crashLog ?: "",
-                                fontSize = 9.sp,
+                                fontSize = UxConfig.Home.DIALOG_LOG_FONT_SIZE,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                lineHeight = 13.sp
+                                lineHeight = UxConfig.Home.DIALOG_LOG_LINE_HEIGHT
                             )
                         }
                     }
@@ -194,15 +194,15 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
             title = { Text("Claude 디버그 로그", fontWeight = FontWeight.Bold) },
             text = {
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.heightIn(max = 400.dp)
+                    modifier = Modifier.heightIn(max = UxConfig.Home.DIALOG_LOG_MAX_HEIGHT)
                 ) {
                     item {
                         androidx.compose.foundation.text.selection.SelectionContainer {
                             Text(
                                 debugLog ?: "",
-                                fontSize = 9.sp,
+                                fontSize = UxConfig.Home.DIALOG_LOG_FONT_SIZE,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                lineHeight = 13.sp
+                                lineHeight = UxConfig.Home.DIALOG_LOG_LINE_HEIGHT
                             )
                         }
                     }
@@ -335,12 +335,17 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    modifier = Modifier.weight(1f).padding(horizontal = 20.dp),
+                    columns = GridCells.Adaptive(minSize = UxConfig.Home.GRID_MIN_SIZE),
+                    modifier = Modifier.weight(
+                        1f
+                    ).padding(horizontal = UxConfig.Home.GRID_PADDING_H),
                     userScrollEnabled = dragItem == null,
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    contentPadding = PaddingValues(
+                        top = UxConfig.Home.GRID_PADDING_TOP,
+                        bottom = UxConfig.Home.GRID_PADDING_BOTTOM
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(UxConfig.Home.GRID_SPACING_H),
+                    verticalArrangement = Arrangement.spacedBy(UxConfig.Home.GRID_SPACING_V)
                 ) {
                     items(currentFolders, key = { "folder_${it.id}" }) { folder ->
                         var itemPos by remember { mutableStateOf(Offset.Zero) }
@@ -382,7 +387,8 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                                                     break
                                                 }
                                                 val elapsed = System.currentTimeMillis() - startTime
-                                                if (!longPressed && elapsed >= 200) {
+                                                val threshold = UxConfig.Gesture.LONG_PRESS_HOME_MS
+                                                if (!longPressed && elapsed >= threshold) {
                                                     longPressed = true
                                                     dragItem = DragItem(
                                                         folder.id, true, folder.name
@@ -392,7 +398,9 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    if (drag.getDistance() > 2f) {
+                                                    val moved2 = drag.getDistance() >
+                                                        UxConfig.Gesture.DRAG_THRESHOLD_PX
+                                                    if (moved2) {
                                                         moved = true
                                                         hasDragMoved = true
                                                     }
@@ -483,7 +491,8 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                                                     break
                                                 }
                                                 val elapsed = System.currentTimeMillis() - startTime
-                                                if (!longPressed && elapsed >= 200) {
+                                                val threshold = UxConfig.Gesture.LONG_PRESS_HOME_MS
+                                                if (!longPressed && elapsed >= threshold) {
                                                     longPressed = true
                                                     dragItem = DragItem(
                                                         doc.id, false, doc.displayName
@@ -493,7 +502,9 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    if (drag.getDistance() > 2f) {
+                                                    val moved2 = drag.getDistance() >
+                                                        UxConfig.Gesture.DRAG_THRESHOLD_PX
+                                                    if (moved2) {
                                                         moved = true
                                                         hasDragMoved = true
                                                     }
@@ -562,13 +573,19 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                             (localY - 30).toInt()
                         )
                     }
-                    .shadow(12.dp, RoundedCornerShape(12.dp))
-                    .background(Color.White, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .shadow(
+                        UxConfig.Home.DRAG_SHADOW,
+                        RoundedCornerShape(UxConfig.Home.DRAG_CORNER)
+                    )
+                    .background(Color.White, RoundedCornerShape(UxConfig.Home.DRAG_CORNER))
+                    .padding(
+                        horizontal = UxConfig.Home.DRAG_PADDING_H,
+                        vertical = UxConfig.Home.DRAG_PADDING_V
+                    )
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(UxConfig.Home.DRAG_ICON_SPACING)
                 ) {
                     Icon(
                         if (dragItem!!.isFolder) {
@@ -577,12 +594,12 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                             Icons.Default.PictureAsPdf
                         },
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(UxConfig.Home.DRAG_ICON_SIZE),
                         tint = if (dragItem!!.isFolder) MaestroPrimary else Slate500
                     )
                     Text(
                         dragItem!!.label,
-                        fontSize = 12.sp,
+                        fontSize = UxConfig.Home.DRAG_TEXT_SIZE,
                         fontWeight = FontWeight.Medium,
                         color = MaestroOnSurface,
                         maxLines = 1,
@@ -594,28 +611,33 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
 
         // FAB
         var showFabMenu by remember { mutableStateOf(false) }
-        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
+        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(UxConfig.Home.FAB_PADDING)) {
             FloatingActionButton(
                 onClick = { showFabMenu = true },
                 shape = CircleShape,
                 containerColor = MaestroPrimary,
                 contentColor = Color.White,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = UxConfig.Home.FAB_ELEVATION
+                )
             ) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = "추가",
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(UxConfig.Home.FAB_ICON_SIZE)
                 )
             }
 
             DropdownMenu(
                 expanded = showFabMenu,
                 onDismissRequest = { showFabMenu = false },
-                modifier = Modifier.background(Color.White, RoundedCornerShape(12.dp))
+                modifier = Modifier.background(
+                    Color.White,
+                    RoundedCornerShape(UxConfig.Home.FAB_MENU_CORNER)
+                )
             ) {
                 DropdownMenuItem(
-                    text = { Text("PDF 파일 업로드", fontSize = 14.sp) },
+                    text = { Text("PDF 파일 업로드", fontSize = UxConfig.Home.FAB_MENU_FONT_SIZE) },
                     onClick = {
                         showFabMenu = false
                         pdfPickerLauncher.launch(arrayOf("application/pdf"))
@@ -629,7 +651,7 @@ fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("새 폴더 만들기", fontSize = 14.sp) },
+                    text = { Text("새 폴더 만들기", fontSize = UxConfig.Home.FAB_MENU_FONT_SIZE) },
                     onClick = {
                         showFabMenu = false
                         showCreateFolderDialog = true
@@ -661,7 +683,7 @@ private fun RenameDialog(currentName: String, onDismiss: () -> Unit, onRename: (
                 onValueChange = { name = it },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(UxConfig.Home.DIALOG_TEXT_FIELD_CORNER)
             )
         },
         confirmButton = {
@@ -687,7 +709,7 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
                 placeholder = { Text("폴더 이름") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(UxConfig.Home.DIALOG_TEXT_FIELD_CORNER)
             )
         },
         confirmButton = {
@@ -708,8 +730,8 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
     Row(
         modifier = Modifier.fillMaxWidth().height(
-            72.dp
-        ).background(Slate50).padding(horizontal = 12.dp),
+            UxConfig.Home.TOP_BAR_HEIGHT
+        ).background(Slate50).padding(horizontal = UxConfig.Home.TOP_BAR_PADDING_H),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
@@ -723,7 +745,7 @@ private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
             Spacer(Modifier.width(4.dp))
             Text(
                 text = currentFolderName ?: "Maestro",
-                fontSize = 20.sp,
+                fontSize = UxConfig.Home.FOLDER_NAME_FONT_SIZE,
                 fontWeight = FontWeight.Bold,
                 color = Maestro900,
                 maxLines = 1,
@@ -734,14 +756,14 @@ private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
             Spacer(Modifier.width(12.dp))
             Text(
                 "Maestro",
-                fontSize = 24.sp,
+                fontSize = UxConfig.Home.LOGO_FONT_SIZE,
                 fontWeight = FontWeight.Black,
                 color = Maestro900,
-                letterSpacing = (-0.5).sp
+                letterSpacing = UxConfig.Home.LOGO_LETTER_SPACING
             )
             Spacer(Modifier.weight(1f))
         }
-        Text("PDF Studio", fontSize = 13.sp, color = Slate500)
+        Text("PDF Studio", fontSize = UxConfig.Home.SUBTITLE_FONT_SIZE, color = Slate500)
         Spacer(Modifier.width(12.dp))
     }
 }
@@ -758,13 +780,13 @@ private fun EmptyLibrary(isInFolder: Boolean, modifier: Modifier = Modifier) {
         Icon(
             if (isInFolder) Icons.Default.Folder else Icons.Default.PictureAsPdf,
             contentDescription = null,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(UxConfig.Home.EMPTY_ICON_SIZE),
             tint = MaestroOutlineVariant
         )
         Spacer(Modifier.height(16.dp))
         Text(
             if (isInFolder) "빈 폴더입니다" else "PDF 파일이 없습니다",
-            fontSize = 18.sp,
+            fontSize = UxConfig.Home.EMPTY_TITLE_FONT_SIZE,
             fontWeight = FontWeight.SemiBold,
             color = MaestroOnSurfaceVariant
         )
@@ -775,10 +797,10 @@ private fun EmptyLibrary(isInFolder: Boolean, modifier: Modifier = Modifier) {
             } else {
                 "오른쪽 아래의 + 버튼을 눌러\nPDF 파일이나 폴더를 추가하세요"
             },
-            fontSize = 14.sp,
+            fontSize = UxConfig.Home.EMPTY_DESC_FONT_SIZE,
             color = Slate500,
             textAlign = TextAlign.Center,
-            lineHeight = 22.sp
+            lineHeight = UxConfig.Home.EMPTY_DESC_LINE_HEIGHT
         )
     }
 }
@@ -792,45 +814,70 @@ private fun FolderGridItem(
     modifier: Modifier = Modifier
 ) {
     val borderMod = if (isDropTarget) {
-        Modifier.border(3.dp, MaestroPrimary, RoundedCornerShape(12.dp))
+        Modifier.border(
+            UxConfig.Home.ITEM_BORDER_DROP_TARGET,
+            MaestroPrimary,
+            RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+        )
     } else {
         Modifier
     }
     Column(
         modifier = modifier
             .then(borderMod)
-            .clip(RoundedCornerShape(12.dp))
-            .shadow(if (isDropTarget) 8.dp else 4.dp, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
+            .shadow(
+                if (isDropTarget) {
+                    UxConfig.Home.ITEM_SHADOW_DROP_TARGET
+                } else {
+                    UxConfig.Home.ITEM_SHADOW
+                },
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            )
             .background(
                 if (isDropTarget) Maestro50 else MaestroSurfaceContainerLowest,
-                RoundedCornerShape(12.dp)
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
             ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(0.707f)
-                .background(if (isDropTarget) MaestroPrimary.copy(alpha = 0.1f) else Maestro50),
+            modifier = Modifier.fillMaxWidth().aspectRatio(UxConfig.Home.ITEM_ASPECT_RATIO)
+                .background(
+                    if (isDropTarget) {
+                        MaestroPrimary.copy(
+                            alpha = UxConfig.Home.DROP_TARGET_BG_ALPHA
+                        )
+                    } else {
+                        Maestro50
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Default.Folder,
                 contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = MaestroPrimary.copy(alpha = if (isDropTarget) 1f else 0.7f)
+                modifier = Modifier.size(UxConfig.Home.FOLDER_ICON_SIZE),
+                tint = MaestroPrimary.copy(
+                    alpha = if (isDropTarget) {
+                        UxConfig.Home.FOLDER_ICON_ALPHA_DROP
+                    } else {
+                        UxConfig.Home.FOLDER_ICON_ALPHA
+                    }
+                )
             )
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(UxConfig.Home.ITEM_PADDING)) {
             Text(
                 folder.name,
-                fontSize = 13.sp,
+                fontSize = UxConfig.Home.ITEM_NAME_FONT_SIZE,
                 fontWeight = FontWeight.SemiBold,
                 color = MaestroOnSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 18.sp
+                lineHeight = UxConfig.Home.ITEM_NAME_LINE_HEIGHT
             )
             Spacer(Modifier.height(4.dp))
-            Text("폴더", fontSize = 11.sp, color = Slate500)
+            Text("폴더", fontSize = UxConfig.Home.ITEM_META_FONT_SIZE, color = Slate500)
         }
     }
 }
@@ -871,14 +918,17 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .shadow(4.dp, RoundedCornerShape(12.dp))
-            .background(MaestroSurfaceContainerLowest, RoundedCornerShape(12.dp)),
+            .clip(RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
+            .shadow(UxConfig.Home.ITEM_SHADOW, RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
+            .background(
+                MaestroSurfaceContainerLowest,
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier.fillMaxWidth().aspectRatio(
-                0.707f
+                UxConfig.Home.ITEM_ASPECT_RATIO
             ).background(MaestroSurfaceContainer),
             contentAlignment = Alignment.Center
         ) {
@@ -893,23 +943,27 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
                 Icon(
                     Icons.Default.PictureAsPdf,
                     contentDescription = null,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(UxConfig.Home.PDF_PLACEHOLDER_ICON_SIZE),
                     tint = MaestroOutlineVariant
                 )
             }
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(UxConfig.Home.ITEM_PADDING)) {
             Text(
                 doc.displayName,
-                fontSize = 13.sp,
+                fontSize = UxConfig.Home.ITEM_NAME_FONT_SIZE,
                 fontWeight = FontWeight.SemiBold,
                 color = MaestroOnSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 18.sp
+                lineHeight = UxConfig.Home.ITEM_NAME_LINE_HEIGHT
             )
             Spacer(Modifier.height(4.dp))
-            Text("${doc.pageCount}페이지", fontSize = 11.sp, color = Slate500)
+            Text(
+                "${doc.pageCount}페이지",
+                fontSize = UxConfig.Home.ITEM_META_FONT_SIZE,
+                color = Slate500
+            )
         }
     }
 }
@@ -966,7 +1020,10 @@ private fun MovePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 500.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(
+            min = UxConfig.Home.MOVE_DIALOG_MIN_HEIGHT,
+            max = UxConfig.Home.MOVE_DIALOG_MAX_HEIGHT
+        ),
         title = {
             Column {
                 Row(
@@ -977,7 +1034,7 @@ private fun MovePickerDialog(
                     Text(
                         "\"$itemLabel\" 이동",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
+                        fontSize = UxConfig.Home.MOVE_DIALOG_TITLE_FONT_SIZE,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -993,11 +1050,15 @@ private fun MovePickerDialog(
                 ) {
                     breadcrumbs.forEachIndexed { index, (id, name) ->
                         if (index > 0) {
-                            Text(" > ", fontSize = 12.sp, color = Slate400)
+                            Text(
+                                " > ",
+                                fontSize = UxConfig.Home.MOVE_DIALOG_BREADCRUMB_FONT_SIZE,
+                                color = Slate400
+                            )
                         }
                         Text(
                             name,
-                            fontSize = 12.sp,
+                            fontSize = UxConfig.Home.MOVE_DIALOG_BREADCRUMB_FONT_SIZE,
                             color = if (id == browseFolderId) MaestroPrimary else Slate500,
                             fontWeight = if (id == browseFolderId) {
                                 FontWeight.Bold
@@ -1014,52 +1075,71 @@ private fun MovePickerDialog(
         text = {
             if (visibleFolders.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    modifier = Modifier.fillMaxWidth().height(
+                        UxConfig.Home.MOVE_DIALOG_EMPTY_HEIGHT
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             Icons.Default.FolderOpen,
                             contentDescription = null,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(UxConfig.Home.MOVE_DIALOG_EMPTY_ICON_SIZE),
                             tint = MaestroOutlineVariant
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text("하위 폴더 없음", fontSize = 13.sp, color = Slate500)
+                        Text(
+                            "하위 폴더 없음",
+                            fontSize = UxConfig.Home.MOVE_DIALOG_EMPTY_TITLE_FONT_SIZE,
+                            color = Slate500
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "현재 위치에 이동하려면 '이동' 버튼을 누르세요",
-                            fontSize = 11.sp,
+                            fontSize = UxConfig.Home.MOVE_DIALOG_EMPTY_DESC_FONT_SIZE,
                             color = Slate400,
                             textAlign = TextAlign.Center
                         )
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(
+                        UxConfig.Home.MOVE_DIALOG_LIST_SPACING
+                    )
+                ) {
                     items(visibleFolders, key = { it.id }) { folder ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(UxConfig.Home.MOVE_DIALOG_ROW_CORNER))
                                 .clickable { browseFolderId = folder.id }
                                 .background(
-                                    MaestroSurfaceContainer.copy(alpha = 0.5f),
-                                    RoundedCornerShape(8.dp)
+                                    MaestroSurfaceContainer.copy(
+                                        alpha = UxConfig.Home.MOVE_DIALOG_ROW_BG_ALPHA
+                                    ),
+                                    RoundedCornerShape(UxConfig.Home.MOVE_DIALOG_ROW_CORNER)
                                 )
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                                .padding(
+                                    horizontal = UxConfig.Home.MOVE_DIALOG_ROW_PADDING_H,
+                                    vertical = UxConfig.Home.MOVE_DIALOG_ROW_PADDING_V
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(
+                                UxConfig.Home.MOVE_DIALOG_ROW_SPACING
+                            )
                         ) {
                             Icon(
                                 Icons.Default.Folder,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MaestroPrimary.copy(alpha = 0.7f)
+                                modifier = Modifier.size(UxConfig.Home.MOVE_DIALOG_ICON_SIZE),
+                                tint = MaestroPrimary.copy(
+                                    alpha = UxConfig.Home.MOVE_DIALOG_ICON_ALPHA
+                                )
                             )
                             Text(
                                 folder.name,
-                                fontSize = 14.sp,
+                                fontSize = UxConfig.Home.MOVE_DIALOG_FONT_SIZE,
                                 fontWeight = FontWeight.Medium,
                                 color = MaestroOnSurface,
                                 modifier = Modifier.weight(1f),
@@ -1069,7 +1149,7 @@ private fun MovePickerDialog(
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(UxConfig.Home.MOVE_DIALOG_CHEVRON_SIZE),
                                 tint = Slate400
                             )
                         }
