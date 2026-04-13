@@ -16,7 +16,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maestro.app.ui.home.HomeScreen
 import com.maestro.app.ui.home.HomeViewModel
+import com.maestro.app.ui.viewer.ViewerScreen
+import com.maestro.app.ui.viewer.ViewerViewModel
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
 fun MaestroNavGraph() {
@@ -71,15 +74,24 @@ fun MaestroNavGraph() {
                 navArgument("uriEncoded") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val pdfId = backStackEntry.arguments?.getString("pdfId") ?: return@composable
-            val pageCount = backStackEntry.arguments?.getInt("pageCount") ?: 1
-            val uriEncoded = backStackEntry.arguments?.getString("uriEncoded") ?: return@composable
+            val pdfId = backStackEntry.arguments
+                ?.getString("pdfId") ?: return@composable
+            val pageCount = backStackEntry.arguments
+                ?.getInt("pageCount") ?: 1
+            val uriEncoded = backStackEntry.arguments
+                ?.getString("uriEncoded") ?: return@composable
             val pdfUri = Uri.parse(Uri.decode(uriEncoded))
+
+            val viewModel: ViewerViewModel = koinViewModel {
+                parametersOf(pdfId, pageCount, pdfUri)
+            }
 
             BackHandler { navController.popBackStack() }
 
-            // Placeholder for Phase 2
-            Text("Viewer: $pdfId (pages: $pageCount)")
+            ViewerScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }
