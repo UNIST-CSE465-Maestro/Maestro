@@ -7,19 +7,16 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.maestro.app.domain.model.ChatMessage
 import com.maestro.app.domain.service.LlmService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class PdfTextExtractor(
     private val llmService: LlmService,
     private val context: Context
 ) {
-    suspend fun extractText(
-        pdfUri: Uri,
-        pageCount: Int
-    ): String = withContext(Dispatchers.IO) {
+    suspend fun extractText(pdfUri: Uri, pageCount: Int): String = withContext(Dispatchers.IO) {
         val images = mutableListOf<ByteArray>()
         for (i in 0 until pageCount) {
             val bytes = renderPageToPng(pdfUri, i)
@@ -43,10 +40,7 @@ class PdfTextExtractor(
         )
     }
 
-    suspend fun saveContentMd(
-        documentId: String,
-        text: String
-    ) = withContext(Dispatchers.IO) {
+    suspend fun saveContentMd(documentId: String, text: String) = withContext(Dispatchers.IO) {
         val dir = File(
             context.filesDir,
             "documents/$documentId"
@@ -55,9 +49,7 @@ class PdfTextExtractor(
         File(dir, "content.md").writeText(text)
     }
 
-    suspend fun loadContentMd(
-        documentId: String
-    ): String? = withContext(Dispatchers.IO) {
+    suspend fun loadContentMd(documentId: String): String? = withContext(Dispatchers.IO) {
         val file = File(
             context.filesDir,
             "documents/$documentId/content.md"
@@ -65,10 +57,7 @@ class PdfTextExtractor(
         if (file.exists()) file.readText() else null
     }
 
-    private fun renderPageToPng(
-        uri: Uri,
-        pageIndex: Int
-    ): ByteArray? {
+    private fun renderPageToPng(uri: Uri, pageIndex: Int): ByteArray? {
         var fd: ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
         var page: PdfRenderer.Page? = null
@@ -92,35 +81,43 @@ class PdfTextExtractor(
             val bmpH =
                 (h * scale).toInt().coerceAtLeast(1)
             val bmp = Bitmap.createBitmap(
-                bmpW, bmpH, Bitmap.Config.ARGB_8888
+                bmpW,
+                bmpH,
+                Bitmap.Config.ARGB_8888
             )
             bmp.eraseColor(
                 android.graphics.Color.WHITE
             )
             page.render(
-                bmp, null, null,
+                bmp,
+                null,
+                null,
                 PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
             )
             val stream = ByteArrayOutputStream()
             bmp.compress(
-                Bitmap.CompressFormat.PNG, 100, stream
+                Bitmap.CompressFormat.PNG,
+                100,
+                stream
             )
             bmp.recycle()
             stream.toByteArray()
         } catch (_: Throwable) {
             null
         } finally {
-            try { page?.close() } catch (_: Throwable) {}
+            try {
+                page?.close()
+            } catch (_: Throwable) {}
             try {
                 renderer?.close()
             } catch (_: Throwable) {}
-            try { fd?.close() } catch (_: Throwable) {}
+            try {
+                fd?.close()
+            } catch (_: Throwable) {}
         }
     }
 
-    private fun openPfd(
-        uri: Uri
-    ): ParcelFileDescriptor? {
+    private fun openPfd(uri: Uri): ParcelFileDescriptor? {
         return try {
             if (uri.scheme == "file") {
                 val path = uri.path ?: return null

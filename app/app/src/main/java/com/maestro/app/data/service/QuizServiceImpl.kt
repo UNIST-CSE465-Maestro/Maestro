@@ -8,10 +8,7 @@ class QuizServiceImpl(
     private val llmService: LlmService
 ) : QuizService {
 
-    override suspend fun generateQuiz(
-        documentContent: String,
-        questionCount: Int
-    ): String {
+    override suspend fun generateQuiz(documentContent: String, questionCount: Int): String {
         val systemPrompt =
             "You are a quiz generator. Based on " +
                 "the provided document content, " +

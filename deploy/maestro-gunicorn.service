@@ -1,0 +1,14 @@
+[Unit]
+Description=Maestro Django Gunicorn
+After=network.target redis-server.service
+
+[Service]
+User=maestro
+Group=maestro
+WorkingDirectory=/home/maestro/maestro/server
+ExecStart=/home/maestro/maestro/.venv/bin/gunicorn config.wsgi:application -c /home/maestro/maestro/server/gunicorn.conf.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

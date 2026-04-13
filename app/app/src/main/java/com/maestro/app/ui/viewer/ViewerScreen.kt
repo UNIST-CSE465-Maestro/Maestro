@@ -55,11 +55,15 @@ fun ViewerScreen(
                 val imgH = bitmap.height.toFloat()
                 val overlay =
                     DrawingState.ImageOverlay(
-                        bitmap, 100f, 100f,
-                        imgW, imgH
+                        bitmap,
+                        100f,
+                        100f,
+                        imgW,
+                        imgH
                     )
                 drawingState.addImage(
-                    page, overlay
+                    page,
+                    overlay
                 )
                 drawingState.selectedImage =
                     overlay

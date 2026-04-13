@@ -1,11 +1,15 @@
+import os
 from datetime import timedelta
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from dotenv import load_dotenv
 
-SECRET_KEY = "django-insecure-ak^p+l073_a%k=lazi09(#1ynhcu69g+7jd@@)=r5%v=-g3zae"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() in ("true", "1")
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "maestro.jwchae.com,localhost").split(",")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -68,6 +72,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- REST Framework ---

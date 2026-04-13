@@ -1,0 +1,17 @@
+[2026-04-13 20:56:41 +0900] [91729] [INFO] Starting gunicorn 25.3.0
+[2026-04-13 20:56:41 +0900] [91729] [INFO] Listening at: http://127.0.0.1:8000 (91729)
+[2026-04-13 20:56:41 +0900] [91729] [INFO] Using worker: sync
+[2026-04-13 20:56:41 +0900] [91792] [INFO] Booting worker with pid: 91792
+[2026-04-13 20:56:41 +0900] [91793] [INFO] Booting worker with pid: 91793
+[2026-04-13 20:56:42 +0900] [91794] [INFO] Booting worker with pid: 91794
+[2026-04-13 20:56:42 +0900] [91795] [INFO] Booting worker with pid: 91795
+[2026-04-13 20:56:42 +0900] [91813] [INFO] Booting worker with pid: 91813
+[2026-04-13 20:56:42 +0900] [91823] [INFO] Booting worker with pid: 91823
+[2026-04-13 20:56:42 +0900] [91825] [INFO] Booting worker with pid: 91825
+[2026-04-13 20:56:42 +0900] [91831] [INFO] Booting worker with pid: 91831
+[2026-04-13 20:56:42 +0900] [91837] [INFO] Booting worker with pid: 91837
+[2026-04-13 20:56:42 +0900] [91841] [INFO] Booting worker with pid: 91841
+[2026-04-13 20:56:42 +0900] [91842] [INFO] Booting worker with pid: 91842
+[2026-04-13 20:56:42 +0900] [91843] [INFO] Booting worker with pid: 91843
+[2026-04-13 20:56:42 +0900] [91844] [INFO] Booting worker with pid: 91844
+[2026-04-13 20:56:42 +0900] [91729] [INFO] Control socket listening at /home/maestro/.gunicorn/gunicorn.ctl

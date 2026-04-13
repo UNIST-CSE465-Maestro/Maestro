@@ -1,8 +1,10 @@
 package com.maestro.app.ui.home
 
+import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.fake.FakeDocumentRepository
 import com.maestro.app.util.MainCoroutineRule
 import com.maestro.app.util.TestFixtures
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -27,8 +29,12 @@ class HomeViewModelTest {
         repo = FakeDocumentRepository()
     }
 
+    private val pdfMerger: PdfMerger = mockk(relaxed = true)
+
     private fun createViewModel(): HomeViewModel {
-        return HomeViewModel(repo).also { viewModel = it }
+        return HomeViewModel(repo, pdfMerger).also {
+            viewModel = it
+        }
     }
 
     @Test

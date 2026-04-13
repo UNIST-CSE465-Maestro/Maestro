@@ -371,6 +371,18 @@ object UxConfig {
         val MOVE_DIALOG_CHEVRON_SIZE = 20.dp
         val MOVE_DIALOG_LIST_SPACING = 2.dp
         const val MOVE_DIALOG_ROW_BG_ALPHA = 0.5f
+
+        /** Multi-select / merge bar */
+        val MERGE_BAR_HEIGHT = 56.dp
+        val MERGE_BAR_PADDING_H = 16.dp
+        val MERGE_BAR_CORNER = 16.dp
+        val MERGE_BAR_MARGIN = 12.dp
+        val MERGE_BUTTON_CORNER = 8.dp
+        val MERGE_BUTTON_PADDING_H = 20.dp
+        val MERGE_BUTTON_PADDING_V = 8.dp
+        val MERGE_FONT_SIZE: TextUnit = 14.sp
+        val CHECKBOX_SIZE = 24.dp
+        val CHECKBOX_OFFSET = 8.dp
     }
 
     // ── Viewer screen ────────────────────────────────

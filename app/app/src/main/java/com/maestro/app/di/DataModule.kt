@@ -1,6 +1,7 @@
 package com.maestro.app.di
 
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.local.PdfTextExtractor
 import com.maestro.app.data.remote.AnthropicSseClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
@@ -27,6 +28,7 @@ val dataModule = module {
         LlmServiceImpl(get(), get())
     }
     single { ConversationLocalDataSource(get()) }
+    single { PdfMerger(get()) }
     single { PdfTextExtractor(get(), get()) }
     single<QuizService> { QuizServiceImpl(get()) }
 }

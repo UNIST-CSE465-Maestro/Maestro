@@ -1,0 +1,14 @@
+[Unit]
+Description=Maestro Celery Worker
+After=network.target redis-server.service
+
+[Service]
+User=maestro
+Group=maestro
+WorkingDirectory=/home/maestro/maestro/server
+ExecStart=/home/maestro/maestro/.venv/bin/celery -A config worker --loglevel=info --logfile=/home/maestro/maestro/server/logs/celery.log
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

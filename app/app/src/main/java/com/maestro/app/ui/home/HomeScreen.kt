@@ -62,6 +62,8 @@ fun HomeScreen(
     val documents by viewModel.documents.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val currentFolderId by viewModel.currentFolderId.collectAsState()
+    val selectedDocIds by viewModel.selectedDocIds.collectAsState()
+    val isMultiSelect by viewModel.isMultiSelectMode.collectAsState()
 
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -463,6 +465,8 @@ fun HomeScreen(
                         Box {
                             PdfGridItem(
                                 doc = doc,
+                                isSelected = doc.id in selectedDocIds,
+                                isMultiSelectMode = isMultiSelect,
                                 modifier = Modifier
                                     .onGloballyPositioned {
                                         itemPos = it.positionInWindow()
@@ -518,16 +522,43 @@ fun HomeScreen(
                                             }
                                         }
                                     }
-                                    .clickable { onOpenPdf(doc) }
+                                    .clickable {
+                                        if (isMultiSelect) {
+                                            viewModel.toggleSelect(
+                                                doc.id
+                                            )
+                                        } else {
+                                            onOpenPdf(doc)
+                                        }
+                                    }
                             )
                             DropdownMenu(
                                 expanded = contextPdf?.id == doc.id,
                                 onDismissRequest = { contextPdf = null },
-                                offset = DpOffset(with(density) { docItemWidth.toDp() }, 0.dp)
+                                offset = DpOffset(
+                                    with(density) { docItemWidth.toDp() },
+                                    0.dp
+                                )
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("선택") },
+                                    onClick = {
+                                        viewModel.toggleSelect(doc.id)
+                                        contextPdf = null
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaestroPrimary
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("이름 변경") },
-                                    onClick = { showRenameDialog = true },
+                                    onClick = {
+                                        showRenameDialog = true
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Edit,
@@ -538,7 +569,9 @@ fun HomeScreen(
                                 )
                                 DropdownMenuItem(
                                     text = { Text("이동") },
-                                    onClick = { showMoveDialog = true },
+                                    onClick = {
+                                        showMoveDialog = true
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             Icons.AutoMirrored.Filled.DriveFileMove,
@@ -548,8 +581,15 @@ fun HomeScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("삭제", color = MaestroError) },
-                                    onClick = { showDeleteConfirm = true },
+                                    text = {
+                                        Text(
+                                            "삭제",
+                                            color = MaestroError
+                                        )
+                                    },
+                                    onClick = {
+                                        showDeleteConfirm = true
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Delete,
@@ -668,6 +708,95 @@ fun HomeScreen(
                         )
                     }
                 )
+            }
+        }
+
+        // Multi-select bottom bar
+        if (isMultiSelect) {
+            val count = selectedDocIds.size
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(UxConfig.Home.MERGE_BAR_MARGIN)
+                    .fillMaxWidth()
+                    .height(UxConfig.Home.MERGE_BAR_HEIGHT)
+                    .shadow(
+                        UxConfig.Home.ITEM_SHADOW,
+                        RoundedCornerShape(
+                            UxConfig.Home.MERGE_BAR_CORNER
+                        )
+                    )
+                    .background(
+                        Color.White,
+                        RoundedCornerShape(
+                            UxConfig.Home.MERGE_BAR_CORNER
+                        )
+                    )
+                    .padding(
+                        horizontal =
+                        UxConfig.Home.MERGE_BAR_PADDING_H
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement =
+                Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "${count}개 선택됨",
+                    fontSize = UxConfig.Home.MERGE_FONT_SIZE,
+                    fontWeight = FontWeight.Medium,
+                    color = MaestroOnSurface
+                )
+                Row(
+                    horizontalArrangement =
+                    Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearSelection()
+                        }
+                    ) {
+                        Text(
+                            "취소",
+                            fontSize =
+                            UxConfig.Home.MERGE_FONT_SIZE,
+                            color = Slate500
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.mergeSelected()
+                        },
+                        enabled = count >= 2,
+                        shape = RoundedCornerShape(
+                            UxConfig.Home.MERGE_BUTTON_CORNER
+                        ),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaestroPrimary
+                        ),
+                        contentPadding = PaddingValues(
+                            horizontal =
+                            UxConfig.Home
+                                .MERGE_BUTTON_PADDING_H,
+                            vertical =
+                            UxConfig.Home
+                                .MERGE_BUTTON_PADDING_V
+                        )
+                    ) {
+                        @Suppress("DEPRECATION")
+                        Icon(
+                            Icons.Default.MergeType,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "병합",
+                            fontSize =
+                            UxConfig.Home.MERGE_FONT_SIZE,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }
@@ -887,7 +1016,12 @@ private fun FolderGridItem(
 }
 
 @Composable
-private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
+private fun PdfGridItem(
+    doc: PdfDocument,
+    isSelected: Boolean = false,
+    isMultiSelectMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val thumbnail = remember(doc.uriString) {
         var fd: android.os.ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
@@ -920,10 +1054,25 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
         }
     }
 
+    val selBorder = if (isSelected) {
+        Modifier.border(
+            UxConfig.Home.ITEM_BORDER_DROP_TARGET,
+            MaestroPrimary,
+            RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+        )
+    } else {
+        Modifier
+    }
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
-            .shadow(UxConfig.Home.ITEM_SHADOW, RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
+            .then(selBorder)
+            .clip(
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            )
+            .shadow(
+                UxConfig.Home.ITEM_SHADOW,
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            )
             .background(
                 MaestroSurfaceContainerLowest,
                 RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
@@ -931,9 +1080,10 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(
-                UxConfig.Home.ITEM_ASPECT_RATIO
-            ).background(MaestroSurfaceContainer),
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(UxConfig.Home.ITEM_ASPECT_RATIO)
+                .background(MaestroSurfaceContainer),
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
@@ -947,9 +1097,35 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
                 Icon(
                     Icons.Default.PictureAsPdf,
                     contentDescription = null,
-                    modifier = Modifier.size(UxConfig.Home.PDF_PLACEHOLDER_ICON_SIZE),
+                    modifier = Modifier.size(
+                        UxConfig.Home.PDF_PLACEHOLDER_ICON_SIZE
+                    ),
                     tint = MaestroOutlineVariant
                 )
+            }
+            if (isMultiSelectMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(UxConfig.Home.CHECKBOX_OFFSET)
+                ) {
+                    Icon(
+                        imageVector = if (isSelected) {
+                            Icons.Default.CheckCircle
+                        } else {
+                            Icons.Default.RadioButtonUnchecked
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(
+                            UxConfig.Home.CHECKBOX_SIZE
+                        ),
+                        tint = if (isSelected) {
+                            MaestroPrimary
+                        } else {
+                            Slate500
+                        }
+                    )
+                }
             }
         }
         Column(modifier = Modifier.fillMaxWidth().padding(UxConfig.Home.ITEM_PADDING)) {

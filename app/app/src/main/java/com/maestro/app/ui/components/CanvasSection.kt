@@ -317,7 +317,7 @@ fun CanvasSection(
                                 Modifier
                                     .matchParentSize(),
                                 onLassoLlm =
-                                    onLassoLlm
+                                onLassoLlm
                             )
 
                             // Long-press action menu

@@ -1384,26 +1384,30 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         Color.White,
         Offset(cx4 - 10f, cy4 + 8f),
         Offset(cx4 - 5f, cy4 - 8f),
-        2.5f, StrokeCap.Round
+        2.5f,
+        StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx4 - 5f, cy4 - 8f),
         Offset(cx4, cy4 + 8f),
-        2.5f, StrokeCap.Round
+        2.5f,
+        StrokeCap.Round
     )
     drawLine(
         Color.White,
         Offset(cx4 - 8f, cy4 + 2f),
         Offset(cx4 - 2f, cy4 + 2f),
-        2f, StrokeCap.Round
+        2f,
+        StrokeCap.Round
     )
     // Letter I
     drawLine(
         Color.White,
         Offset(cx4 + 5f, cy4 - 8f),
         Offset(cx4 + 5f, cy4 + 8f),
-        2.5f, StrokeCap.Round
+        2.5f,
+        StrokeCap.Round
     )
 }
 
@@ -1431,7 +1435,8 @@ private fun captureSelectionBitmap(
     val h = (bounds.height * scale).toInt()
         .coerceAtLeast(1)
     val bmp = android.graphics.Bitmap.createBitmap(
-        w, h,
+        w,
+        h,
         android.graphics.Bitmap.Config.ARGB_8888
     )
     val canvas = android.graphics.Canvas(bmp)
@@ -1457,8 +1462,11 @@ private fun captureSelectionBitmap(
                 (pt.x - bounds.left) * scale
             val sy =
                 (pt.y - bounds.top) * scale
-            if (i == 0) path.moveTo(sx, sy)
-            else path.lineTo(sx, sy)
+            if (i == 0) {
+                path.moveTo(sx, sy)
+            } else {
+                path.lineTo(sx, sy)
+            }
         }
         canvas.drawPath(path, paint)
     }
@@ -1466,7 +1474,8 @@ private fun captureSelectionBitmap(
         java.io.ByteArrayOutputStream()
     bmp.compress(
         android.graphics.Bitmap.CompressFormat.PNG,
-        90, stream
+        90,
+        stream
     )
     bmp.recycle()
     callback(stream.toByteArray())

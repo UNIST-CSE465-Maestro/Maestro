@@ -77,10 +77,7 @@ class ViewerViewModel(
         _sidebarVisible.value = !_sidebarVisible.value
     }
 
-    fun sendSelectionToLlm(
-        bitmap: ByteArray,
-        prompt: String
-    ) {
+    fun sendSelectionToLlm(bitmap: ByteArray, prompt: String) {
         _sidebarVisible.value = true
         _pendingLlmImage.value = bitmap
         _pendingLlmPrompt.value = prompt
