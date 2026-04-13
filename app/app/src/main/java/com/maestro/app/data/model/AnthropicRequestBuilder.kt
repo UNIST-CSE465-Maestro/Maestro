@@ -1,7 +1,7 @@
 package com.maestro.app.data.model
 
-import android.util.Base64
 import com.maestro.app.domain.model.ChatMessage
+import java.util.Base64
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -89,10 +89,8 @@ object AnthropicRequestBuilder {
                                 put("media_type", "image/png")
                                 put(
                                     "data",
-                                    Base64.encodeToString(
-                                        imageBytes,
-                                        Base64.NO_WRAP
-                                    )
+                                    Base64.getEncoder()
+                                        .encodeToString(imageBytes)
                                 )
                             }
                         )

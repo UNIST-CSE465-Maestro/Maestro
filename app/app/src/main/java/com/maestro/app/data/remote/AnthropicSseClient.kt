@@ -22,7 +22,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * Supports both streaming (SSE) and single-shot requests.
  */
 class AnthropicSseClient(
-    private val httpClient: OkHttpClient
+    private val httpClient: OkHttpClient,
+    private val baseUrl: String = AnthropicRequestBuilder.BASE_URL
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -107,7 +108,7 @@ class AnthropicSseClient(
     }
 
     private fun buildRequest(apiKey: String, body: JsonObject): Request = Request.Builder()
-        .url("${AnthropicRequestBuilder.BASE_URL}/v1/messages")
+        .url("$baseUrl/v1/messages")
         .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
         .addHeader("Content-Type", "application/json")
         .addHeader("x-api-key", apiKey)
