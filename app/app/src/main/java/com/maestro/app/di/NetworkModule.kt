@@ -1,9 +1,9 @@
 package com.maestro.app.di
 
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.dsl.module
-import java.util.concurrent.TimeUnit
 
 val networkModule = module {
     single {

@@ -43,10 +43,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.domain.model.Folder
@@ -54,10 +54,7 @@ import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.ui.theme.*
 
 @Composable
-fun HomeScreen(
-    viewModel: HomeViewModel,
-    onOpenPdf: (PdfDocument) -> Unit
-) {
+fun HomeScreen(viewModel: HomeViewModel, onOpenPdf: (PdfDocument) -> Unit) {
     val documents by viewModel.documents.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val currentFolderId by viewModel.currentFolderId.collectAsState()
@@ -95,9 +92,14 @@ fun HomeScreen(
         folderBoundsMap.entries.firstOrNull { (id, bounds) ->
             bounds.contains(dragPosition) && id != dragItem?.id
         }?.key
-    } else null
+    } else {
+        null
+    }
 
-    fun clearDrag() { dragItem = null; hasDragMoved = false }
+    fun clearDrag() {
+        dragItem = null
+        hasDragMoved = false
+    }
 
     /** Compute drop target from current state — safe to call inside pointerInput lambdas */
     fun findDropTarget(excludeSelfId: String, isFolderDrag: Boolean): String? {
@@ -125,11 +127,15 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         try {
             val logFile = java.io.File(context.filesDir, "crash_log.txt")
-            if (logFile.exists()) { crashLog = logFile.readText() }
+            if (logFile.exists()) {
+                crashLog = logFile.readText()
+            }
         } catch (_: Throwable) {}
         try {
             val dbgFile = java.io.File(context.filesDir, ".claude/debug.log")
-            if (dbgFile.exists()) { debugLog = dbgFile.readText() }
+            if (dbgFile.exists()) {
+                debugLog = dbgFile.readText()
+            }
         } catch (_: Throwable) {}
     }
 
@@ -137,23 +143,37 @@ fun HomeScreen(
     if (crashLog != null) {
         AlertDialog(
             onDismissRequest = {
-                try { java.io.File(context.filesDir, "crash_log.txt").delete() } catch (_: Throwable) {}
+                try {
+                    java.io.File(context.filesDir, "crash_log.txt").delete()
+                } catch (
+                    _: Throwable
+                ) {}
                 crashLog = null
             },
             title = { Text("크래시 로그", fontWeight = FontWeight.Bold) },
             text = {
-                androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp)
+                ) {
                     item {
                         androidx.compose.foundation.text.selection.SelectionContainer {
-                            Text(crashLog ?: "", fontSize = 9.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 13.sp)
+                            Text(
+                                crashLog ?: "",
+                                fontSize = 9.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                lineHeight = 13.sp
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    try { java.io.File(context.filesDir, "crash_log.txt").delete() } catch (_: Throwable) {}
+                    try {
+                        java.io.File(context.filesDir, "crash_log.txt").delete()
+                    } catch (
+                        _: Throwable
+                    ) {}
                     crashLog = null
                 }) { Text("확인") }
             }
@@ -164,23 +184,37 @@ fun HomeScreen(
     if (debugLog != null) {
         AlertDialog(
             onDismissRequest = {
-                try { java.io.File(context.filesDir, ".claude/debug.log").delete() } catch (_: Throwable) {}
+                try {
+                    java.io.File(context.filesDir, ".claude/debug.log").delete()
+                } catch (
+                    _: Throwable
+                ) {}
                 debugLog = null
             },
             title = { Text("Claude 디버그 로그", fontWeight = FontWeight.Bold) },
             text = {
-                androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp)
+                ) {
                     item {
                         androidx.compose.foundation.text.selection.SelectionContainer {
-                            Text(debugLog ?: "", fontSize = 9.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 13.sp)
+                            Text(
+                                debugLog ?: "",
+                                fontSize = 9.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                lineHeight = 13.sp
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    try { java.io.File(context.filesDir, ".claude/debug.log").delete() } catch (_: Throwable) {}
+                    try {
+                        java.io.File(context.filesDir, ".claude/debug.log").delete()
+                    } catch (
+                        _: Throwable
+                    ) {}
                     debugLog = null
                 }) { Text("확인 (로그 삭제)") }
             }
@@ -192,11 +226,17 @@ fun HomeScreen(
         val currentName = contextPdf?.displayName ?: contextFolder?.name ?: ""
         RenameDialog(
             currentName = currentName,
-            onDismiss = { showRenameDialog = false; contextPdf = null; contextFolder = null },
+            onDismiss = {
+                showRenameDialog = false
+                contextPdf = null
+                contextFolder = null
+            },
             onRename = { newName ->
                 contextPdf?.let { viewModel.renameDocument(it.id, newName) }
                 contextFolder?.let { viewModel.renameFolder(it.id, newName) }
-                showRenameDialog = false; contextPdf = null; contextFolder = null
+                showRenameDialog = false
+                contextPdf = null
+                contextFolder = null
             }
         )
     }
@@ -205,18 +245,28 @@ fun HomeScreen(
     if (showDeleteConfirm) {
         val label = contextPdf?.displayName ?: contextFolder?.name ?: ""
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false; contextPdf = null; contextFolder = null },
+            onDismissRequest = {
+                showDeleteConfirm = false
+                contextPdf = null
+                contextFolder = null
+            },
             title = { Text("삭제", fontWeight = FontWeight.Bold) },
             text = { Text("\"$label\"을(를) 삭제하시겠습니까?") },
             confirmButton = {
                 TextButton(onClick = {
                     contextPdf?.let { viewModel.deleteDocument(it.id) }
                     contextFolder?.let { viewModel.deleteFolder(it.id) }
-                    showDeleteConfirm = false; contextPdf = null; contextFolder = null
+                    showDeleteConfirm = false
+                    contextPdf = null
+                    contextFolder = null
                 }) { Text("삭제", color = MaestroError, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false; contextPdf = null; contextFolder = null }) { Text("취소") }
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    contextPdf = null
+                    contextFolder = null
+                }) { Text("취소") }
             }
         )
     }
@@ -230,11 +280,17 @@ fun HomeScreen(
             allFolders = folders,
             excludeFolderId = movingFolderId,
             itemLabel = movingLabel,
-            onDismiss = { showMoveDialog = false; contextPdf = null; contextFolder = null },
+            onDismiss = {
+                showMoveDialog = false
+                contextPdf = null
+                contextFolder = null
+            },
             onConfirm = { targetFolderId ->
                 if (movingPdfId != null) viewModel.moveDocument(movingPdfId, targetFolderId)
                 if (movingFolderId != null) viewModel.moveFolder(movingFolderId, targetFolderId)
-                showMoveDialog = false; contextPdf = null; contextFolder = null
+                showMoveDialog = false
+                contextPdf = null
+                contextFolder = null
             }
         )
     }
@@ -243,7 +299,10 @@ fun HomeScreen(
     if (showCreateFolderDialog) {
         CreateFolderDialog(
             onDismiss = { showCreateFolderDialog = false },
-            onCreate = { name -> viewModel.createFolder(name); showCreateFolderDialog = false }
+            onCreate = { name ->
+                viewModel.createFolder(name)
+                showCreateFolderDialog = false
+            }
         )
     }
 
@@ -252,8 +311,9 @@ fun HomeScreen(
     val currentDocs = documents.filter { it.folderId == currentFolderId }
     val currentFolderName = folders.find { it.id == currentFolderId }?.name
 
-    Box(modifier = Modifier.fillMaxSize().background(MaestroBackground)
-        .onGloballyPositioned { rootOffset = it.positionInWindow() }
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaestroBackground)
+            .onGloballyPositioned { rootOffset = it.positionInWindow() }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             HomeTopBar(
@@ -263,7 +323,9 @@ fun HomeScreen(
                         val parent = folders.find { it.id == currentFolderId }?.parentId
                         viewModel.navigateFolder(parent)
                     }
-                } else null
+                } else {
+                    null
+                }
             )
 
             if (currentFolders.isEmpty() && currentDocs.isEmpty()) {
@@ -304,23 +366,36 @@ fun HomeScreen(
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.firstOrNull() ?: break
                                                 if (change.changedToUp()) {
-                                                    if (longPressed && !moved) { contextFolder = folder; contextPdf = null }
-                                                    else if (longPressed && moved) {
+                                                    if (longPressed && !moved) {
+                                                        contextFolder = folder
+                                                        contextPdf = null
+                                                    } else if (longPressed && moved) {
                                                         val target = findDropTarget(folder.id, true)
-                                                        if (target != null) viewModel.moveFolder(folder.id, target)
+                                                        if (target != null) {
+                                                            viewModel.moveFolder(
+                                                                folder.id,
+                                                                target
+                                                            )
+                                                        }
                                                     }
-                                                    clearDrag(); break
+                                                    clearDrag()
+                                                    break
                                                 }
                                                 val elapsed = System.currentTimeMillis() - startTime
                                                 if (!longPressed && elapsed >= 200) {
                                                     longPressed = true
-                                                    dragItem = DragItem(folder.id, true, folder.name)
+                                                    dragItem = DragItem(
+                                                        folder.id, true, folder.name
+                                                    )
                                                     dragPosition = startPos
                                                     hasDragMoved = false
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    if (drag.getDistance() > 2f) { moved = true; hasDragMoved = true }
+                                                    if (drag.getDistance() > 2f) {
+                                                        moved = true
+                                                        hasDragMoved = true
+                                                    }
                                                     dragPosition += drag
                                                     change.consume()
                                                 }
@@ -337,17 +412,35 @@ fun HomeScreen(
                                 DropdownMenuItem(
                                     text = { Text("이름 변경") },
                                     onClick = { showRenameDialog = true },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = MaestroOnSurfaceVariant) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("이동") },
                                     onClick = { showMoveDialog = true },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null, tint = MaestroOnSurfaceVariant) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.DriveFileMove,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("삭제", color = MaestroError) },
                                     onClick = { showDeleteConfirm = true },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaestroError) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = MaestroError
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -367,29 +460,45 @@ fun HomeScreen(
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
                                             val startPos = itemPos + down.position
-                                            var moved = false; var longPressed = false
+                                            var moved = false
+                                            var longPressed = false
                                             val startTime = System.currentTimeMillis()
                                             while (true) {
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.firstOrNull() ?: break
                                                 if (change.changedToUp()) {
-                                                    if (longPressed && !moved) { contextPdf = doc; contextFolder = null }
-                                                    else if (longPressed && moved) {
+                                                    if (longPressed && !moved) {
+                                                        contextPdf = doc
+                                                        contextFolder = null
+                                                    } else if (longPressed && moved) {
                                                         val target = findDropTarget(doc.id, false)
-                                                        if (target != null) viewModel.moveDocument(doc.id, target)
+                                                        if (target != null) {
+                                                            viewModel.moveDocument(
+                                                                doc.id,
+                                                                target
+                                                            )
+                                                        }
                                                     }
-                                                    clearDrag(); break
+                                                    clearDrag()
+                                                    break
                                                 }
                                                 val elapsed = System.currentTimeMillis() - startTime
                                                 if (!longPressed && elapsed >= 200) {
                                                     longPressed = true
-                                                    dragItem = DragItem(doc.id, false, doc.displayName)
-                                                    dragPosition = startPos; hasDragMoved = false
+                                                    dragItem = DragItem(
+                                                        doc.id, false, doc.displayName
+                                                    )
+                                                    dragPosition = startPos
+                                                    hasDragMoved = false
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    if (drag.getDistance() > 2f) { moved = true; hasDragMoved = true }
-                                                    dragPosition += drag; change.consume()
+                                                    if (drag.getDistance() > 2f) {
+                                                        moved = true
+                                                        hasDragMoved = true
+                                                    }
+                                                    dragPosition += drag
+                                                    change.consume()
                                                 }
                                             }
                                         }
@@ -404,17 +513,35 @@ fun HomeScreen(
                                 DropdownMenuItem(
                                     text = { Text("이름 변경") },
                                     onClick = { showRenameDialog = true },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = MaestroOnSurfaceVariant) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("이동") },
                                     onClick = { showMoveDialog = true },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null, tint = MaestroOnSurfaceVariant) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.DriveFileMove,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("삭제", color = MaestroError) },
                                     onClick = { showDeleteConfirm = true },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaestroError) }
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = MaestroError
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -429,19 +556,38 @@ fun HomeScreen(
             val localY = dragPosition.y - rootOffset.y
             Box(
                 modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset((localX - 60).toInt(), (localY - 30).toInt()) }
+                    .offset {
+                        androidx.compose.ui.unit.IntOffset(
+                            (localX - 60).toInt(),
+                            (localY - 30).toInt()
+                        )
+                    }
                     .shadow(12.dp, RoundedCornerShape(12.dp))
                     .background(Color.White, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Icon(
-                        if (dragItem!!.isFolder) Icons.Default.Folder else Icons.Default.PictureAsPdf,
-                        contentDescription = null, modifier = Modifier.size(20.dp),
+                        if (dragItem!!.isFolder) {
+                            Icons.Default.Folder
+                        } else {
+                            Icons.Default.PictureAsPdf
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
                         tint = if (dragItem!!.isFolder) MaestroPrimary else Slate500
                     )
-                    Text(dragItem!!.label, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                        color = MaestroOnSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        dragItem!!.label,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaestroOnSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -455,7 +601,13 @@ fun HomeScreen(
                 containerColor = MaestroPrimary,
                 contentColor = Color.White,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
-            ) { Icon(Icons.Default.Add, contentDescription = "추가", modifier = Modifier.size(28.dp)) }
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "추가",
+                    modifier = Modifier.size(28.dp)
+                )
+            }
 
             DropdownMenu(
                 expanded = showFabMenu,
@@ -464,13 +616,31 @@ fun HomeScreen(
             ) {
                 DropdownMenuItem(
                     text = { Text("PDF 파일 업로드", fontSize = 14.sp) },
-                    onClick = { showFabMenu = false; pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = MaestroPrimary) }
+                    onClick = {
+                        showFabMenu = false
+                        pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.InsertDriveFile,
+                            contentDescription = null,
+                            tint = MaestroPrimary
+                        )
+                    }
                 )
                 DropdownMenuItem(
                     text = { Text("새 폴더 만들기", fontSize = 14.sp) },
-                    onClick = { showFabMenu = false; showCreateFolderDialog = true },
-                    leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = MaestroPrimary) }
+                    onClick = {
+                        showFabMenu = false
+                        showCreateFolderDialog = true
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.CreateNewFolder,
+                            contentDescription = null,
+                            tint = MaestroPrimary
+                        )
+                    }
                 )
             }
         }
@@ -537,22 +707,38 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 @Composable
 private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(72.dp).background(Slate50).padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth().height(
+            72.dp
+        ).background(Slate50).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로", tint = Maestro900)
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "뒤로",
+                    tint = Maestro900
+                )
             }
             Spacer(Modifier.width(4.dp))
             Text(
                 text = currentFolderName ?: "Maestro",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Maestro900,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Maestro900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
         } else {
             Spacer(Modifier.width(12.dp))
-            Text("Maestro", fontSize = 24.sp, fontWeight = FontWeight.Black, color = Maestro900, letterSpacing = (-0.5).sp)
+            Text(
+                "Maestro",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Black,
+                color = Maestro900,
+                letterSpacing = (-0.5).sp
+            )
             Spacer(Modifier.weight(1f))
         }
         Text("PDF Studio", fontSize = 13.sp, color = Slate500)
@@ -571,18 +757,28 @@ private fun EmptyLibrary(isInFolder: Boolean, modifier: Modifier = Modifier) {
     ) {
         Icon(
             if (isInFolder) Icons.Default.Folder else Icons.Default.PictureAsPdf,
-            contentDescription = null, modifier = Modifier.size(72.dp), tint = MaestroOutlineVariant
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaestroOutlineVariant
         )
         Spacer(Modifier.height(16.dp))
         Text(
             if (isInFolder) "빈 폴더입니다" else "PDF 파일이 없습니다",
-            fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaestroOnSurfaceVariant
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaestroOnSurfaceVariant
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            if (isInFolder) "오른쪽 아래의 + 버튼을 눌러\nPDF 파일을 추가하세요"
-            else "오른쪽 아래의 + 버튼을 눌러\nPDF 파일이나 폴더를 추가하세요",
-            fontSize = 14.sp, color = Slate500, textAlign = TextAlign.Center, lineHeight = 22.sp
+            if (isInFolder) {
+                "오른쪽 아래의 + 버튼을 눌러\nPDF 파일을 추가하세요"
+            } else {
+                "오른쪽 아래의 + 버튼을 눌러\nPDF 파일이나 폴더를 추가하세요"
+            },
+            fontSize = 14.sp,
+            color = Slate500,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
         )
     }
 }
@@ -590,10 +786,16 @@ private fun EmptyLibrary(isInFolder: Boolean, modifier: Modifier = Modifier) {
 // ── Grid items ──────────────────────────────────────
 
 @Composable
-private fun FolderGridItem(folder: Folder, isDropTarget: Boolean = false, modifier: Modifier = Modifier) {
-    val borderMod = if (isDropTarget)
+private fun FolderGridItem(
+    folder: Folder,
+    isDropTarget: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val borderMod = if (isDropTarget) {
         Modifier.border(3.dp, MaestroPrimary, RoundedCornerShape(12.dp))
-    else Modifier
+    } else {
+        Modifier
+    }
     Column(
         modifier = modifier
             .then(borderMod)
@@ -610,12 +812,23 @@ private fun FolderGridItem(folder: Folder, isDropTarget: Boolean = false, modifi
                 .background(if (isDropTarget) MaestroPrimary.copy(alpha = 0.1f) else Maestro50),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Folder, contentDescription = null,
-                modifier = Modifier.size(56.dp), tint = MaestroPrimary.copy(alpha = if (isDropTarget) 1f else 0.7f))
+            Icon(
+                Icons.Default.Folder,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaestroPrimary.copy(alpha = if (isDropTarget) 1f else 0.7f)
+            )
         }
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(folder.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                color = MaestroOnSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+            Text(
+                folder.name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaestroOnSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 18.sp
+            )
             Spacer(Modifier.height(4.dp))
             Text("폴더", fontSize = 11.sp, color = Slate500)
         }
@@ -632,18 +845,27 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
             val path = Uri.parse(doc.uriString).path ?: return@remember null
             val file = java.io.File(path)
             if (!file.exists()) return@remember null
-            fd = android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            fd = android.os.ParcelFileDescriptor.open(
+                file, android.os.ParcelFileDescriptor.MODE_READ_ONLY
+            )
             renderer = PdfRenderer(fd)
             page = renderer.openPage(0)
             val bmp = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
             bmp.eraseColor(android.graphics.Color.WHITE)
             page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             bmp
-        } catch (_: Throwable) { null }
-        finally {
-            try { page?.close() } catch (_: Throwable) {}
-            try { renderer?.close() } catch (_: Throwable) {}
-            try { fd?.close() } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+            null
+        } finally {
+            try {
+                page?.close()
+            } catch (_: Throwable) {}
+            try {
+                renderer?.close()
+            } catch (_: Throwable) {}
+            try {
+                fd?.close()
+            } catch (_: Throwable) {}
         }
     }
 
@@ -655,20 +877,37 @@ private fun PdfGridItem(doc: PdfDocument, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(0.707f).background(MaestroSurfaceContainer),
+            modifier = Modifier.fillMaxWidth().aspectRatio(
+                0.707f
+            ).background(MaestroSurfaceContainer),
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
-                Image(bitmap = thumbnail.asImageBitmap(), contentDescription = doc.displayName,
-                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(
+                    bitmap = thumbnail.asImageBitmap(),
+                    contentDescription = doc.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
             } else {
-                Icon(Icons.Default.PictureAsPdf, contentDescription = null,
-                    modifier = Modifier.size(48.dp), tint = MaestroOutlineVariant)
+                Icon(
+                    Icons.Default.PictureAsPdf,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaestroOutlineVariant
+                )
             }
         }
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(doc.displayName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                color = MaestroOnSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+            Text(
+                doc.displayName,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaestroOnSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 18.sp
+            )
             Spacer(Modifier.height(4.dp))
             Text("${doc.pageCount}페이지", fontSize = 11.sp, color = Slate500)
         }
@@ -687,8 +926,9 @@ private fun MovePickerDialog(
 ) {
     // Collect excluded IDs (the folder itself + all descendants)
     val excludedIds = remember(excludeFolderId, allFolders) {
-        if (excludeFolderId == null) emptySet()
-        else {
+        if (excludeFolderId == null) {
+            emptySet()
+        } else {
             val set = mutableSetOf(excludeFolderId)
             fun collectChildren(parentId: String) {
                 allFolders.filter { it.parentId == parentId }.forEach {
@@ -720,7 +960,9 @@ private fun MovePickerDialog(
         path
     }
 
-    val visibleFolders = allFolders.filter { it.parentId == browseFolderId && it.id !in excludedIds }
+    val visibleFolders = allFolders.filter {
+        it.parentId == browseFolderId && it.id !in excludedIds
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -732,8 +974,14 @@ private fun MovePickerDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("\"$itemLabel\" 이동", fontWeight = FontWeight.Bold, fontSize = 16.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(
+                        "\"$itemLabel\" 이동",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                     TextButton(onClick = { onConfirm(browseFolderId) }) {
                         Text("이동", fontWeight = FontWeight.Bold, color = MaestroPrimary)
                     }
@@ -751,7 +999,11 @@ private fun MovePickerDialog(
                             name,
                             fontSize = 12.sp,
                             color = if (id == browseFolderId) MaestroPrimary else Slate500,
-                            fontWeight = if (id == browseFolderId) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (id == browseFolderId) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Normal
+                            },
                             modifier = Modifier.clickable { browseFolderId = id },
                             maxLines = 1
                         )
@@ -761,15 +1013,26 @@ private fun MovePickerDialog(
         },
         text = {
             if (visibleFolders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null,
-                            modifier = Modifier.size(32.dp), tint = MaestroOutlineVariant)
+                        Icon(
+                            Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaestroOutlineVariant
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text("하위 폴더 없음", fontSize = 13.sp, color = Slate500)
                         Spacer(Modifier.height(4.dp))
-                        Text("현재 위치에 이동하려면 '이동' 버튼을 누르세요",
-                            fontSize = 11.sp, color = Slate400, textAlign = TextAlign.Center)
+                        Text(
+                            "현재 위치에 이동하려면 '이동' 버튼을 누르세요",
+                            fontSize = 11.sp,
+                            color = Slate400,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             } else {
@@ -780,18 +1043,35 @@ private fun MovePickerDialog(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { browseFolderId = folder.id }
-                                .background(MaestroSurfaceContainer.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .background(
+                                    MaestroSurfaceContainer.copy(alpha = 0.5f),
+                                    RoundedCornerShape(8.dp)
+                                )
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Default.Folder, contentDescription = null,
-                                modifier = Modifier.size(24.dp), tint = MaestroPrimary.copy(alpha = 0.7f))
-                            Text(folder.name, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                                color = MaestroOnSurface, modifier = Modifier.weight(1f),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Icon(Icons.Default.ChevronRight, contentDescription = null,
-                                modifier = Modifier.size(20.dp), tint = Slate400)
+                            Icon(
+                                Icons.Default.Folder,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaestroPrimary.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                folder.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaestroOnSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = Slate400
+                            )
                         }
                     }
                 }

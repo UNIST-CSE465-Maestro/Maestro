@@ -56,7 +56,9 @@ fun MaestroNavGraph() {
                 viewModel = viewModel,
                 onOpenPdf = { doc ->
                     val encoded = Uri.encode(doc.uriString)
-                    navController.navigate(Screen.Viewer.createRoute(doc.id, doc.pageCount, encoded))
+                    navController.navigate(
+                        Screen.Viewer.createRoute(doc.id, doc.pageCount, encoded)
+                    )
                 }
             )
         }

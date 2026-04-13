@@ -10,16 +10,19 @@ import com.maestro.app.data.model.FolderDto
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.domain.repository.DocumentRepository
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
-import java.util.UUID
 
 class DocumentRepositoryImpl(private val context: Context) : DocumentRepository {
 
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
+    }
     private val pdfDir = File(context.filesDir, "pdfs").also { it.mkdirs() }
     private val metaFile = File(context.filesDir, "pdf_meta.json")
     private val foldersFile = File(context.filesDir, "folders_meta.json")
@@ -163,6 +166,8 @@ class DocumentRepositoryImpl(private val context: Context) : DocumentRepository 
             renderer.close()
             fd.close()
             count
-        } catch (_: Throwable) { 1 }
+        } catch (_: Throwable) {
+            1
+        }
     }
 }

@@ -4,14 +4,14 @@ import android.app.Application
 import com.maestro.app.di.appModule
 import com.maestro.app.di.dataModule
 import com.maestro.app.di.networkModule
-import org.koin.android.ext.koin.androidContext
-import org.koin.core.context.startKoin
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.context.startKoin
 
 class MaestroApp : Application() {
     override fun onCreate() {
@@ -28,7 +28,9 @@ class MaestroApp : Application() {
                 val sw = StringWriter()
                 val pw = PrintWriter(sw)
                 pw.println("=== MAESTRO CRASH ===")
-                pw.println("Time: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
+                pw.println(
+                    "Time: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}"
+                )
                 pw.println("Thread: ${thread.name}")
                 pw.println()
                 throwable.printStackTrace(pw)
