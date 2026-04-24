@@ -3,6 +3,8 @@ package com.maestro.app.di
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.PdfMerger
+import com.maestro.app.data.local.ProfileLocalDataSource
+import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.MaestroServerApi
@@ -10,13 +12,18 @@ import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.data.repository.DocumentRepositoryImpl
+import com.maestro.app.data.repository.KnowledgeRepositoryImpl
 import com.maestro.app.data.repository.SettingsRepositoryImpl
+import com.maestro.app.data.service.HeuristicKnowledgeTracer
 import com.maestro.app.data.service.LlmServiceImpl
+import com.maestro.app.data.service.OnnxRektKnowledgeTracer
 import com.maestro.app.data.service.QuizServiceImpl
 import com.maestro.app.domain.repository.DocumentRepository
+import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
+import com.maestro.app.domain.service.RektKnowledgeTracer
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -48,8 +55,28 @@ val dataModule = module {
         )
     }
     single { ConversationLocalDataSource(get()) }
+    single { ProfileLocalDataSource(get()) }
+    single {
+        StudyEventLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
     single { PdfMerger(get()) }
     single<QuizService> { QuizServiceImpl(get()) }
+    single<RektKnowledgeTracer> {
+        OnnxRektKnowledgeTracer(
+            context = get<android.content.Context>(),
+            fallback = HeuristicKnowledgeTracer()
+        )
+    }
+    single<KnowledgeRepository> {
+        KnowledgeRepositoryImpl(
+            context = get<android.content.Context>(),
+            documentRepository = get(),
+            studyEvents = get(),
+            tracer = get()
+        )
+    }
 
     // Maestro Server Retrofit + API
     single<MaestroServerApi> {

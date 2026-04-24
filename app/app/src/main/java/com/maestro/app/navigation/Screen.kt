@@ -8,4 +8,5 @@ sealed class Screen(val route: String) {
             "viewer/$pdfId/$pageCount/$uriEncoded"
     }
     data object Settings : Screen("settings")
+    data object Profile : Screen("profile")
 }

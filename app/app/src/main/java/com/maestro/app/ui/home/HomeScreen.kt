@@ -51,23 +51,30 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.*
+import java.io.File
+import org.koin.compose.koinInject
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenPdf: (PdfDocument) -> Unit,
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
+    profileDataSource: ProfileLocalDataSource = koinInject()
 ) {
     val documents by viewModel.documents.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val currentFolderId by viewModel.currentFolderId.collectAsState()
     val selectedDocIds by viewModel.selectedDocIds.collectAsState()
     val isMultiSelect by viewModel.isMultiSelectMode.collectAsState()
+    val profile by profileDataSource.profile.collectAsState()
 
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -473,7 +480,9 @@ fun HomeScreen(
                 } else {
                     null
                 },
-                onOpenSettings = onOpenSettings
+                onOpenSettings = onOpenSettings,
+                onOpenProfile = onOpenProfile,
+                avatarPath = profile.avatarPath
             )
 
             if (currentFolders.isEmpty() && currentDocs.isEmpty()) {
@@ -1062,7 +1071,9 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 private fun HomeTopBar(
     currentFolderName: String?,
     onBack: (() -> Unit)?,
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
+    avatarPath: String? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().height(
@@ -1101,6 +1112,24 @@ private fun HomeTopBar(
         }
         Text("PDF Studio", fontSize = UxConfig.Home.SUBTITLE_FONT_SIZE, color = Slate500)
         Spacer(Modifier.width(4.dp))
+        IconButton(onClick = onOpenProfile) {
+            if (avatarPath != null) {
+                AsyncImage(
+                    model = File(avatarPath),
+                    contentDescription = "프로필",
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    Icons.Default.AccountCircle,
+                    contentDescription = "프로필",
+                    tint = Slate500
+                )
+            }
+        }
         IconButton(onClick = onOpenSettings) {
             Icon(
                 Icons.Default.Settings,

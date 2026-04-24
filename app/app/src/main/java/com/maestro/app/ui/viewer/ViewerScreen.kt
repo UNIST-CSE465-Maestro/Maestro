@@ -209,6 +209,12 @@ fun ViewerScreen(
                 documentContent = documentContent,
                 pendingImage = pendingImage,
                 pendingPrompt = pendingPrompt,
+                onLlmRequested = { prompt, hasImage ->
+                    viewModel.recordLlmRequested(
+                        prompt,
+                        hasImage
+                    )
+                },
                 onPendingConsumed = {
                     viewModel.consumePendingLlm()
                 }

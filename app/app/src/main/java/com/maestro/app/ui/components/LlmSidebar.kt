@@ -102,6 +102,7 @@ fun LlmSidebar(
     documentContent: String? = null,
     pendingImage: ByteArray? = null,
     pendingPrompt: String? = null,
+    onLlmRequested: (prompt: String, hasImage: Boolean) -> Unit = { _, _ -> },
     onPendingConsumed: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -225,6 +226,7 @@ fun LlmSidebar(
         activeJob?.cancel()
         isLoading = false
         errorMessage = null
+        onLlmRequested(text, imgs.isNotEmpty())
         val userMsg = ChatMessage(
             role = ChatMessage.Role.USER,
             content = text

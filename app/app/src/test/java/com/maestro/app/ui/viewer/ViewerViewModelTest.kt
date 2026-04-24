@@ -2,6 +2,7 @@ package com.maestro.app.ui.viewer
 
 import android.content.Context
 import android.net.Uri
+import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.domain.repository.SettingsRepository
@@ -36,6 +37,7 @@ class ViewerViewModelTest {
     private val settingsRepo: SettingsRepository =
         mockk(relaxed = true)
     private val appContext: Context = mockk(relaxed = true)
+    private lateinit var studyEvents: StudyEventLocalDataSource
 
     @Before
     fun setup() {
@@ -45,6 +47,12 @@ class ViewerViewModelTest {
         } returns java.io.File(
             System.getProperty("java.io.tmpdir"),
             "maestro-test"
+        )
+        studyEvents = StudyEventLocalDataSource(
+            java.io.File(
+                System.getProperty("java.io.tmpdir"),
+                "maestro-test-events-${System.nanoTime()}.json"
+            )
         )
     }
 
@@ -61,6 +69,7 @@ class ViewerViewModelTest {
             analyzerClient = analyzerClient,
             settingsRepository = settingsRepo,
             documentRepository = docRepo,
+            studyEvents = studyEvents,
             appContext = appContext,
             pdfId = pdfId,
             pageCount = pageCount,

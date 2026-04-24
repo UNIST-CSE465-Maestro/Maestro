@@ -81,6 +81,9 @@ dependencies {
     // Stylus
     implementation(libs.androidx.input.motionprediction)
 
+    // Local ML inference
+    implementation(libs.onnxruntime.android)
+
     // Test
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

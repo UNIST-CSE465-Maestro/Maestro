@@ -37,6 +37,8 @@ import com.maestro.app.ui.auth.AuthScreen
 import com.maestro.app.ui.auth.AuthViewModel
 import com.maestro.app.ui.home.HomeScreen
 import com.maestro.app.ui.home.HomeViewModel
+import com.maestro.app.ui.profile.ProfileScreen
+import com.maestro.app.ui.profile.ProfileViewModel
 import com.maestro.app.ui.settings.SettingsScreen
 import com.maestro.app.ui.settings.SettingsViewModel
 import com.maestro.app.ui.theme.MaestroBackground
@@ -232,6 +234,11 @@ fun MaestroNavGraph() {
                     navController.navigate(
                         Screen.Settings.route
                     )
+                },
+                onOpenProfile = {
+                    navController.navigate(
+                        Screen.Profile.route
+                    )
                 }
             )
         }
@@ -314,6 +321,22 @@ fun MaestroNavGraph() {
                             inclusive = true
                         }
                     }
+                }
+            )
+        }
+
+        composable(Screen.Profile.route) {
+            val viewModel: ProfileViewModel =
+                koinViewModel()
+
+            BackHandler {
+                navController.popBackStack()
+            }
+
+            ProfileScreen(
+                viewModel = viewModel,
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

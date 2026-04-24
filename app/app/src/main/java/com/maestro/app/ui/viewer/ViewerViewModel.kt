@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.maestro.app.data.local.StudyEventLocalDataSource
+import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
@@ -28,6 +30,7 @@ class ViewerViewModel(
     private val analyzerClient: MaterialAnalyzerClient,
     private val settingsRepository: SettingsRepository,
     private val documentRepository: DocumentRepository,
+    private val studyEvents: StudyEventLocalDataSource,
     private val appContext: Context,
     val pdfId: String,
     val pageCount: Int,
@@ -75,13 +78,14 @@ class ViewerViewModel(
     private var lastSavedVersion = 0
 
     init {
+        recordDocumentOpened()
         loadAnnotations()
         loadDocumentContent()
         loadDocumentMeta()
     }
 
     private fun loadDocumentContent() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 _documentContent.value =
                     loadContentMd(pdfId)
@@ -90,14 +94,12 @@ class ViewerViewModel(
     }
 
     private fun loadAnnotations() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                withContext(Dispatchers.IO) {
-                    annotationRepo.loadAll(
-                        pdfId,
-                        drawingState
-                    )
-                }
+                annotationRepo.loadAll(
+                    pdfId,
+                    drawingState
+                )
             } catch (_: Throwable) {}
             lastSavedVersion =
                 drawingState.annotationVersion
@@ -109,6 +111,12 @@ class ViewerViewModel(
             drawingState.annotationVersion
         if (currentVersion <= lastSavedVersion) return
         lastSavedVersion = currentVersion
+        studyEvents.append(
+            type = StudyEventType.ANNOTATION_SAVED,
+            documentId = pdfId,
+            pageIndex = drawingState.activePageIndex
+                .coerceAtLeast(0)
+        )
         viewModelScope.launch {
             delay(UxConfig.Timing.AUTOSAVE_DEBOUNCE_MS)
             withContext(Dispatchers.IO) {
@@ -121,7 +129,7 @@ class ViewerViewModel(
     }
 
     private fun loadDocumentMeta() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val doc = documentRepository.loadDocuments()
                 .find { it.id == pdfId }
             if (doc != null) {
@@ -157,11 +165,24 @@ class ViewerViewModel(
             documentRepository.updateDocument(
                 doc.copy(bookmarkedPages = updated)
             )
+            studyEvents.append(
+                type = StudyEventType.BOOKMARK_TOGGLED,
+                documentId = pdfId,
+                pageIndex = page,
+                metadata = mapOf(
+                    "bookmarked" to (page in updated).toString()
+                )
+            )
         }
     }
 
     fun setCurrentPage(page: Int) {
         _currentPage.value = page
+        studyEvents.append(
+            type = StudyEventType.PAGE_VIEWED,
+            documentId = pdfId,
+            pageIndex = page
+        )
     }
 
     fun toggleSidebar() {
@@ -184,6 +205,12 @@ class ViewerViewModel(
         if (_documentContent.value.isNullOrBlank()) {
             return
         }
+        studyEvents.append(
+            type = StudyEventType.QUIZ_REQUESTED,
+            documentId = pdfId,
+            pageIndex = _currentPage.value,
+            promptLength = _documentContent.value?.length
+        )
         _sidebarVisible.value = true
         _pendingLlmPrompt.value =
             "이 문서의 내용을 바탕으로 " +
@@ -191,6 +218,25 @@ class ViewerViewModel(
             "각 문제에 4개 선택지(A-D)와 " +
             "정답을 포함해줘." +
             "\n<!--${System.currentTimeMillis()}-->"
+    }
+
+    fun recordLlmRequested(prompt: String, hasImage: Boolean) {
+        studyEvents.append(
+            type = StudyEventType.LLM_REQUESTED,
+            documentId = pdfId,
+            pageIndex = _currentPage.value,
+            promptLength = prompt.length,
+            metadata = mapOf(
+                "hasImage" to hasImage.toString()
+            )
+        )
+    }
+
+    private fun recordDocumentOpened() {
+        studyEvents.append(
+            type = StudyEventType.DOCUMENT_OPENED,
+            documentId = pdfId
+        )
     }
 
     private suspend fun loadOrExtract(uri: Uri, mode: String): String {
