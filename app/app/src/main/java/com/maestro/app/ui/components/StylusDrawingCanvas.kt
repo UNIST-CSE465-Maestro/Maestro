@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
@@ -81,7 +82,7 @@ private var copyButtonRect: Rect? = null
 private var deleteButtonRect: Rect? = null
 private var cropCopyButtonRect: Rect? = null
 private var cropCancelButtonRect: Rect? = null
-private var llmButtonRect: Rect? = null
+private var cropLlmButtonRect: Rect? = null
 private var imgDeleteRect: Rect? = null
 private var imgCopyRect: Rect? = null
 private var imgCutRect: Rect? = null
@@ -96,7 +97,7 @@ fun StylusDrawingCanvas(
     state: DrawingState,
     pageIndex: Int,
     modifier: Modifier = Modifier,
-    onLassoLlm: ((ByteArray) -> Unit)? = null
+    onCropLlm: ((ByteArray) -> Unit)? = null
 ) {
     val pageStrokes = state.strokesForPage(pageIndex)
     val view = LocalView.current
@@ -205,6 +206,26 @@ fun StylusDrawingCanvas(
                             canvasWidth, canvasHeight,
                             canvasScreenX, canvasScreenY,
                             view, context,
+                            { buttonTapConsumed = true }
+                        )
+                        return@pointerInteropFilter true
+                    }
+
+                    // ── Crop Capture tool: adjusting phase ──
+                    if (state.activeTool ==
+                        DrawingTool.CROP_CAPTURE &&
+                        state.cropCapturePhase ==
+                        CropCapturePhase.ADJUSTING &&
+                        state.cropCapturePageIndex ==
+                        pageIndex
+                    ) {
+                        handleCropCaptureAdjust(
+                            event, state, pageIndex,
+                            canvasWidth, canvasHeight,
+                            canvasScreenX,
+                            canvasScreenY,
+                            view, context,
+                            onCropLlm,
                             { buttonTapConsumed = true }
                         )
                         return@pointerInteropFilter true
@@ -406,22 +427,6 @@ fun StylusDrawingCanvas(
                             buttonTapConsumed = true
                             return@pointerInteropFilter true
                         }
-                        if (llmButtonRect?.contains(
-                                Offset(tx, ty)
-                            ) == true &&
-                            onLassoLlm != null
-                        ) {
-                            captureSelectionBitmap(
-                                state,
-                                pageIndex,
-                                canvasWidth,
-                                onLassoLlm
-                            )
-                            state.isStylusTouching =
-                                false
-                            buttonTapConsumed = true
-                            return@pointerInteropFilter true
-                        }
                     }
 
                     // Pen with lasso selection: drag
@@ -454,6 +459,13 @@ fun StylusDrawingCanvas(
                                 )
                             DrawingTool.LASSO ->
                                 handleLasso(
+                                    event,
+                                    state,
+                                    pageIndex,
+                                    iz
+                                )
+                            DrawingTool.CROP_CAPTURE ->
+                                handleCropCaptureDraw(
                                     event,
                                     state,
                                     pageIndex,
@@ -604,6 +616,13 @@ fun StylusDrawingCanvas(
 
             // ── Crop overlay ──
             drawCropOverlay(
+                state,
+                pageIndex,
+                renderScale
+            )
+
+            // ── Crop Capture overlay ──
+            drawCropCaptureOverlay(
                 state,
                 pageIndex,
                 renderScale
@@ -1357,58 +1376,6 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
         Offset(cx3 + 7f, cy3 + 7f),
         style = Stroke(UxConfig.Selection.CUT_CIRCLE_STROKE)
     )
-
-    // LLM / AI button (purple) - far left
-    val llmSize = UxConfig.Selection.LLM_BUTTON_SIZE
-    val llmRect = Rect(
-        cutRect.left - llmSize - gap,
-        btnY,
-        cutRect.left - gap,
-        btnY + llmSize
-    )
-    llmButtonRect = llmRect
-    drawRoundRect(
-        BtnLlm,
-        Offset(llmRect.left, llmRect.top),
-        Size(llmSize, llmSize),
-        CornerRadius(
-            UxConfig.Selection.BUTTON_CORNER_RADIUS
-        ),
-        style = Fill
-    )
-    val cx4 = llmRect.center.x
-    val cy4 = llmRect.center.y
-    // Draw "AI" text via simple lines
-    // Letter A
-    drawLine(
-        Color.White,
-        Offset(cx4 - 10f, cy4 + 8f),
-        Offset(cx4 - 5f, cy4 - 8f),
-        2.5f,
-        StrokeCap.Round
-    )
-    drawLine(
-        Color.White,
-        Offset(cx4 - 5f, cy4 - 8f),
-        Offset(cx4, cy4 + 8f),
-        2.5f,
-        StrokeCap.Round
-    )
-    drawLine(
-        Color.White,
-        Offset(cx4 - 8f, cy4 + 2f),
-        Offset(cx4 - 2f, cy4 + 2f),
-        2f,
-        StrokeCap.Round
-    )
-    // Letter I
-    drawLine(
-        Color.White,
-        Offset(cx4 + 5f, cy4 - 8f),
-        Offset(cx4 + 5f, cy4 + 8f),
-        2.5f,
-        StrokeCap.Round
-    )
 }
 
 /**
@@ -1966,6 +1933,475 @@ private fun addHistorical(event: MotionEvent, target: MutableList<StrokePoint>, 
             event.getHistoricalPressure(h)
                 .coerceIn(UxConfig.Drawing.PRESSURE_MIN, UxConfig.Drawing.PRESSURE_MAX),
             true
+        )
+    }
+}
+
+// ── Crop Capture: drawing phase ─────────────────
+
+private var cropCaptureStartX = 0f
+private var cropCaptureStartY = 0f
+
+private fun handleCropCaptureDraw(
+    event: MotionEvent,
+    state: DrawingState,
+    pageIndex: Int,
+    iz: Float
+) {
+    val rx = event.x * iz
+    val ry = event.y * iz
+    when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+            cropCaptureStartX = rx
+            cropCaptureStartY = ry
+            state.cropCapturePageIndex = pageIndex
+            state.cropCapturePhase =
+                CropCapturePhase.DRAWING
+            state.cropCaptureTopLeft = Offset(rx, ry)
+            state.cropCaptureBottomRight =
+                Offset(rx, ry)
+        }
+        MotionEvent.ACTION_MOVE -> {
+            if (state.cropCapturePhase ==
+                CropCapturePhase.DRAWING
+            ) {
+                state.cropCaptureTopLeft = Offset(
+                    minOf(cropCaptureStartX, rx),
+                    minOf(cropCaptureStartY, ry)
+                )
+                state.cropCaptureBottomRight = Offset(
+                    maxOf(cropCaptureStartX, rx),
+                    maxOf(cropCaptureStartY, ry)
+                )
+            }
+        }
+        MotionEvent.ACTION_UP,
+        MotionEvent.ACTION_CANCEL -> {
+            val w = state.cropCaptureBottomRight.x -
+                state.cropCaptureTopLeft.x
+            val h = state.cropCaptureBottomRight.y -
+                state.cropCaptureTopLeft.y
+            if (w > UxConfig.Crop.MIN_CORNER_GAP &&
+                h > UxConfig.Crop.MIN_CORNER_GAP
+            ) {
+                state.cropCapturePhase =
+                    CropCapturePhase.ADJUSTING
+            } else {
+                state.clearCropCapture()
+            }
+        }
+    }
+}
+
+// ── Crop Capture: adjust phase ──────────────────
+
+private var cropCaptureDragCorner = -1
+
+private fun handleCropCaptureAdjust(
+    event: MotionEvent,
+    state: DrawingState,
+    pageIndex: Int,
+    cw: Float,
+    ch: Float,
+    cx: Float,
+    cy: Float,
+    view: View,
+    context: Context,
+    onCropLlm: ((ByteArray) -> Unit)?,
+    onButtonTap: () -> Unit
+) {
+    val refW = state.getPageRefWidth(pageIndex)
+    val rs = if (refW > 0f && cw > 0f) {
+        cw / refW
+    } else {
+        1f
+    }
+    val ex = event.x
+    val ey = event.y
+
+    when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+            state.isStylusTouching = true
+            disallowParentIntercept(view, true)
+            // Check AI button
+            if (cropLlmButtonRect?.contains(
+                    Offset(ex, ey)
+                ) == true && onCropLlm != null
+            ) {
+                captureCropCaptureAndSend(
+                    context,
+                    view,
+                    state,
+                    cw,
+                    ch,
+                    cx,
+                    cy,
+                    onCropLlm
+                )
+                onButtonTap()
+                return
+            }
+            // Check cancel button
+            if (cropCaptureCancelRect?.contains(
+                    Offset(ex, ey)
+                ) == true
+            ) {
+                state.clearCropCapture()
+                state.isStylusTouching = false
+                onButtonTap()
+                return
+            }
+            // Find nearest corner
+            val tl = state.cropCaptureTopLeft
+            val br = state.cropCaptureBottomRight
+            val tlx = tl.x * rs
+            val tly = tl.y * rs
+            val brx = br.x * rs
+            val bry = br.y * rs
+            val corners = listOf(
+                0 to Offset(tlx, tly),
+                1 to Offset(brx, tly),
+                2 to Offset(tlx, bry),
+                3 to Offset(brx, bry)
+            )
+            val nearest = corners.minByOrNull {
+                val dx = it.second.x - ex
+                val dy = it.second.y - ey
+                dx * dx + dy * dy
+            }
+            val dist = nearest?.let {
+                val dx = it.second.x - ex
+                val dy = it.second.y - ey
+                kotlin.math.sqrt(
+                    (dx * dx + dy * dy).toDouble()
+                ).toFloat()
+            } ?: 999f
+            cropCaptureDragCorner =
+                if (dist < UxConfig.Crop.CORNER_DRAG_DISTANCE) {
+                    nearest!!.first
+                } else {
+                    -1
+                }
+        }
+        MotionEvent.ACTION_MOVE -> {
+            if (cropCaptureDragCorner in 0..3) {
+                val maxRx =
+                    if (rs > 0f) cw / rs else 9999f
+                val maxRy =
+                    if (rs > 0f) ch / rs else 9999f
+                val rx = (ex / rs).coerceIn(0f, maxRx)
+                val ry = (ey / rs).coerceIn(0f, maxRy)
+                val gap = UxConfig.Crop.MIN_CORNER_GAP
+                val tl = state.cropCaptureTopLeft
+                val br = state.cropCaptureBottomRight
+                when (cropCaptureDragCorner) {
+                    0 ->
+                        state.cropCaptureTopLeft =
+                            Offset(
+                                rx.coerceAtMost(br.x - gap),
+                                ry.coerceAtMost(br.y - gap)
+                            )
+                    1 -> {
+                        state.cropCaptureBottomRight =
+                            Offset(
+                                rx.coerceAtLeast(
+                                    tl.x + gap
+                                ),
+                                br.y
+                            )
+                        state.cropCaptureTopLeft =
+                            Offset(
+                                tl.x,
+                                ry.coerceAtMost(
+                                    br.y - gap
+                                )
+                            )
+                    }
+                    2 -> {
+                        state.cropCaptureTopLeft =
+                            Offset(
+                                rx.coerceAtMost(
+                                    br.x - gap
+                                ),
+                                tl.y
+                            )
+                        state.cropCaptureBottomRight =
+                            Offset(
+                                br.x,
+                                ry.coerceAtLeast(
+                                    tl.y + gap
+                                )
+                            )
+                    }
+                    3 ->
+                        state.cropCaptureBottomRight =
+                            Offset(
+                                rx.coerceAtLeast(tl.x + gap),
+                                ry.coerceAtLeast(tl.y + gap)
+                            )
+                }
+            }
+        }
+        MotionEvent.ACTION_UP,
+        MotionEvent.ACTION_CANCEL -> {
+            state.isStylusTouching = false
+            cropCaptureDragCorner = -1
+            disallowParentIntercept(view, false)
+        }
+    }
+}
+
+private var cropCaptureCancelRect: Rect? = null
+
+private fun captureCropCaptureAndSend(
+    context: Context,
+    view: View,
+    state: DrawingState,
+    cw: Float,
+    ch: Float,
+    cx: Float,
+    cy: Float,
+    callback: (ByteArray) -> Unit
+) {
+    try {
+        val savedPhase = state.cropCapturePhase
+        state.cropCapturePhase = CropCapturePhase.IDLE
+
+        val rootView = view.rootView
+        val fullBitmap =
+            android.graphics.Bitmap.createBitmap(
+                rootView.width,
+                rootView.height,
+                android.graphics.Bitmap
+                    .Config.ARGB_8888
+            )
+        rootView.draw(
+            android.graphics.Canvas(fullBitmap)
+        )
+
+        state.cropCapturePhase = savedPhase
+
+        val refW = state.getPageRefWidth(
+            state.cropCapturePageIndex
+        )
+        val rs = if (refW > 0f && cw > 0f) {
+            cw / refW
+        } else {
+            1f
+        }
+
+        val left = (
+            cx + state.cropCaptureTopLeft.x * rs
+            ).toInt().coerceIn(0, fullBitmap.width - 1)
+        val top = (
+            cy + state.cropCaptureTopLeft.y * rs
+            ).toInt().coerceIn(0, fullBitmap.height - 1)
+        val right = (
+            cx + state.cropCaptureBottomRight.x * rs
+            ).toInt().coerceIn(left + 1, fullBitmap.width)
+        val bottom = (
+            cy + state.cropCaptureBottomRight.y * rs
+            ).toInt()
+            .coerceIn(top + 1, fullBitmap.height)
+
+        val cropped =
+            android.graphics.Bitmap.createBitmap(
+                fullBitmap,
+                left,
+                top,
+                right - left,
+                bottom - top
+            )
+
+        val stream = java.io.ByteArrayOutputStream()
+        cropped.compress(
+            android.graphics.Bitmap
+                .CompressFormat.PNG,
+            100,
+            stream
+        )
+        val bytes = stream.toByteArray()
+
+        fullBitmap.recycle()
+        cropped.recycle()
+
+        state.clearCropCapture()
+        callback(bytes)
+    } catch (_: Throwable) {
+        state.clearCropCapture()
+    }
+}
+
+// ── Crop Capture overlay drawing ────────────────
+
+private fun DrawScope.drawCropCaptureOverlay(
+    state: DrawingState,
+    pageIndex: Int,
+    renderScale: Float
+) {
+    if (state.activeTool != DrawingTool.CROP_CAPTURE) {
+        return
+    }
+    if (state.cropCapturePhase ==
+        CropCapturePhase.IDLE
+    ) {
+        return
+    }
+    if (state.cropCapturePageIndex != pageIndex) {
+        return
+    }
+
+    val rs = renderScale
+    val tl = state.cropCaptureTopLeft
+    val br = state.cropCaptureBottomRight
+    val left = tl.x * rs
+    val top = tl.y * rs
+    val right = br.x * rs
+    val bottom = br.y * rs
+    val w = right - left
+    val h = bottom - top
+
+    // Dim outside region
+    drawRect(
+        Color.Black.copy(alpha = 0.3f),
+        Offset.Zero,
+        Size(size.width, top)
+    )
+    drawRect(
+        Color.Black.copy(alpha = 0.3f),
+        Offset(0f, bottom),
+        Size(size.width, size.height - bottom)
+    )
+    drawRect(
+        Color.Black.copy(alpha = 0.3f),
+        Offset(0f, top),
+        Size(left, h)
+    )
+    drawRect(
+        Color.Black.copy(alpha = 0.3f),
+        Offset(right, top),
+        Size(size.width - right, h)
+    )
+
+    // Border
+    drawRect(
+        MaestroPrimary,
+        Offset(left, top),
+        Size(w, h),
+        style = Stroke(2f)
+    )
+
+    // Corner handles
+    if (state.cropCapturePhase ==
+        CropCapturePhase.ADJUSTING
+    ) {
+        val cr = UxConfig.Crop.CORNER_HANDLE_RADIUS
+        listOf(
+            Offset(left, top),
+            Offset(right, top),
+            Offset(left, bottom),
+            Offset(right, bottom)
+        ).forEach { corner ->
+            drawCircle(
+                Color.White,
+                cr,
+                corner,
+                style = Fill
+            )
+            drawCircle(
+                MaestroPrimary,
+                cr,
+                corner,
+                style = Stroke(2f)
+            )
+        }
+
+        // AI send button (top-right of rect)
+        val btnSize =
+            UxConfig.Selection.LLM_BUTTON_SIZE
+        val gap = 6f
+        val aiRect = Rect(
+            right - btnSize,
+            top - btnSize - gap,
+            right,
+            top - gap
+        )
+        cropLlmButtonRect = aiRect
+        drawRoundRect(
+            MaestroPrimary,
+            Offset(aiRect.left, aiRect.top),
+            Size(btnSize, btnSize),
+            CornerRadius(
+                UxConfig.Selection
+                    .BUTTON_CORNER_RADIUS
+            ),
+            style = Fill
+        )
+        // Robot icon (simple)
+        val acx = aiRect.center.x
+        val acy = aiRect.center.y
+        // Head
+        drawRoundRect(
+            Color.White,
+            Offset(acx - 7f, acy - 6f),
+            Size(14f, 10f),
+            CornerRadius(3f),
+            style = Fill
+        )
+        // Eyes
+        drawCircle(
+            MaestroPrimary,
+            2f,
+            Offset(acx - 3f, acy - 2f)
+        )
+        drawCircle(
+            MaestroPrimary,
+            2f,
+            Offset(acx + 3f, acy - 2f)
+        )
+        // Antenna
+        drawLine(
+            Color.White,
+            Offset(acx, acy - 6f),
+            Offset(acx, acy - 10f),
+            1.5f,
+            StrokeCap.Round
+        )
+        drawCircle(Color.White, 1.5f, Offset(acx, acy - 10f))
+
+        // Cancel button (left of AI button)
+        val cancelRect = Rect(
+            aiRect.left - btnSize - gap,
+            aiRect.top,
+            aiRect.left - gap,
+            aiRect.bottom
+        )
+        cropCaptureCancelRect = cancelRect
+        drawRoundRect(
+            MaestroError,
+            Offset(cancelRect.left, cancelRect.top),
+            Size(btnSize, btnSize),
+            CornerRadius(
+                UxConfig.Selection
+                    .BUTTON_CORNER_RADIUS
+            ),
+            style = Fill
+        )
+        val ccx = cancelRect.center.x
+        val ccy = cancelRect.center.y
+        drawLine(
+            Color.White,
+            Offset(ccx - 6f, ccy - 6f),
+            Offset(ccx + 6f, ccy + 6f),
+            2.5f,
+            StrokeCap.Round
+        )
+        drawLine(
+            Color.White,
+            Offset(ccx + 6f, ccy - 6f),
+            Offset(ccx - 6f, ccy + 6f),
+            2.5f,
+            StrokeCap.Round
         )
     }
 }

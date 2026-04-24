@@ -2,29 +2,34 @@ package com.maestro.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.maestro.app.data.remote.LoginRequest
-import com.maestro.app.data.remote.MaestroServerApi
-import com.maestro.app.data.remote.RegisterRequest
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
-    private val llmService: LlmService,
-    private val serverApi: MaestroServerApi
+    private val llmService: LlmService
 ) : ViewModel() {
 
-    private val _apiKeySet =
-        MutableStateFlow(false)
-    val apiKeySet: StateFlow<Boolean> =
-        _apiKeySet.asStateFlow()
+    private val _geminiKeySet = MutableStateFlow(false)
+    val geminiKeySet: StateFlow<Boolean> =
+        _geminiKeySet.asStateFlow()
+
+    private val _openAiKeySet = MutableStateFlow(false)
+    val openAiKeySet: StateFlow<Boolean> =
+        _openAiKeySet.asStateFlow()
+
+    private val _claudeKeySet = MutableStateFlow(false)
+    val claudeKeySet: StateFlow<Boolean> =
+        _claudeKeySet.asStateFlow()
+
+    // Keep legacy for compatibility
+    val apiKeySet: StateFlow<Boolean> = _geminiKeySet
 
     private val _validationResult =
         MutableStateFlow<String?>(null)
@@ -36,23 +41,6 @@ class SettingsViewModel(
     val isValidating: StateFlow<Boolean> =
         _isValidating.asStateFlow()
 
-    val serverUrl: StateFlow<String?> =
-        settingsRepository.getServerUrl()
-            .stateIn(
-                viewModelScope,
-                SharingStarted.Eagerly,
-                null
-            )
-
-    val isLoggedIn: StateFlow<Boolean> =
-        settingsRepository.getAccessToken()
-            .map { !it.isNullOrBlank() }
-            .stateIn(
-                viewModelScope,
-                SharingStarted.Eagerly,
-                false
-            )
-
     val username: StateFlow<String?> =
         settingsRepository.getUsername()
             .stateIn(
@@ -61,131 +49,147 @@ class SettingsViewModel(
                 null
             )
 
-    private val _serverMessage =
-        MutableStateFlow<String?>(null)
-    val serverMessage: StateFlow<String?> =
-        _serverMessage.asStateFlow()
-
-    private val _isServerLoading =
-        MutableStateFlow(false)
-    val isServerLoading: StateFlow<Boolean> =
-        _isServerLoading.asStateFlow()
-
     init {
         viewModelScope.launch {
-            settingsRepository.getApiKey().collect {
-                _apiKeySet.value =
-                    !it.isNullOrBlank()
-            }
+            settingsRepository.getGeminiApiKey()
+                .collect {
+                    _geminiKeySet.value =
+                        !it.isNullOrBlank()
+                }
+        }
+        viewModelScope.launch {
+            settingsRepository.getOpenAiApiKey()
+                .collect {
+                    _openAiKeySet.value =
+                        !it.isNullOrBlank()
+                }
+        }
+        viewModelScope.launch {
+            settingsRepository.getClaudeApiKey()
+                .collect {
+                    _claudeKeySet.value =
+                        !it.isNullOrBlank()
+                }
         }
     }
 
-    fun saveApiKey(key: String) {
-        viewModelScope.launch {
-            settingsRepository.setApiKey(key)
-            _validationResult.value = null
-        }
+    fun saveAndValidateApiKey(key: String) {
+        saveAndValidateGeminiKey(key)
     }
 
-    fun clearApiKey() {
+    fun saveAndValidateGeminiKey(key: String) {
         viewModelScope.launch {
-            settingsRepository.clearApiKey()
-            _validationResult.value = null
-        }
-    }
-
-    fun validateApiKey(key: String) {
-        viewModelScope.launch {
+            val trimmed = key.trim()
+            settingsRepository.setGeminiApiKey(trimmed)
             _isValidating.value = true
             _validationResult.value = null
             try {
+                val prev = settingsRepository
+                    .getLlmProvider()
+                settingsRepository.setLlmProvider(
+                    "GEMINI"
+                )
                 val valid =
-                    llmService.validateApiKey(key)
+                    llmService.validateApiKey(trimmed)
                 _validationResult.value = if (valid) {
-                    "OK - API 키가 유효합니다"
+                    "OK - Gemini API 키가 유효합니다"
                 } else {
-                    "API 키가 유효하지 않습니다"
+                    "Gemini API 키가 유효하지 않습니다"
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _validationResult.value =
-                    "오류: ${e.message}"
+                    "서버에 연결할 수 없습니다"
             } finally {
                 _isValidating.value = false
             }
         }
     }
 
-    fun saveServerUrl(url: String) {
+    fun saveAndValidateOpenAiKey(key: String) {
         viewModelScope.launch {
-            settingsRepository.setServerUrl(url)
-            _serverMessage.value = "서버 URL 저장됨"
-        }
-    }
-
-    fun login(loginUsername: String, password: String) {
-        viewModelScope.launch {
-            _isServerLoading.value = true
-            _serverMessage.value = null
+            val trimmed = key.trim()
+            settingsRepository.setOpenAiApiKey(trimmed)
+            _isValidating.value = true
+            _validationResult.value = null
             try {
-                val resp = serverApi.login(
-                    LoginRequest(loginUsername, password)
+                val prev = settingsRepository
+                    .getLlmProvider()
+                settingsRepository.setLlmProvider(
+                    "OPENAI"
                 )
-                if (resp.isSuccessful) {
-                    val body = resp.body()!!
-                    settingsRepository.setTokens(
-                        body.access,
-                        body.refresh
-                    )
-                    settingsRepository.setUsername(
-                        loginUsername
-                    )
-                    _serverMessage.value =
-                        "로그인 성공"
+                val valid =
+                    llmService.validateApiKey(trimmed)
+                _validationResult.value = if (valid) {
+                    "OK - OpenAI API 키가 유효합니다"
                 } else {
-                    _serverMessage.value =
-                        "로그인 실패: ${resp.code()}"
+                    "OpenAI API 키가 유효하지 않습니다"
                 }
-            } catch (e: Exception) {
-                _serverMessage.value =
-                    "오류: ${e.message}"
+            } catch (_: Exception) {
+                _validationResult.value =
+                    "서버에 연결할 수 없습니다"
             } finally {
-                _isServerLoading.value = false
+                _isValidating.value = false
             }
         }
     }
 
-    fun register(regUsername: String, email: String, password: String) {
+    fun saveAndValidateClaudeKey(key: String) {
         viewModelScope.launch {
-            _isServerLoading.value = true
-            _serverMessage.value = null
+            val trimmed = key.trim()
+            settingsRepository.setClaudeApiKey(trimmed)
+            _isValidating.value = true
+            _validationResult.value = null
             try {
-                val resp = serverApi.register(
-                    RegisterRequest(
-                        regUsername,
-                        email,
-                        password
-                    )
+                settingsRepository.setLlmProvider(
+                    "CLAUDE"
                 )
-                if (resp.isSuccessful) {
-                    _serverMessage.value =
-                        "회원가입 성공. 로그인해주세요."
+                val valid =
+                    llmService.validateApiKey(trimmed)
+                _validationResult.value = if (valid) {
+                    "OK - Claude API 키가 유효합니다"
                 } else {
-                    _serverMessage.value =
-                        "회원가입 실패: ${resp.code()}"
+                    "Claude API 키가 유효하지 않습니다"
                 }
-            } catch (e: Exception) {
-                _serverMessage.value =
-                    "오류: ${e.message}"
+            } catch (_: Exception) {
+                _validationResult.value =
+                    "서버에 연결할 수 없습니다"
             } finally {
-                _isServerLoading.value = false
+                _isValidating.value = false
             }
+        }
+    }
+
+    fun clearApiKey() {
+        viewModelScope.launch {
+            settingsRepository.clearGeminiApiKey()
+            _validationResult.value = null
+        }
+    }
+
+    fun clearGeminiKey() {
+        viewModelScope.launch {
+            settingsRepository.clearGeminiApiKey()
+            _validationResult.value = null
+        }
+    }
+
+    fun clearOpenAiKey() {
+        viewModelScope.launch {
+            settingsRepository.clearOpenAiApiKey()
+            _validationResult.value = null
+        }
+    }
+
+    fun clearClaudeKey() {
+        viewModelScope.launch {
+            settingsRepository.clearClaudeApiKey()
+            _validationResult.value = null
         }
     }
 
     fun logout() {
         viewModelScope.launch {
             settingsRepository.clearTokens()
-            _serverMessage.value = "로그아웃 완료"
         }
     }
 }

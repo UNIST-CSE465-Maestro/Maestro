@@ -20,7 +20,7 @@ object UxConfig {
         const val LONG_PRESS_CANVAS_MS = 500L
 
         /** Minimum drag distance to count as "moved" (px) */
-        const val DRAG_THRESHOLD_PX = 2f
+        const val DRAG_THRESHOLD_PX = 20f
 
         /** Long-press cancel distance squared (px^2) */
         const val LONG_PRESS_CANCEL_DIST_SQ = 30f * 30f
@@ -388,8 +388,8 @@ object UxConfig {
     // ── Viewer screen ────────────────────────────────
 
     object Viewer {
-        val SIDEBAR_MIN_WIDTH = 250.dp
+        val SIDEBAR_MIN_WIDTH = 300.dp
         val SIDEBAR_MAX_WIDTH = 600.dp
-        val SIDEBAR_DEFAULT_WIDTH = 350.dp
+        val SIDEBAR_DEFAULT_WIDTH = 420.dp
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.EraserMode
 import com.maestro.app.domain.model.InkStroke
@@ -109,6 +110,23 @@ class DrawingState {
     var cropBottomRight by mutableStateOf(
         Offset(UxConfig.Crop.INITIAL_BOTTOM_RIGHT_X, UxConfig.Crop.INITIAL_BOTTOM_RIGHT_Y)
     )
+
+    // ── Crop Capture tool state ──
+    var cropCapturePhase by mutableStateOf(
+        CropCapturePhase.IDLE
+    )
+    var cropCapturePageIndex by mutableIntStateOf(-1)
+    var cropCaptureTopLeft by mutableStateOf(Offset.Zero)
+    var cropCaptureBottomRight by mutableStateOf(
+        Offset.Zero
+    )
+
+    fun clearCropCapture() {
+        cropCapturePhase = CropCapturePhase.IDLE
+        cropCapturePageIndex = -1
+        cropCaptureTopLeft = Offset.Zero
+        cropCaptureBottomRight = Offset.Zero
+    }
 
     /** Eraser position for circle visualization */
     var eraserIndicator by mutableStateOf<Offset?>(null)

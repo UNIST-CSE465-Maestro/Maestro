@@ -3,9 +3,11 @@ package com.maestro.app.di
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.PdfMerger
-import com.maestro.app.data.remote.AnthropicSseClient
+import com.maestro.app.data.remote.ClaudeClient
+import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.MaestroServerApi
 import com.maestro.app.data.remote.MaterialAnalyzerClient
+import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.data.repository.DocumentRepositoryImpl
 import com.maestro.app.data.repository.SettingsRepositoryImpl
@@ -34,9 +36,16 @@ val dataModule = module {
         SettingsRepositoryImpl(get())
     }
     single { AnnotationRepositoryImpl(get()) }
-    single { AnthropicSseClient(get()) }
+    single { LlmClient(get()) }
+    single { OpenAiClient(get()) }
+    single { ClaudeClient(get()) }
     single<LlmService> {
-        LlmServiceImpl(get(), get())
+        LlmServiceImpl(
+            get<LlmClient>(),
+            get<OpenAiClient>(),
+            get<ClaudeClient>(),
+            get()
+        )
     }
     single { ConversationLocalDataSource(get()) }
     single { PdfMerger(get()) }
@@ -47,7 +56,7 @@ val dataModule = module {
         val settings = get<SettingsRepository>()
         val baseUrl = runBlocking {
             settings.getServerUrl().firstOrNull()
-        } ?: "http://localhost:8000/"
+        } ?: "https://maestro.jwchae.com/"
         val normalizedUrl = if (
             baseUrl.endsWith("/")
         ) {

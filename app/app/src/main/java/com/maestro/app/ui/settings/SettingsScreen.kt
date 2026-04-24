@@ -45,41 +45,22 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
-    val apiKeySet by viewModel.apiKeySet
+fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: () -> Unit = {}) {
+    val geminiKeySet by viewModel.geminiKeySet
+        .collectAsState()
+    val openAiKeySet by viewModel.openAiKeySet
         .collectAsState()
     val validationResult by viewModel
         .validationResult.collectAsState()
     val isValidating by viewModel.isValidating
         .collectAsState()
-    val serverUrl by viewModel.serverUrl
-        .collectAsState()
-    val isLoggedIn by viewModel.isLoggedIn
-        .collectAsState()
     val username by viewModel.username
         .collectAsState()
-    val serverMessage by viewModel.serverMessage
-        .collectAsState()
-    val isServerLoading by viewModel.isServerLoading
-        .collectAsState()
 
-    var apiKeyInput by remember { mutableStateOf("") }
-    var serverUrlInput by remember {
-        mutableStateOf(serverUrl ?: "")
-    }
-    var loginUsernameInput by remember {
+    var geminiKeyInput by remember {
         mutableStateOf("")
     }
-    var loginPasswordInput by remember {
-        mutableStateOf("")
-    }
-    var regUsernameInput by remember {
-        mutableStateOf("")
-    }
-    var regEmailInput by remember {
-        mutableStateOf("")
-    }
-    var regPasswordInput by remember {
+    var openAiKeyInput by remember {
         mutableStateOf("")
     }
 
@@ -120,41 +101,37 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // API Key section
+            // Gemini API Key
             Text(
-                text = "Anthropic API Key",
+                text = "Gemini API Key",
                 fontWeight = FontWeight.Medium,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme
-                    .onSurface
+                fontSize = 16.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (apiKeySet) {
-                    "API 키가 설정되어 있습니다"
+                text = if (geminiKeySet) {
+                    "Gemini API 키가 설정되어 있습니다"
                 } else {
-                    "API 키가 설정되지 않았습니다"
+                    "Gemini API 키가 설정되지 않았습니다"
                 },
                 fontSize = 13.sp,
-                color = if (apiKeySet) {
+                color = if (geminiKeySet) {
                     Color(0xFF10B981)
                 } else {
                     MaterialTheme.colorScheme
                         .onSurfaceVariant
                 }
             )
-
-            Spacer(Modifier.height(16.dp))
-
+            Spacer(Modifier.height(12.dp))
             SettingsTextField(
-                value = apiKeyInput,
-                onValueChange = { apiKeyInput = it },
-                placeholder = "sk-ant-...",
+                value = geminiKeyInput,
+                onValueChange = {
+                    geminiKeyInput = it
+                },
+                placeholder = "Gemini API 키 입력",
                 isPassword = true
             )
-
-            Spacer(Modifier.height(16.dp))
-
+            Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
@@ -162,22 +139,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             ) {
                 Button(
                     onClick = {
-                        viewModel.saveApiKey(apiKeyInput)
-                        apiKeyInput = ""
-                    },
-                    enabled = apiKeyInput.isNotBlank()
-                ) {
-                    Text("저장")
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        viewModel.validateApiKey(
-                            apiKeyInput
-                        )
+                        viewModel
+                            .saveAndValidateGeminiKey(
+                                geminiKeyInput
+                            )
+                        geminiKeyInput = ""
                     },
                     enabled =
-                    apiKeyInput.isNotBlank() &&
+                    geminiKeyInput.isNotBlank() &&
                         !isValidating
                 ) {
                     if (isValidating) {
@@ -188,27 +157,186 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("검증")
+                        Text("저장 및 검증")
                     }
                 }
-
                 OutlinedButton(
                     onClick = {
-                        viewModel.clearApiKey()
-                        apiKeyInput = ""
+                        viewModel.clearGeminiKey()
+                        geminiKeyInput = ""
                     },
-                    enabled = apiKeySet,
+                    enabled = geminiKeySet,
                     colors = ButtonDefaults
                         .outlinedButtonColors(
                             contentColor =
                             MaterialTheme.colorScheme
                                 .error
                         )
-                ) {
-                    Text("삭제")
-                }
+                ) { Text("삭제") }
             }
 
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(20.dp))
+
+            // OpenAI API Key
+            Text(
+                text = "OpenAI API Key",
+                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (openAiKeySet) {
+                    "OpenAI API 키가 설정되어 있습니다"
+                } else {
+                    "OpenAI API 키가 설정되지 않았습니다"
+                },
+                fontSize = 13.sp,
+                color = if (openAiKeySet) {
+                    Color(0xFF10B981)
+                } else {
+                    MaterialTheme.colorScheme
+                        .onSurfaceVariant
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+            SettingsTextField(
+                value = openAiKeyInput,
+                onValueChange = {
+                    openAiKeyInput = it
+                },
+                placeholder = "OpenAI API 키 입력",
+                isPassword = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        viewModel
+                            .saveAndValidateOpenAiKey(
+                                openAiKeyInput
+                            )
+                        openAiKeyInput = ""
+                    },
+                    enabled =
+                    openAiKeyInput.isNotBlank() &&
+                        !isValidating
+                ) {
+                    if (isValidating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .height(16.dp)
+                                .width(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("저장 및 검증")
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        viewModel.clearOpenAiKey()
+                        openAiKeyInput = ""
+                    },
+                    enabled = openAiKeySet,
+                    colors = ButtonDefaults
+                        .outlinedButtonColors(
+                            contentColor =
+                            MaterialTheme.colorScheme
+                                .error
+                        )
+                ) { Text("삭제") }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(20.dp))
+
+            // Claude API Key
+            val claudeKeySet by viewModel.claudeKeySet
+                .collectAsState()
+            var claudeKeyInput by remember {
+                mutableStateOf("")
+            }
+            Text(
+                text = "Claude API Key",
+                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (claudeKeySet) {
+                    "Claude API 키가 설정되어 있습니다"
+                } else {
+                    "Claude API 키가 설정되지 않았습니다"
+                },
+                fontSize = 13.sp,
+                color = if (claudeKeySet) {
+                    Color(0xFF10B981)
+                } else {
+                    MaterialTheme.colorScheme
+                        .onSurfaceVariant
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+            SettingsTextField(
+                value = claudeKeyInput,
+                onValueChange = {
+                    claudeKeyInput = it
+                },
+                placeholder = "Claude API 키 입력",
+                isPassword = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        viewModel
+                            .saveAndValidateClaudeKey(
+                                claudeKeyInput
+                            )
+                        claudeKeyInput = ""
+                    },
+                    enabled =
+                    claudeKeyInput.isNotBlank() &&
+                        !isValidating
+                ) {
+                    if (isValidating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .height(16.dp)
+                                .width(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("저장 및 검증")
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        viewModel.clearClaudeKey()
+                        claudeKeyInput = ""
+                    },
+                    enabled = claudeKeySet,
+                    colors = ButtonDefaults
+                        .outlinedButtonColors(
+                            contentColor =
+                            MaterialTheme.colorScheme
+                                .error
+                        )
+                ) { Text("삭제") }
+            }
+
+            // Validation result
             validationResult?.let { result ->
                 Spacer(Modifier.height(12.dp))
                 val isOk = result.startsWith("OK")
@@ -227,100 +355,32 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))
 
-            // Server settings section
+            // Account section
             Text(
-                text = "서버 설정",
+                text = "계정",
                 fontWeight = FontWeight.Medium,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme
-                    .onSurface
+                fontSize = 16.sp
             )
-
-            Spacer(Modifier.height(12.dp))
-
-            SettingsTextField(
-                value = serverUrlInput,
-                onValueChange = {
-                    serverUrlInput = it
-                },
-                placeholder = "https://example.com"
-            )
-
             Spacer(Modifier.height(8.dp))
-
-            Button(
+            Text(
+                text = "로그인됨: ${username ?: ""}",
+                fontSize = 14.sp,
+                color = Color(0xFF10B981)
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
                 onClick = {
-                    viewModel.saveServerUrl(
-                        serverUrlInput
-                    )
+                    viewModel.logout()
+                    onLogout()
                 },
-                enabled = serverUrlInput.isNotBlank()
+                colors = ButtonDefaults
+                    .outlinedButtonColors(
+                        contentColor =
+                        MaterialTheme.colorScheme
+                            .error
+                    )
             ) {
-                Text("서버 URL 저장")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            if (isLoggedIn) {
-                LoggedInSection(
-                    username = username,
-                    onLogout = { viewModel.logout() }
-                )
-            } else {
-                LoginSection(
-                    loginUsername = loginUsernameInput,
-                    onLoginUsernameChange = {
-                        loginUsernameInput = it
-                    },
-                    loginPassword = loginPasswordInput,
-                    onLoginPasswordChange = {
-                        loginPasswordInput = it
-                    },
-                    isLoading = isServerLoading,
-                    onLogin = {
-                        viewModel.login(
-                            loginUsernameInput,
-                            loginPasswordInput
-                        )
-                    }
-                )
-
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(16.dp))
-
-                RegisterSection(
-                    regUsername = regUsernameInput,
-                    onRegUsernameChange = {
-                        regUsernameInput = it
-                    },
-                    regEmail = regEmailInput,
-                    onRegEmailChange = {
-                        regEmailInput = it
-                    },
-                    regPassword = regPasswordInput,
-                    onRegPasswordChange = {
-                        regPasswordInput = it
-                    },
-                    isLoading = isServerLoading,
-                    onRegister = {
-                        viewModel.register(
-                            regUsernameInput,
-                            regEmailInput,
-                            regPasswordInput
-                        )
-                    }
-                )
-            }
-
-            serverMessage?.let { msg ->
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = msg,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme
-                        .onSurfaceVariant
-                )
+                Text("로그아웃")
             }
 
             Spacer(Modifier.height(32.dp))
@@ -350,138 +410,12 @@ private fun SettingsTextField(
         singleLine = true,
         colors = TextFieldDefaults.colors(
             focusedContainerColor =
-            MaterialTheme.colorScheme
-                .surfaceVariant,
+            MaterialTheme.colorScheme.surfaceVariant,
             unfocusedContainerColor =
-            MaterialTheme.colorScheme
-                .surfaceVariant,
-            focusedIndicatorColor =
-            Color.Transparent,
-            unfocusedIndicatorColor =
-            Color.Transparent
+            MaterialTheme.colorScheme.surfaceVariant,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
         ),
         shape = RoundedCornerShape(12.dp)
     )
-}
-
-@Composable
-private fun LoggedInSection(username: String?, onLogout: () -> Unit) {
-    Text(
-        text = "로그인됨: ${username ?: ""}",
-        fontSize = 14.sp,
-        color = Color(0xFF10B981)
-    )
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = onLogout,
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme
-                .error
-        )
-    ) {
-        Text("로그아웃")
-    }
-}
-
-@Composable
-private fun LoginSection(
-    loginUsername: String,
-    onLoginUsernameChange: (String) -> Unit,
-    loginPassword: String,
-    onLoginPasswordChange: (String) -> Unit,
-    isLoading: Boolean,
-    onLogin: () -> Unit
-) {
-    Text(
-        text = "로그인",
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp
-    )
-    Spacer(Modifier.height(8.dp))
-    SettingsTextField(
-        value = loginUsername,
-        onValueChange = onLoginUsernameChange,
-        placeholder = "사용자명"
-    )
-    Spacer(Modifier.height(8.dp))
-    SettingsTextField(
-        value = loginPassword,
-        onValueChange = onLoginPasswordChange,
-        placeholder = "비밀번호",
-        isPassword = true
-    )
-    Spacer(Modifier.height(8.dp))
-    Button(
-        onClick = onLogin,
-        enabled = loginUsername.isNotBlank() &&
-            loginPassword.isNotBlank() &&
-            !isLoading
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .height(16.dp)
-                    .width(16.dp),
-                strokeWidth = 2.dp
-            )
-        } else {
-            Text("로그인")
-        }
-    }
-}
-
-@Composable
-private fun RegisterSection(
-    regUsername: String,
-    onRegUsernameChange: (String) -> Unit,
-    regEmail: String,
-    onRegEmailChange: (String) -> Unit,
-    regPassword: String,
-    onRegPasswordChange: (String) -> Unit,
-    isLoading: Boolean,
-    onRegister: () -> Unit
-) {
-    Text(
-        text = "회원가입",
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp
-    )
-    Spacer(Modifier.height(8.dp))
-    SettingsTextField(
-        value = regUsername,
-        onValueChange = onRegUsernameChange,
-        placeholder = "사용자명"
-    )
-    Spacer(Modifier.height(8.dp))
-    SettingsTextField(
-        value = regEmail,
-        onValueChange = onRegEmailChange,
-        placeholder = "이메일"
-    )
-    Spacer(Modifier.height(8.dp))
-    SettingsTextField(
-        value = regPassword,
-        onValueChange = onRegPasswordChange,
-        placeholder = "비밀번호",
-        isPassword = true
-    )
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = onRegister,
-        enabled = regUsername.isNotBlank() &&
-            regEmail.isNotBlank() &&
-            regPassword.isNotBlank() &&
-            !isLoading
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .height(16.dp)
-                    .width(16.dp),
-                strokeWidth = 2.dp
-            )
-        } else {
-            Text("회원가입")
-        }
-    }
 }

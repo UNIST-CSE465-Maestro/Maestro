@@ -9,12 +9,12 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val networkModule = module {
-    // Anthropic OkHttpClient (existing)
-    single(named("anthropic")) {
+    // LLM API OkHttpClient
+    single(named("llmApi")) {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor
@@ -24,9 +24,9 @@ val networkModule = module {
             .build()
     }
 
-    // Default (for backward compat)
+    // Default
     single {
-        get<OkHttpClient>(named("anthropic"))
+        get<OkHttpClient>(named("llmApi"))
     }
 
     // TokenManager

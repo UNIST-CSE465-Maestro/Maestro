@@ -149,6 +149,43 @@ class DocumentRepositoryImpl(private val context: Context) : DocumentRepository 
         foldersFile.writeText(json.encodeToString(dtos))
     }
 
+    override suspend fun updateDocument(doc: PdfDocument) = withContext(Dispatchers.IO) {
+        val all = loadDocuments().map {
+            if (it.id == doc.id) doc else it
+        }
+        saveAllDocs(all)
+    }
+
+    override suspend fun duplicateDocument(documentId: String): PdfDocument? =
+        withContext(Dispatchers.IO) {
+            val all = loadDocuments()
+            val doc = all.find { it.id == documentId }
+                ?: return@withContext null
+            val srcPath = Uri.parse(doc.uriString).path
+                ?: return@withContext null
+            val srcFile = File(srcPath)
+            if (!srcFile.exists()) return@withContext null
+
+            val newId = UUID.randomUUID().toString()
+            val destFile = File(pdfDir, "$newId.pdf")
+            srcFile.copyTo(destFile)
+
+            val copyName = doc.displayName
+                .removeSuffix(".pdf") + " 사본.pdf"
+            val copy = PdfDocument(
+                id = newId,
+                uriString = Uri.fromFile(destFile)
+                    .toString(),
+                displayName = copyName,
+                pageCount = doc.pageCount,
+                folderId = doc.folderId
+            )
+            val updated = all.toMutableList()
+            updated += copy
+            saveAllDocs(updated)
+            copy
+        }
+
     // ── Helpers ───────────────────────────────────────
 
     private fun queryDisplayName(uri: Uri): String? {

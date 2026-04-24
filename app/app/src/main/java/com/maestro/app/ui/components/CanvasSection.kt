@@ -50,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maestro.app.domain.model.CropCapturePhase
+import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
 import com.maestro.app.domain.model.StrokePoint
@@ -92,7 +94,7 @@ fun CanvasSection(
     pageCount: Int,
     drawingState: DrawingState,
     modifier: Modifier = Modifier,
-    onLassoLlm: ((ByteArray) -> Unit)? = null
+    onCropLlm: ((ByteArray) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -316,8 +318,8 @@ fun CanvasSection(
                                 modifier =
                                 Modifier
                                     .matchParentSize(),
-                                onLassoLlm =
-                                onLassoLlm
+                                onCropLlm =
+                                onCropLlm
                             )
 
                             // Long-press action menu
@@ -359,6 +361,32 @@ fun CanvasSection(
             ) {
                 PlaceholderCanvas()
             }
+        }
+
+        // Crop capture hint
+        if (drawingState.activeTool ==
+            DrawingTool.CROP_CAPTURE &&
+            drawingState.cropCapturePhase ==
+            CropCapturePhase.IDLE
+        ) {
+            Text(
+                "캡처하실 영역을 선택하십시오",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+                    .background(
+                        MaestroOnSurface
+                            .copy(alpha = 0.7f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 8.dp
+                    ),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaestroSurfaceContainerLowest
+            )
         }
 
         // Zoom indicator

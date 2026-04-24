@@ -35,7 +35,24 @@ fun ViewerScreen(
     val drawingState = viewModel.drawingState
     val sidebarVisible by viewModel
         .sidebarVisible.collectAsState()
+    val pendingImage by viewModel
+        .pendingLlmImage.collectAsState()
+    val pendingPrompt by viewModel
+        .pendingLlmPrompt.collectAsState()
+    val documentContent by viewModel
+        .documentContent.collectAsState()
+    val isPinned by viewModel
+        .isPinned.collectAsState()
+    val isBookmarked by viewModel
+        .isCurrentPageBookmarked.collectAsState()
     val context = LocalContext.current
+
+    // Warm up LLM connection pool on viewer entry
+    LaunchedEffect(Unit) {
+        try {
+            llmService.fetchModels()
+        } catch (_: Exception) {}
+    }
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -101,6 +118,13 @@ fun ViewerScreen(
         0
     }
 
+    // Track current page for bookmark state
+    LaunchedEffect(drawingState.activePageIndex) {
+        viewModel.setCurrentPage(
+            drawingState.activePageIndex.coerceAtLeast(0)
+        )
+    }
+
     // Auto-save on annotation changes
     LaunchedEffect(drawingState.annotationVersion) {
         viewModel.saveIfNeeded()
@@ -139,9 +163,19 @@ fun ViewerScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBarSection(
             drawingState = drawingState,
+            isPinned = isPinned,
+            isBookmarked = isBookmarked,
             onBack = onBack,
             onUndo = { drawingState.undo() },
             onRedo = { drawingState.redo() },
+            onTogglePin = {
+                viewModel.togglePin()
+            },
+            onToggleBookmark = {
+                val page = drawingState.activePageIndex
+                    .coerceAtLeast(0)
+                viewModel.toggleBookmark(page)
+            },
             onInsertImage = {
                 imagePicker.launch("image/*")
             },
@@ -159,7 +193,7 @@ fun ViewerScreen(
                 pageCount = safePageCount,
                 drawingState = drawingState,
                 modifier = Modifier.weight(1f),
-                onLassoLlm = { imageBytes ->
+                onCropLlm = { imageBytes ->
                     viewModel.sendSelectionToLlm(
                         imageBytes,
                         "이 영역에 대해 설명해주세요"
@@ -171,7 +205,13 @@ fun ViewerScreen(
                 onCollapse = { viewModel.toggleSidebar() },
                 llmService = llmService,
                 settingsRepository = settingsRepository,
-                conversationDataSource = conversationDataSource
+                conversationDataSource = conversationDataSource,
+                documentContent = documentContent,
+                pendingImage = pendingImage,
+                pendingPrompt = pendingPrompt,
+                onPendingConsumed = {
+                    viewModel.consumePendingLlm()
+                }
             )
         }
     }

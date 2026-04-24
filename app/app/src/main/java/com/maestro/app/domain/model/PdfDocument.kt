@@ -6,5 +6,16 @@ data class PdfDocument(
     val displayName: String,
     val pageCount: Int,
     val folderId: String? = null,
-    val addedTimestamp: Long = System.currentTimeMillis()
+    val addedTimestamp: Long = System.currentTimeMillis(),
+    val extractionStatus: ExtractionStatus = ExtractionStatus.NONE,
+    val extractionMode: String? = null,
+    val isPinned: Boolean = false,
+    val bookmarkedPages: Set<Int> = emptySet()
 )
+
+enum class ExtractionStatus {
+    NONE,
+    EXTRACTING,
+    DONE,
+    FAILED
+}

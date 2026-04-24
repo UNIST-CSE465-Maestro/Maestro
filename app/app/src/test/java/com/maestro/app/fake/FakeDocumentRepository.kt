@@ -84,4 +84,19 @@ class FakeDocumentRepository : DocumentRepository {
             )
         }
     }
+
+    override suspend fun duplicateDocument(documentId: String): PdfDocument? {
+        val src = docs.find { it.id == documentId } ?: return null
+        val copy = src.copy(
+            id = UUID.randomUUID().toString(),
+            displayName = src.displayName.removeSuffix(".pdf") + " 사본.pdf"
+        )
+        docs += copy
+        return copy
+    }
+
+    override suspend fun updateDocument(doc: PdfDocument) {
+        val idx = docs.indexOfFirst { it.id == doc.id }
+        if (idx >= 0) docs[idx] = doc
+    }
 }

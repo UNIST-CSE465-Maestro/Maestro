@@ -41,7 +41,7 @@ interface MaestroServerApi {
     suspend fun getResultJson(@Path("id") taskId: String): Response<ResponseBody>
 
     @GET("api/v1/health")
-    suspend fun health(): Response<Map<String, Any>>
+    suspend fun health(): Response<ResponseBody>
 }
 
 @Serializable
@@ -75,6 +75,7 @@ data class AnalysisTaskResponse(
     @SerialName("original_filename")
     val originalFilename: String = "",
     val mode: String = "",
+    // queued, processing, completed, failed
     val status: String = "",
     @SerialName("created_at")
     val createdAt: String = "",

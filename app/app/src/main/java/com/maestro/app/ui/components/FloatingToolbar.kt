@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.outlined.AutoFixHigh
@@ -41,14 +42,23 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
                     openPopup = PopupType.NONE
                 }
                 state.clearLasso()
+                state.clearCropCapture()
             }
             DrawingTool.ERASER -> {
                 if (openPopup == PopupType.PEN) {
                     openPopup = PopupType.NONE
                 }
                 state.clearLasso()
+                state.clearCropCapture()
             }
-            DrawingTool.LASSO -> openPopup = PopupType.NONE
+            DrawingTool.LASSO -> {
+                openPopup = PopupType.NONE
+                state.clearCropCapture()
+            }
+            DrawingTool.CROP_CAPTURE -> {
+                openPopup = PopupType.NONE
+                state.clearLasso()
+            }
         }
     }
 
@@ -104,6 +114,18 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
                 activeColor = Maestro600,
                 onClick = {
                     state.activeTool = DrawingTool.LASSO
+                    openPopup = PopupType.NONE
+                }
+            )
+
+            ToolButton(
+                icon = Icons.Default.Crop,
+                label = "Capture",
+                isActive = state.activeTool == DrawingTool.CROP_CAPTURE,
+                activeColor = Maestro600,
+                onClick = {
+                    state.activeTool =
+                        DrawingTool.CROP_CAPTURE
                     openPopup = PopupType.NONE
                 }
             )

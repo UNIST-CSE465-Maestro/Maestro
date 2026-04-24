@@ -17,4 +17,5 @@ interface LlmService {
     ): String
 
     suspend fun validateApiKey(apiKey: String): Boolean
+    suspend fun fetchModels(): List<String>
 }

@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -43,11 +44,14 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.ui.config.UxConfig
@@ -67,15 +71,23 @@ fun HomeScreen(
 
     val context = LocalContext.current
     val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
     var crashLog by remember { mutableStateOf<String?>(null) }
     var debugLog by remember { mutableStateOf<String?>(null) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
 
     // PDF picker launcher
+    val extractingDocIds by viewModel.extractingDocIds
+        .collectAsState()
+    val pendingImportUri by viewModel.pendingImportUri
+        .collectAsState()
+    val extractionError by viewModel.extractionError
+        .collectAsState()
+
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { viewModel.importPdf(it) }
+        uri?.let { viewModel.stagePdfImport(it) }
     }
 
     // Long-press context menu state
@@ -84,6 +96,7 @@ fun HomeScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
+    var showMergeOrderDialog by remember { mutableStateOf(false) }
 
     // Drag-and-drop state
     data class DragItem(val id: String, val isFolder: Boolean, val label: String)
@@ -138,7 +151,7 @@ fun HomeScreen(
             }
         } catch (_: Throwable) {}
         try {
-            val dbgFile = java.io.File(context.filesDir, ".claude/debug.log")
+            val dbgFile = java.io.File(context.filesDir, "maestro/debug.log")
             if (dbgFile.exists()) {
                 debugLog = dbgFile.readText()
             }
@@ -191,13 +204,13 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = {
                 try {
-                    java.io.File(context.filesDir, ".claude/debug.log").delete()
+                    java.io.File(context.filesDir, "maestro/debug.log").delete()
                 } catch (
                     _: Throwable
                 ) {}
                 debugLog = null
             },
-            title = { Text("Claude 디버그 로그", fontWeight = FontWeight.Bold) },
+            title = { Text("디버그 로그", fontWeight = FontWeight.Bold) },
             text = {
                 androidx.compose.foundation.lazy.LazyColumn(
                     modifier = Modifier.heightIn(max = UxConfig.Home.DIALOG_LOG_MAX_HEIGHT)
@@ -217,7 +230,7 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(onClick = {
                     try {
-                        java.io.File(context.filesDir, ".claude/debug.log").delete()
+                        java.io.File(context.filesDir, "maestro/debug.log").delete()
                     } catch (
                         _: Throwable
                     ) {}
@@ -249,23 +262,57 @@ fun HomeScreen(
 
     // Delete confirmation
     if (showDeleteConfirm) {
-        val label = contextPdf?.displayName ?: contextFolder?.name ?: ""
+        val label = contextPdf?.displayName
+            ?: contextFolder?.name ?: ""
+        val isNonEmptyFolder = contextFolder != null &&
+            viewModel.isFolderNonEmpty(
+                contextFolder!!.id
+            )
         AlertDialog(
             onDismissRequest = {
                 showDeleteConfirm = false
                 contextPdf = null
                 contextFolder = null
             },
-            title = { Text("삭제", fontWeight = FontWeight.Bold) },
-            text = { Text("\"$label\"을(를) 삭제하시겠습니까?") },
+            title = {
+                Text(
+                    "삭제",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                if (isNonEmptyFolder) {
+                    Text(
+                        "\"$label\" 폴더 안에 파일 또는 " +
+                            "하위 폴더가 있습니다.\n" +
+                            "폴더와 내용을 모두 " +
+                            "삭제하시겠습니까?"
+                    )
+                } else {
+                    Text(
+                        "\"$label\"을(를) " +
+                            "삭제하시겠습니까?"
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    contextPdf?.let { viewModel.deleteDocument(it.id) }
-                    contextFolder?.let { viewModel.deleteFolder(it.id) }
+                    contextPdf?.let {
+                        viewModel.deleteDocument(it.id)
+                    }
+                    contextFolder?.let {
+                        viewModel.deleteFolder(it.id)
+                    }
                     showDeleteConfirm = false
                     contextPdf = null
                     contextFolder = null
-                }) { Text("삭제", color = MaestroError, fontWeight = FontWeight.Bold) }
+                }) {
+                    Text(
+                        "삭제",
+                        color = MaestroError,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -312,6 +359,100 @@ fun HomeScreen(
         )
     }
 
+    if (showMergeOrderDialog) {
+        MergeOrderDialog(
+            docs = documents.filter {
+                it.id in selectedDocIds
+            },
+            onDismiss = { showMergeOrderDialog = false },
+            onConfirm = { orderedIds ->
+                showMergeOrderDialog = false
+                viewModel.mergeOrdered(orderedIds)
+            }
+        )
+    }
+
+    // Extraction mode selection dialog
+    if (pendingImportUri != null) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.cancelPdfImport()
+            },
+            title = {
+                Text(
+                    "텍스트 추출 방식",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "PDF에서 텍스트를 추출할 방식을 선택하세요.\n" +
+                        "AI 추출은 더 정확하지만 시간이 더 걸립니다."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingImportUri?.let {
+                            viewModel.importAndExtract(
+                                it,
+                                "ai"
+                            )
+                        }
+                    }
+                ) {
+                    Text(
+                        "AI 추출",
+                        fontWeight = FontWeight.Bold,
+                        color = MaestroPrimary
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingImportUri?.let {
+                            viewModel.importAndExtract(
+                                it,
+                                "standard"
+                            )
+                        }
+                    }
+                ) {
+                    Text(
+                        "일반 추출",
+                        color = Slate500
+                    )
+                }
+            }
+        )
+    }
+
+    // Extraction error dialog
+    if (extractionError != null) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.clearExtractionError()
+            },
+            title = {
+                Text(
+                    "추출 실패",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(extractionError ?: "")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearExtractionError()
+                    }
+                ) { Text("확인") }
+            }
+        )
+    }
+
     // Filter items for current folder
     val currentFolders = folders.filter { it.parentId == currentFolderId }
     val currentDocs = documents.filter { it.folderId == currentFolderId }
@@ -331,7 +472,8 @@ fun HomeScreen(
                     }
                 } else {
                     null
-                }
+                },
+                onOpenSettings = onOpenSettings
             )
 
             if (currentFolders.isEmpty() && currentDocs.isEmpty()) {
@@ -367,20 +509,37 @@ fun HomeScreen(
                                         itemWidth = it.size.width
                                     }
                                     .pointerInput(folder.id) {
+                                        val handler = android.os.Handler(
+                                            android.os.Looper.getMainLooper()
+                                        )
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
                                             val startPos = itemPos + down.position
                                             var moved = false
                                             var longPressed = false
-                                            val startTime = System.currentTimeMillis()
+                                            val runnable = Runnable {
+                                                longPressed = true
+                                                haptic.performHapticFeedback(
+                                                    HapticFeedbackType.LongPress
+                                                )
+                                                contextFolder = folder
+                                                contextPdf = null
+                                                dragItem = DragItem(
+                                                    folder.id, true, folder.name
+                                                )
+                                                dragPosition = startPos
+                                                hasDragMoved = false
+                                            }
+                                            handler.postDelayed(
+                                                runnable,
+                                                UxConfig.Gesture.LONG_PRESS_HOME_MS
+                                            )
                                             while (true) {
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.firstOrNull() ?: break
                                                 if (change.changedToUp()) {
-                                                    if (longPressed && !moved) {
-                                                        contextFolder = folder
-                                                        contextPdf = null
-                                                    } else if (longPressed && moved) {
+                                                    handler.removeCallbacks(runnable)
+                                                    if (longPressed && moved) {
                                                         val target = findDropTarget(folder.id, true)
                                                         if (target != null) {
                                                             viewModel.moveFolder(
@@ -388,25 +547,19 @@ fun HomeScreen(
                                                                 target
                                                             )
                                                         }
+                                                        contextFolder = null
+                                                    } else if (!longPressed && !moved) {
+                                                        viewModel.navigateFolder(folder.id)
                                                     }
                                                     clearDrag()
                                                     break
-                                                }
-                                                val elapsed = System.currentTimeMillis() - startTime
-                                                val threshold = UxConfig.Gesture.LONG_PRESS_HOME_MS
-                                                if (!longPressed && elapsed >= threshold) {
-                                                    longPressed = true
-                                                    dragItem = DragItem(
-                                                        folder.id, true, folder.name
-                                                    )
-                                                    dragPosition = startPos
-                                                    hasDragMoved = false
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
                                                     val moved2 = drag.getDistance() >
                                                         UxConfig.Gesture.DRAG_THRESHOLD_PX
                                                     if (moved2) {
+                                                        if (!moved) contextFolder = null
                                                         moved = true
                                                         hasDragMoved = true
                                                     }
@@ -416,7 +569,6 @@ fun HomeScreen(
                                             }
                                         }
                                     }
-                                    .clickable { viewModel.navigateFolder(folder.id) }
                             )
                             DropdownMenu(
                                 expanded = contextFolder?.id == folder.id,
@@ -467,26 +619,44 @@ fun HomeScreen(
                                 doc = doc,
                                 isSelected = doc.id in selectedDocIds,
                                 isMultiSelectMode = isMultiSelect,
+                                isExtracting = doc.id in extractingDocIds,
                                 modifier = Modifier
                                     .onGloballyPositioned {
                                         itemPos = it.positionInWindow()
                                         docItemWidth = it.size.width
                                     }
                                     .pointerInput(doc.id) {
+                                        val handler = android.os.Handler(
+                                            android.os.Looper.getMainLooper()
+                                        )
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
                                             val startPos = itemPos + down.position
                                             var moved = false
                                             var longPressed = false
-                                            val startTime = System.currentTimeMillis()
+                                            val runnable = Runnable {
+                                                longPressed = true
+                                                haptic.performHapticFeedback(
+                                                    HapticFeedbackType.LongPress
+                                                )
+                                                contextPdf = doc
+                                                contextFolder = null
+                                                dragItem = DragItem(
+                                                    doc.id, false, doc.displayName
+                                                )
+                                                dragPosition = startPos
+                                                hasDragMoved = false
+                                            }
+                                            handler.postDelayed(
+                                                runnable,
+                                                UxConfig.Gesture.LONG_PRESS_HOME_MS
+                                            )
                                             while (true) {
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.firstOrNull() ?: break
                                                 if (change.changedToUp()) {
-                                                    if (longPressed && !moved) {
-                                                        contextPdf = doc
-                                                        contextFolder = null
-                                                    } else if (longPressed && moved) {
+                                                    handler.removeCallbacks(runnable)
+                                                    if (longPressed && moved) {
                                                         val target = findDropTarget(doc.id, false)
                                                         if (target != null) {
                                                             viewModel.moveDocument(
@@ -494,25 +664,23 @@ fun HomeScreen(
                                                                 target
                                                             )
                                                         }
+                                                        contextPdf = null
+                                                    } else if (!longPressed && !moved) {
+                                                        if (isMultiSelect) {
+                                                            viewModel.toggleSelect(doc.id)
+                                                        } else {
+                                                            onOpenPdf(doc)
+                                                        }
                                                     }
                                                     clearDrag()
                                                     break
-                                                }
-                                                val elapsed = System.currentTimeMillis() - startTime
-                                                val threshold = UxConfig.Gesture.LONG_PRESS_HOME_MS
-                                                if (!longPressed && elapsed >= threshold) {
-                                                    longPressed = true
-                                                    dragItem = DragItem(
-                                                        doc.id, false, doc.displayName
-                                                    )
-                                                    dragPosition = startPos
-                                                    hasDragMoved = false
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
                                                     val moved2 = drag.getDistance() >
                                                         UxConfig.Gesture.DRAG_THRESHOLD_PX
                                                     if (moved2) {
+                                                        if (!moved) contextPdf = null
                                                         moved = true
                                                         hasDragMoved = true
                                                     }
@@ -520,15 +688,6 @@ fun HomeScreen(
                                                     change.consume()
                                                 }
                                             }
-                                        }
-                                    }
-                                    .clickable {
-                                        if (isMultiSelect) {
-                                            viewModel.toggleSelect(
-                                                doc.id
-                                            )
-                                        } else {
-                                            onOpenPdf(doc)
                                         }
                                     }
                             )
@@ -540,6 +699,28 @@ fun HomeScreen(
                                     0.dp
                                 )
                             ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (doc.isPinned) {
+                                                "고정 해제"
+                                            } else {
+                                                "고정"
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.togglePin(doc.id)
+                                        contextPdf = null
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.PushPin,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("선택") },
                                     onClick = {
@@ -562,6 +743,24 @@ fun HomeScreen(
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Edit,
+                                            contentDescription = null,
+                                            tint = MaestroOnSurfaceVariant
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("복사") },
+                                    onClick = {
+                                        contextPdf?.let {
+                                            viewModel.duplicateDocument(
+                                                it.id
+                                            )
+                                        }
+                                        contextPdf = null
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.ContentCopy,
                                             contentDescription = null,
                                             tint = MaestroOnSurfaceVariant
                                         )
@@ -764,7 +963,7 @@ fun HomeScreen(
                     }
                     Button(
                         onClick = {
-                            viewModel.mergeSelected()
+                            showMergeOrderDialog = true
                         },
                         enabled = count >= 2,
                         shape = RoundedCornerShape(
@@ -860,7 +1059,11 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 // ── Top bar ─────────────────────────────────────────
 
 @Composable
-private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
+private fun HomeTopBar(
+    currentFolderName: String?,
+    onBack: (() -> Unit)?,
+    onOpenSettings: () -> Unit = {}
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(
             UxConfig.Home.TOP_BAR_HEIGHT
@@ -897,7 +1100,14 @@ private fun HomeTopBar(currentFolderName: String?, onBack: (() -> Unit)?) {
             Spacer(Modifier.weight(1f))
         }
         Text("PDF Studio", fontSize = UxConfig.Home.SUBTITLE_FONT_SIZE, color = Slate500)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(4.dp))
+        IconButton(onClick = onOpenSettings) {
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = "설정",
+                tint = Slate500
+            )
+        }
     }
 }
 
@@ -1020,6 +1230,7 @@ private fun PdfGridItem(
     doc: PdfDocument,
     isSelected: Boolean = false,
     isMultiSelectMode: Boolean = false,
+    isExtracting: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val thumbnail = remember(doc.uriString) {
@@ -1102,6 +1313,57 @@ private fun PdfGridItem(
                     ),
                     tint = MaestroOutlineVariant
                 )
+            }
+            if (doc.isPinned) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "고정됨",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaestroPrimary
+                    )
+                }
+            }
+            if (doc.extractionStatus ==
+                ExtractionStatus.DONE
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(
+                            if (doc.isPinned) {
+                                Alignment.BottomStart
+                            } else {
+                                Alignment.TopStart
+                            }
+                        )
+                        .padding(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription =
+                        "추출 완료",
+                        modifier = Modifier
+                            .size(18.dp),
+                        tint = Color(0xFF10B981)
+                    )
+                }
+            }
+            if (isExtracting) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaestroPrimary
+                    )
+                }
             }
             if (isMultiSelectMode) {
                 Box(
@@ -1340,6 +1602,164 @@ private fun MovePickerDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
+}
+
+// ── Merge Order Dialog ───────────────────────────────
+
+@Composable
+private fun MergeOrderDialog(
+    docs: List<PdfDocument>,
+    onDismiss: () -> Unit,
+    onConfirm: (orderedIds: List<String>) -> Unit
+) {
+    val orderedDocs = remember(docs) {
+        mutableStateListOf(*docs.toTypedArray())
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "병합 순서",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            LazyColumn(
+                verticalArrangement =
+                Arrangement.spacedBy(4.dp)
+            ) {
+                items(orderedDocs.size) { index ->
+                    val doc = orderedDocs[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Slate50,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = 8.dp
+                            ),
+                        verticalAlignment =
+                        Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${index + 1}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaestroPrimary,
+                            modifier = Modifier.width(
+                                24.dp
+                            )
+                        )
+                        Text(
+                            doc.displayName,
+                            fontSize = 14.sp,
+                            color = MaestroOnSurface,
+                            maxLines = 1,
+                            overflow =
+                            TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(
+                                1f
+                            )
+                        )
+                        IconButton(
+                            onClick = {
+                                if (index > 0) {
+                                    val item =
+                                        orderedDocs
+                                            .removeAt(
+                                                index
+                                            )
+                                    orderedDocs.add(
+                                        index - 1,
+                                        item
+                                    )
+                                }
+                            },
+                            enabled = index > 0,
+                            modifier = Modifier.size(
+                                32.dp
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default
+                                    .KeyboardArrowUp,
+                                contentDescription =
+                                "위로",
+                                tint = if (index > 0) {
+                                    Slate500
+                                } else {
+                                    Slate200
+                                }
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                if (
+                                    index <
+                                    orderedDocs
+                                        .size - 1
+                                ) {
+                                    val item =
+                                        orderedDocs
+                                            .removeAt(
+                                                index
+                                            )
+                                    orderedDocs.add(
+                                        index + 1,
+                                        item
+                                    )
+                                }
+                            },
+                            enabled = index <
+                                orderedDocs.size - 1,
+                            modifier = Modifier.size(
+                                32.dp
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default
+                                    .KeyboardArrowDown,
+                                contentDescription =
+                                "아래로",
+                                tint = if (
+                                    index <
+                                    orderedDocs
+                                        .size - 1
+                                ) {
+                                    Slate500
+                                } else {
+                                    Slate200
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        orderedDocs.map { it.id }
+                    )
+                }
+            ) {
+                Text(
+                    "병합",
+                    color = MaestroPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
         }
     )
 }

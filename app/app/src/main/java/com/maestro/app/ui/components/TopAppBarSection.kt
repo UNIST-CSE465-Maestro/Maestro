@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,9 +26,13 @@ import com.maestro.app.ui.theme.*
 @Composable
 fun TopAppBarSection(
     drawingState: DrawingState? = null,
+    isPinned: Boolean = false,
+    isBookmarked: Boolean = false,
     onBack: () -> Unit = {},
     onUndo: () -> Unit = {},
     onRedo: () -> Unit = {},
+    onTogglePin: () -> Unit = {},
+    onToggleBookmark: () -> Unit = {},
     onInsertImage: () -> Unit = {},
     onQuiz: () -> Unit = {},
     onToggleSidebar: () -> Unit = {}
@@ -84,24 +89,40 @@ fun TopAppBarSection(
         }
 
         IconButton(
-            onClick = {},
+            onClick = onTogglePin,
             modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
-                Icons.Default.PushPin,
+                if (isPinned) {
+                    Icons.Filled.PushPin
+                } else {
+                    Icons.Outlined.PushPin
+                },
                 contentDescription = "핀",
-                tint = Slate500
+                tint = if (isPinned) {
+                    MaestroPrimary
+                } else {
+                    Slate500
+                }
             )
         }
 
         IconButton(
-            onClick = {},
+            onClick = onToggleBookmark,
             modifier = Modifier.size(UxConfig.TopBar.ICON_BUTTON_SIZE)
         ) {
             Icon(
-                Icons.Default.BookmarkBorder,
+                if (isBookmarked) {
+                    Icons.Filled.Bookmark
+                } else {
+                    Icons.Default.BookmarkBorder
+                },
                 contentDescription = "북마크",
-                tint = Slate500
+                tint = if (isBookmarked) {
+                    MaestroPrimary
+                } else {
+                    Slate500
+                }
             )
         }
 

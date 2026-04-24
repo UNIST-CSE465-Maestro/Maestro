@@ -7,15 +7,19 @@ import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
+import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
-import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -23,7 +27,7 @@ class ViewerViewModel(
     private val annotationRepo: AnnotationRepositoryImpl,
     private val analyzerClient: MaterialAnalyzerClient,
     private val settingsRepository: SettingsRepository,
-    private val quizService: QuizService,
+    private val documentRepository: DocumentRepository,
     private val appContext: Context,
     val pdfId: String,
     val pageCount: Int,
@@ -44,42 +48,57 @@ class ViewerViewModel(
     val pendingLlmPrompt =
         _pendingLlmPrompt.asStateFlow()
 
-    private val _quizResult =
+    private val _documentContent =
         MutableStateFlow<String?>(null)
-    val quizResult = _quizResult.asStateFlow()
+    val documentContent =
+        _documentContent.asStateFlow()
 
-    private val _isExtracting =
-        MutableStateFlow(false)
-    val isExtracting = _isExtracting.asStateFlow()
+    private val _isPinned = MutableStateFlow(false)
+    val isPinned = _isPinned.asStateFlow()
 
-    private val _extractionMode =
-        MutableStateFlow("standard")
-    val extractionMode =
-        _extractionMode.asStateFlow()
+    private val _bookmarkedPages =
+        MutableStateFlow<Set<Int>>(emptySet())
+    val bookmarkedPages = _bookmarkedPages.asStateFlow()
+
+    private val _currentPage = MutableStateFlow(0)
+    val currentPage = _currentPage.asStateFlow()
+
+    val isCurrentPageBookmarked: StateFlow<Boolean> =
+        combine(_bookmarkedPages, _currentPage) { pages, page ->
+            page in pages
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            false
+        )
 
     private var lastSavedVersion = 0
 
     init {
         loadAnnotations()
+        loadDocumentContent()
+        loadDocumentMeta()
     }
 
-    fun toggleExtractionMode() {
-        _extractionMode.value =
-            if (_extractionMode.value == "standard") {
-                "ai"
-            } else {
-                "standard"
-            }
+    private fun loadDocumentContent() {
+        viewModelScope.launch {
+            try {
+                _documentContent.value =
+                    loadContentMd(pdfId)
+            } catch (_: Throwable) {}
+        }
     }
 
     private fun loadAnnotations() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                annotationRepo.loadAll(
-                    pdfId,
-                    drawingState
-                )
-            }
+            try {
+                withContext(Dispatchers.IO) {
+                    annotationRepo.loadAll(
+                        pdfId,
+                        drawingState
+                    )
+                }
+            } catch (_: Throwable) {}
             lastSavedVersion =
                 drawingState.annotationVersion
         }
@@ -101,6 +120,50 @@ class ViewerViewModel(
         }
     }
 
+    private fun loadDocumentMeta() {
+        viewModelScope.launch {
+            val doc = documentRepository.loadDocuments()
+                .find { it.id == pdfId }
+            if (doc != null) {
+                _bookmarkedPages.value = doc.bookmarkedPages
+                _isPinned.value = doc.isPinned
+            }
+        }
+    }
+
+    fun togglePin() {
+        viewModelScope.launch {
+            val doc = documentRepository.loadDocuments()
+                .find { it.id == pdfId } ?: return@launch
+            val newPinned = !doc.isPinned
+            _isPinned.value = newPinned
+            documentRepository.updateDocument(
+                doc.copy(isPinned = newPinned)
+            )
+        }
+    }
+
+    fun toggleBookmark(page: Int) {
+        viewModelScope.launch {
+            val current = _bookmarkedPages.value
+            val updated = if (page in current) {
+                current - page
+            } else {
+                current + page
+            }
+            _bookmarkedPages.value = updated
+            val doc = documentRepository.loadDocuments()
+                .find { it.id == pdfId } ?: return@launch
+            documentRepository.updateDocument(
+                doc.copy(bookmarkedPages = updated)
+            )
+        }
+    }
+
+    fun setCurrentPage(page: Int) {
+        _currentPage.value = page
+    }
+
     fun toggleSidebar() {
         _sidebarVisible.value =
             !_sidebarVisible.value
@@ -118,25 +181,16 @@ class ViewerViewModel(
     }
 
     fun extractAndQuiz() {
-        if (_isExtracting.value) return
-        val uri = pdfUri ?: return
-        _isExtracting.value = true
-        viewModelScope.launch {
-            try {
-                val mode = _extractionMode.value
-                val content = loadOrExtract(uri, mode)
-                val quiz =
-                    quizService.generateQuiz(content)
-                _quizResult.value = quiz
-                _sidebarVisible.value = true
-                _pendingLlmPrompt.value = quiz
-            } catch (_: Throwable) {
-                _quizResult.value =
-                    "퀴즈 생성에 실패했습니다."
-            } finally {
-                _isExtracting.value = false
-            }
+        if (_documentContent.value.isNullOrBlank()) {
+            return
         }
+        _sidebarVisible.value = true
+        _pendingLlmPrompt.value =
+            "이 문서의 내용을 바탕으로 " +
+            "객관식 퀴즈 5개를 만들어줘. " +
+            "각 문제에 4개 선택지(A-D)와 " +
+            "정답을 포함해줘." +
+            "\n<!--${System.currentTimeMillis()}-->"
     }
 
     private suspend fun loadOrExtract(uri: Uri, mode: String): String {

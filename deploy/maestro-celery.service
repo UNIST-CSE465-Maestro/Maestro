@@ -6,6 +6,7 @@ After=network.target redis-server.service
 User=maestro
 Group=maestro
 WorkingDirectory=/home/maestro/maestro/server
+Environment=MINERU_VLM_BATCH_SIZE=2
 ExecStart=/home/maestro/maestro/.venv/bin/celery -A config worker --loglevel=info --logfile=/home/maestro/maestro/server/logs/celery.log
 Restart=always
 RestartSec=3

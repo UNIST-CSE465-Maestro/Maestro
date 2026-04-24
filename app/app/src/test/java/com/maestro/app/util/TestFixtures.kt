@@ -2,6 +2,7 @@ package com.maestro.app.util
 
 import androidx.compose.ui.graphics.Color
 import com.maestro.app.domain.model.ChatMessage
+import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.PdfDocument
@@ -20,14 +21,22 @@ object TestFixtures {
         displayName: String = "test-document.pdf",
         pageCount: Int = 3,
         folderId: String? = null,
-        addedTimestamp: Long = 1000L
+        addedTimestamp: Long = 1000L,
+        extractionStatus: ExtractionStatus = ExtractionStatus.NONE,
+        extractionMode: String? = null,
+        isPinned: Boolean = false,
+        bookmarkedPages: Set<Int> = emptySet()
     ) = PdfDocument(
         id = id,
         uriString = uriString,
         displayName = displayName,
         pageCount = pageCount,
         folderId = folderId,
-        addedTimestamp = addedTimestamp
+        addedTimestamp = addedTimestamp,
+        extractionStatus = extractionStatus,
+        extractionMode = extractionMode,
+        isPinned = isPinned,
+        bookmarkedPages = bookmarkedPages
     )
 
     fun folder(

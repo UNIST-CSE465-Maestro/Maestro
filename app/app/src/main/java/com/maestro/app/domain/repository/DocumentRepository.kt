@@ -15,4 +15,6 @@ interface DocumentRepository {
     suspend fun deleteFolder(folderId: String)
     suspend fun renameFolder(folderId: String, newName: String)
     suspend fun moveFolder(folderId: String, newParentId: String?)
+    suspend fun updateDocument(doc: PdfDocument)
+    suspend fun duplicateDocument(documentId: String): PdfDocument?
 }

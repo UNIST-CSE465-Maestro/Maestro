@@ -5,7 +5,6 @@ import com.maestro.app.domain.model.ChatMessage
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.fake.FakeSettingsRepository
 import com.maestro.app.util.MainCoroutineRule
-import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -43,6 +42,7 @@ class SettingsViewModelTest {
         ): String = ""
 
         override suspend fun validateApiKey(apiKey: String): Boolean = nextValidationResult
+        override suspend fun fetchModels(): List<String> = emptyList()
     }
 
     @Before
@@ -50,8 +50,7 @@ class SettingsViewModelTest {
         settingsRepo = FakeSettingsRepository()
         viewModel = SettingsViewModel(
             settingsRepo,
-            stubLlmService,
-            mockk(relaxed = true)
+            stubLlmService
         )
     }
 
@@ -63,7 +62,7 @@ class SettingsViewModelTest {
 
     @Test
     fun `saveApiKey updates state to set`() = runTest {
-        viewModel.saveApiKey("sk-test-123")
+        viewModel.saveAndValidateApiKey("sk-test-123")
         advanceUntilIdle()
 
         assertTrue(viewModel.apiKeySet.value)
@@ -71,7 +70,7 @@ class SettingsViewModelTest {
 
     @Test
     fun `clearApiKey updates state to not set`() = runTest {
-        viewModel.saveApiKey("sk-test-123")
+        viewModel.saveAndValidateApiKey("sk-test-123")
         advanceUntilIdle()
 
         viewModel.clearApiKey()
@@ -84,7 +83,7 @@ class SettingsViewModelTest {
     fun `validateApiKey shows success`() = runTest {
         nextValidationResult = true
 
-        viewModel.validateApiKey("sk-valid")
+        viewModel.saveAndValidateApiKey("sk-valid")
         advanceUntilIdle()
 
         viewModel.validationResult.test {
@@ -97,7 +96,7 @@ class SettingsViewModelTest {
     fun `validateApiKey shows failure`() = runTest {
         nextValidationResult = false
 
-        viewModel.validateApiKey("sk-invalid")
+        viewModel.saveAndValidateApiKey("sk-invalid")
         advanceUntilIdle()
 
         viewModel.validationResult.test {

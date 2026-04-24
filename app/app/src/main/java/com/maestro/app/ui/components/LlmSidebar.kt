@@ -1,6 +1,11 @@
 package com.maestro.app.ui.components
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +21,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +47,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,22 +58,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.ConversationSummary
+import com.maestro.app.data.model.LlmRequestBuilder
+import com.maestro.app.data.remote.ClaudeClient
+import com.maestro.app.data.remote.LlmClient
+import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.domain.model.ChatMessage
+import com.maestro.app.domain.model.LlmProvider
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.ui.config.UxConfig
 import kotlinx.coroutines.launch
 
-private const val DEFAULT_SYSTEM_PROMPT =
-    "You are a helpful AI assistant integrated into " +
-        "Maestro, a PDF annotation app. Help the user " +
-        "understand and work with their documents."
+private fun buildSystemPrompt(documentContent: String?): String {
+    val base = "You are a helpful AI assistant " +
+        "integrated into Maestro, a PDF " +
+        "annotation app. Help the user " +
+        "understand and work with their documents. " +
+        "Always respond in Korean."
+    if (documentContent.isNullOrBlank()) return base
+    return "$base\n\n" +
+        "The user is currently viewing a document. " +
+        "Here is the extracted text content:\n\n" +
+        documentContent.take(5000)
+}
 
 @Composable
 fun LlmSidebar(
@@ -65,10 +98,12 @@ fun LlmSidebar(
     onCollapse: () -> Unit,
     llmService: LlmService,
     settingsRepository: SettingsRepository,
-    conversationDataSource: ConversationLocalDataSource
+    conversationDataSource: ConversationLocalDataSource,
+    documentContent: String? = null,
+    pendingImage: ByteArray? = null,
+    pendingPrompt: String? = null,
+    onPendingConsumed: () -> Unit = {}
 ) {
-    if (!isVisible) return
-
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val minWidthPx = with(density) {
@@ -81,30 +116,162 @@ fun LlmSidebar(
         UxConfig.Viewer.SIDEBAR_DEFAULT_WIDTH.toPx()
     }
 
-    var widthPx by remember { mutableStateOf(defaultWidthPx) }
-    val messages = remember { mutableStateListOf<ChatMessage>() }
-    var currentInput by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val savedProviderName by settingsRepository
+        .getLlmProvider()
+        .collectAsState(initial = null)
+    val currentProvider = savedProviderName
+        ?: LlmProvider.GEMINI.name
+    val geminiKey by settingsRepository
+        .getGeminiApiKey()
+        .collectAsState(initial = null)
+    val openAiKey by settingsRepository
+        .getOpenAiApiKey()
+        .collectAsState(initial = null)
+    val claudeKey by settingsRepository
+        .getClaudeApiKey()
+        .collectAsState(initial = null)
+    val hasApiKey = when (currentProvider) {
+        LlmProvider.OPENAI.name ->
+            !openAiKey.isNullOrBlank()
+        LlmProvider.CLAUDE.name ->
+            !claudeKey.isNullOrBlank()
+        else -> !geminiKey.isNullOrBlank()
+    }
+    val savedModel by settingsRepository
+        .getLlmModel()
+        .collectAsState(initial = null)
+    var availableModels by remember {
+        mutableStateOf<List<String>>(emptyList())
+    }
+    var modelsLoading by remember {
+        mutableStateOf(false)
+    }
+
+    var widthPx by remember {
+        mutableStateOf(defaultWidthPx)
+    }
+    val messages = remember {
+        mutableStateListOf<ChatMessage>()
+    }
+    var currentInput by remember {
+        mutableStateOf("")
+    }
+    var isLoading by remember {
+        mutableStateOf(false)
+    }
+    var errorMessage by remember {
+        mutableStateOf<String?>(null)
+    }
+    var activeJob by remember {
+        mutableStateOf<kotlinx.coroutines.Job?>(null)
+    }
+
+    LaunchedEffect(hasApiKey, currentProvider) {
+        if (hasApiKey) {
+            modelsLoading = true
+            availableModels = emptyList()
+            try {
+                availableModels =
+                    llmService.fetchModels()
+            } catch (e: Exception) {
+                errorMessage = "모델 목록 실패: " +
+                    "${e.message}"
+            }
+            modelsLoading = false
+        } else {
+            availableModels = emptyList()
+        }
+    }
+
     var conversationId by remember {
         mutableStateOf<String?>(null)
     }
+    var showHistory by remember {
+        mutableStateOf(false)
+    }
+    var historyList by remember {
+        mutableStateOf<List<ConversationSummary>>(
+            emptyList()
+        )
+    }
     val listState = rememberLazyListState()
 
+    // Track pending images for next send
+    var pendingImages by remember {
+        mutableStateOf<List<ByteArray>>(emptyList())
+    }
+
     LaunchedEffect(conversationId) {
-        val id = conversationId ?: return@LaunchedEffect
-        val loaded = conversationDataSource.loadMessages(id)
+        val id =
+            conversationId ?: return@LaunchedEffect
+        val loaded =
+            conversationDataSource.loadMessages(id)
         messages.clear()
         messages.addAll(loaded)
     }
 
-    LaunchedEffect(messages.size) {
+    val lastMsgContent =
+        messages.lastOrNull()?.content?.length ?: 0
+    LaunchedEffect(messages.size, lastMsgContent) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(
+            listState.scrollToItem(
                 messages.size - 1
             )
         }
     }
+
+    // Consume pending crop/quiz prompt
+    fun sendMessage(text: String, imgs: List<ByteArray> = emptyList()) {
+        activeJob?.cancel()
+        isLoading = false
+        errorMessage = null
+        val userMsg = ChatMessage(
+            role = ChatMessage.Role.USER,
+            content = text
+        )
+        messages.add(userMsg)
+        activeJob = scope.launch {
+            val convId = conversationId
+                ?: conversationDataSource
+                    .create()
+                    .also { conversationId = it }
+            conversationDataSource
+                .appendMessage(convId, userMsg)
+            streamAssistantResponse(
+                messages,
+                llmService,
+                conversationDataSource,
+                convId,
+                imgs,
+                documentContent,
+                { errorMessage = it },
+                { isLoading = it }
+            )
+        }
+    }
+
+    var lastProcessedPrompt by remember {
+        mutableStateOf<String?>(null)
+    }
+    if (pendingPrompt != null &&
+        pendingPrompt != lastProcessedPrompt
+    ) {
+        lastProcessedPrompt = pendingPrompt
+        val imgs = if (pendingImage != null) {
+            listOf(pendingImage)
+        } else {
+            emptyList()
+        }
+        val text = pendingPrompt
+            .replace(
+                Regex("\\n<!--\\d+-->$"),
+                ""
+            )
+        onPendingConsumed()
+        sendMessage(text, imgs)
+    }
+
+    if (!isVisible) return
 
     val widthDp = with(density) { widthPx.toDp() }
 
@@ -113,18 +280,25 @@ fun LlmSidebar(
             .width(widthDp)
             .fillMaxHeight()
     ) {
-        // Drag handle on the left edge
+        // Drag handle
         Box(
             modifier = Modifier
                 .width(6.dp)
                 .fillMaxHeight()
                 .background(
-                    MaterialTheme.colorScheme.outlineVariant
+                    MaterialTheme.colorScheme
+                        .outlineVariant
                 )
                 .pointerInput(Unit) {
-                    detectHorizontalDragGestures { _, dx ->
+                    detectHorizontalDragGestures {
+                            _,
+                            dx
+                        ->
                         widthPx = (widthPx - dx)
-                            .coerceIn(minWidthPx, maxWidthPx)
+                            .coerceIn(
+                                minWidthPx,
+                                maxWidthPx
+                            )
                     }
                 }
         )
@@ -132,132 +306,379 @@ fun LlmSidebar(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(
+                    MaterialTheme.colorScheme.surface
+                )
         ) {
-            // Top bar
             SidebarTopBar(
-                onCollapse = onCollapse,
-                onNewConversation = {
+                currentProvider = currentProvider,
+                onProviderSelected = { provider ->
+                    activeJob?.cancel()
+                    activeJob = null
                     conversationId = null
                     messages.clear()
-                    error = null
-                    currentInput = ""
-                }
-            )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme
-                    .outlineVariant
-            )
-
-            // Message list
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement
-                    .spacedBy(8.dp)
-            ) {
-                item { Spacer(Modifier.height(8.dp)) }
-                items(messages) { msg ->
-                    MessageBubble(message = msg)
-                }
-                item { Spacer(Modifier.height(8.dp)) }
-            }
-
-            // Error display
-            if (error != null) {
-                Text(
-                    text = error ?: "",
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(
-                        horizontal = 12.dp,
-                        vertical = 4.dp
-                    )
-                )
-            }
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme
-                    .outlineVariant
-            )
-
-            // Input area
-            SidebarInput(
-                value = currentInput,
-                onValueChange = { currentInput = it },
-                isLoading = isLoading,
-                onSend = {
-                    val text = currentInput.trim()
-                    if (text.isBlank() || isLoading) return@SidebarInput
-                    error = null
-
-                    val userMsg = ChatMessage(
-                        role = ChatMessage.Role.USER,
-                        content = text
-                    )
-                    messages.add(userMsg)
-                    currentInput = ""
-
+                    errorMessage = null
+                    isLoading = false
                     scope.launch {
-                        val convId = conversationId
-                            ?: conversationDataSource.create()
-                                .also { conversationId = it }
-                        conversationDataSource
-                            .appendMessage(convId, userMsg)
-
-                        isLoading = true
-                        val assistantMsg = ChatMessage(
-                            role = ChatMessage.Role.ASSISTANT,
-                            content = ""
-                        )
-                        messages.add(assistantMsg)
-                        val idx = messages.size - 1
-
-                        try {
-                            val sb = StringBuilder()
-                            llmService.stream(
-                                messages = messages
-                                    .dropLast(1)
-                                    .toList(),
-                                systemPrompt =
-                                DEFAULT_SYSTEM_PROMPT
-                            ).collect { token ->
-                                sb.append(token)
-                                messages[idx] = messages[idx]
-                                    .copy(
-                                        content =
-                                        sb.toString()
-                                    )
-                            }
+                        settingsRepository
+                            .setLlmProvider(provider)
+                        settingsRepository
+                            .setLlmModel("")
+                    }
+                },
+                currentModel = savedModel?.ifBlank {
+                    null
+                } ?: when (currentProvider) {
+                    LlmProvider.OPENAI.name ->
+                        OpenAiClient.DEFAULT_MODEL
+                    LlmProvider.CLAUDE.name ->
+                        ClaudeClient.DEFAULT_MODEL
+                    else ->
+                        LlmRequestBuilder.DEFAULT_MODEL
+                },
+                availableModels = availableModels,
+                modelsLoading = modelsLoading,
+                onModelSelected = { model ->
+                    activeJob?.cancel()
+                    activeJob = null
+                    conversationId = null
+                    messages.clear()
+                    errorMessage = null
+                    isLoading = false
+                    scope.launch {
+                        settingsRepository
+                            .setLlmModel(model)
+                    }
+                },
+                onCollapse = onCollapse,
+                onNewConversation = {
+                    activeJob?.cancel()
+                    activeJob = null
+                    conversationId = null
+                    messages.clear()
+                    errorMessage = null
+                    currentInput = ""
+                    pendingImages = emptyList()
+                    isLoading = false
+                    showHistory = false
+                },
+                onToggleHistory = {
+                    showHistory = !showHistory
+                    if (showHistory) {
+                        historyList =
                             conversationDataSource
-                                .appendMessage(
-                                    convId,
-                                    messages[idx]
-                                )
-                        } catch (e: Exception) {
-                            error = e.message
-                                ?: "Unknown error"
-                            if (messages[idx]
-                                    .content.isBlank()
-                            ) {
-                                messages.removeAt(idx)
+                                .listConversations()
+                    }
+                }
+            )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme
+                    .outlineVariant
+            )
+
+            if (showHistory) {
+                ConversationHistoryPanel(
+                    conversations = historyList,
+                    currentId = conversationId,
+                    onSelect = { summary ->
+                        activeJob?.cancel()
+                        activeJob = null
+                        conversationId = summary.id
+                        isLoading = false
+                        errorMessage = null
+                        showHistory = false
+                    },
+                    onDelete = { summary ->
+                        conversationDataSource
+                            .deleteConversation(
+                                summary.id
+                            )
+                        historyList = historyList
+                            .filter {
+                                it.id != summary.id
                             }
-                        } finally {
-                            isLoading = false
+                        if (conversationId ==
+                            summary.id
+                        ) {
+                            conversationId = null
+                            messages.clear()
                         }
                     }
+                )
+            } else if (!hasApiKey) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment =
+                        Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.Key,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(48.dp),
+                            tint = MaterialTheme
+                                .colorScheme
+                                .outline
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        val providerName =
+                            when (currentProvider) {
+                                LlmProvider.OPENAI
+                                    .name -> "OpenAI"
+                                LlmProvider.CLAUDE
+                                    .name -> "Claude"
+                                else -> "Gemini"
+                            }
+                        Text(
+                            "$providerName API 키가 " +
+                                "설정되지 않았습니다",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight
+                                .SemiBold,
+                            color = MaterialTheme
+                                .colorScheme
+                                .onSurface
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "설정 화면에서 $providerName" +
+                                " API 키를 입력해주세요.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement
+                        .spacedBy(8.dp)
+                ) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    items(messages) { msg ->
+                        MessageBubble(message = msg)
+                    }
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = MaterialTheme
+                            .colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 4.dp
+                        )
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme
+                    .outlineVariant
+            )
+
+            SidebarInput(
+                value = currentInput,
+                onValueChange = {
+                    currentInput = it
+                },
+                isLoading = isLoading,
+                pendingImages = pendingImages,
+                onAddImage = { bytes ->
+                    pendingImages =
+                        pendingImages + bytes
+                },
+                onRemoveImage = { index ->
+                    pendingImages = pendingImages
+                        .toMutableList()
+                        .apply { removeAt(index) }
+                },
+                onSend = {
+                    val text = currentInput.trim()
+                    if (text.isBlank() &&
+                        pendingImages.isEmpty()
+                    ) {
+                        return@SidebarInput
+                    }
+                    val msgText = text.ifBlank {
+                        "이 이미지를 분석해줘"
+                    }
+                    val imgs = pendingImages
+                    pendingImages = emptyList()
+                    currentInput = ""
+                    sendMessage(msgText, imgs)
                 }
             )
         }
     }
 }
 
+private suspend fun streamAssistantResponse(
+    messages: MutableList<ChatMessage>,
+    llmService: LlmService,
+    conversationDataSource: ConversationLocalDataSource,
+    convId: String,
+    images: List<ByteArray>,
+    documentContent: String?,
+    onError: (String?) -> Unit,
+    onLoading: (Boolean) -> Unit
+) {
+    onLoading(true)
+    val assistantMsg = ChatMessage(
+        role = ChatMessage.Role.ASSISTANT,
+        content = ""
+    )
+    messages.add(assistantMsg)
+    val idx = messages.lastIndex
+
+    try {
+        val sb = StringBuilder()
+        var thinking = false
+        llmService.stream(
+            messages = messages.dropLast(1).toList(),
+            systemPrompt = buildSystemPrompt(
+                documentContent
+            ),
+            images = images
+        ).collect { token ->
+            when (token) {
+                LlmClient.THINKING_TOKEN -> {
+                    thinking = true
+                    if (idx in messages.indices) {
+                        messages[idx] =
+                            messages[idx].copy(
+                                content = "생각 중..."
+                            )
+                    }
+                }
+                LlmClient.THINKING_DONE_TOKEN -> {
+                    thinking = false
+                    sb.clear()
+                }
+                ClaudeClient.GENERATING_TOKEN,
+                LlmClient.GENERATING_TOKEN -> {
+                    if (idx in messages.indices) {
+                        messages[idx] =
+                            messages[idx].copy(
+                                content =
+                                "응답 생성 중..."
+                            )
+                    }
+                }
+                LlmClient.RETRY_TOKEN -> {
+                    if (idx in messages.indices) {
+                        messages[idx] =
+                            messages[idx].copy(
+                                content =
+                                "서버 과부하, 재시도 중..."
+                            )
+                    }
+                }
+                else -> {
+                    if (!thinking) {
+                        sb.append(token)
+                        if (idx in messages.indices) {
+                            messages[idx] =
+                                messages[idx].copy(
+                                    content =
+                                    sb.toString()
+                                )
+                        }
+                    }
+                }
+            }
+        }
+        if (idx in messages.indices) {
+            if (messages[idx].content.isBlank()) {
+                messages.removeAt(idx)
+                onError(
+                    "이 모델에서 응답을 받지 못했습니다. " +
+                        "다른 모델을 선택해주세요."
+                )
+            } else {
+                conversationDataSource.appendMessage(
+                    convId,
+                    messages[idx]
+                )
+            }
+        }
+    } catch (_: kotlin.coroutines.cancellation.CancellationException) {
+        if (idx in messages.indices &&
+            messages[idx].content.isBlank()
+        ) {
+            messages.removeAt(idx)
+        }
+    } catch (e: Exception) {
+        val msg = e.message ?: ""
+        onError(
+            when {
+                msg.contains("API key not configured") ->
+                    "API 키가 설정되지 않았습니다"
+                msg.contains("API error 401") ||
+                    msg.contains("API error 403") ->
+                    "API 키가 유효하지 않습니다"
+                msg.contains("API error 429") ->
+                    "요청 한도 초과: $msg"
+                msg.contains("API error") -> msg
+                msg.contains("cancel", true) ||
+                    msg.contains("closed") ->
+                    null
+                else -> "AI 응답을 받을 수 없습니다: $msg"
+            }
+        )
+        if (idx in messages.indices &&
+            messages[idx].content.isBlank()
+        ) {
+            messages.removeAt(idx)
+        }
+    } finally {
+        onLoading(false)
+    }
+}
+
 @Composable
-private fun SidebarTopBar(onCollapse: () -> Unit, onNewConversation: () -> Unit) {
+private fun SidebarTopBar(
+    currentProvider: String,
+    onProviderSelected: (String) -> Unit,
+    currentModel: String,
+    availableModels: List<String>,
+    modelsLoading: Boolean,
+    onModelSelected: (String) -> Unit,
+    onCollapse: () -> Unit,
+    onNewConversation: () -> Unit,
+    onToggleHistory: () -> Unit
+) {
+    var showModelMenu by remember {
+        mutableStateOf(false)
+    }
+    var showProviderMenu by remember {
+        mutableStateOf(false)
+    }
+    val providerLabel = when (currentProvider) {
+        LlmProvider.OPENAI.name -> "OpenAI"
+        LlmProvider.CLAUDE.name -> "Claude"
+        else -> "Gemini"
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -265,13 +686,166 @@ private fun SidebarTopBar(onCollapse: () -> Unit, onNewConversation: () -> Unit)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Claude",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
+        // Provider toggle
+        Box {
+            Text(
+                text = providerLabel,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme
+                    .onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        MaterialTheme.colorScheme
+                            .surfaceVariant
+                    )
+                    .clickable {
+                        showProviderMenu = true
+                    }
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 4.dp
+                    )
+            )
+            DropdownMenu(
+                expanded = showProviderMenu,
+                onDismissRequest = {
+                    showProviderMenu = false
+                }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Gemini") },
+                    onClick = {
+                        onProviderSelected(
+                            LlmProvider.GEMINI.name
+                        )
+                        showProviderMenu = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("OpenAI") },
+                    onClick = {
+                        onProviderSelected(
+                            LlmProvider.OPENAI.name
+                        )
+                        showProviderMenu = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Claude") },
+                    onClick = {
+                        onProviderSelected(
+                            LlmProvider.CLAUDE.name
+                        )
+                        showProviderMenu = false
+                    }
+                )
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        // Model selector
+        Box(modifier = Modifier.weight(1f)) {
+            Text(
+                text = currentModel,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text
+                    .style.TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme
+                    .primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable {
+                        showModelMenu = true
+                    }
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 4.dp
+                    )
+            )
+            DropdownMenu(
+                expanded = showModelMenu,
+                onDismissRequest = {
+                    showModelMenu = false
+                }
+            ) {
+                if (modelsLoading) {
+                    Box(
+                        modifier = Modifier
+                            .padding(16.dp),
+                        contentAlignment =
+                        Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                } else if (
+                    availableModels.isEmpty()
+                ) {
+                    Text(
+                        "모델 목록을 불러올 수 없습니다",
+                        modifier = Modifier
+                            .padding(16.dp),
+                        fontSize = 13.sp,
+                        color = MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant
+                    )
+                } else {
+                    availableModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    model,
+                                    fontSize = 13.sp,
+                                    fontWeight =
+                                    if (model ==
+                                        currentModel
+                                    ) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight
+                                            .Normal
+                                    },
+                                    color =
+                                    if (model ==
+                                        currentModel
+                                    ) {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface
+                                    }
+                                )
+                            },
+                            onClick = {
+                                onModelSelected(model)
+                                showModelMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        IconButton(
+            onClick = onToggleHistory,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.History,
+                contentDescription = "대화 기록",
+                tint = MaterialTheme.colorScheme
+                    .onSurfaceVariant
+            )
+        }
         IconButton(
             onClick = onNewConversation,
             modifier = Modifier.size(36.dp)
@@ -346,52 +920,336 @@ private fun SidebarInput(
     value: String,
     onValueChange: (String) -> Unit,
     isLoading: Boolean,
+    pendingImages: List<ByteArray>,
+    onAddImage: (ByteArray) -> Unit,
+    onRemoveImage: (Int) -> Unit,
     onSend: () -> Unit
 ) {
-    Row(
+    val context = LocalContext.current
+    val clipboardManager = context.getSystemService(
+        android.content.Context.CLIPBOARD_SERVICE
+    ) as android.content.ClipboardManager
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver
+                .openInputStream(uri)?.use {
+                    onAddImage(it.readBytes())
+                }
+        } catch (_: Throwable) {}
+    }
+
+    val canSend =
+        value.isNotBlank() ||
+            pendingImages.isNotEmpty()
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
-        verticalAlignment = Alignment.Bottom
+            .padding(8.dp)
     ) {
-        TextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            placeholder = {
-                Text(
-                    "메시지를 입력하세요...",
-                    fontSize = 14.sp
+        if (pendingImages.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement =
+                Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            ) {
+                items(pendingImages.size) { idx ->
+                    ImageThumbnail(
+                        bytes = pendingImages[idx],
+                        onRemove = {
+                            onRemoveImage(idx)
+                        }
+                    )
+                }
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.Bottom
+        ) {
+            IconButton(
+                onClick = {
+                    imagePicker.launch("image/*")
+                },
+                enabled = !isLoading,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Image,
+                    contentDescription = "이미지 첨부",
+                    tint = if (!isLoading) {
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme
+                            .outline
+                    },
+                    modifier = Modifier.size(20.dp)
                 )
-            },
-            maxLines = 5,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme
-                    .colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme
-                    .colorScheme.surfaceVariant,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            ),
-            shape = RoundedCornerShape(12.dp)
+            }
+            IconButton(
+                onClick = {
+                    try {
+                        val clip = clipboardManager
+                            .primaryClip
+                        val item =
+                            clip?.getItemAt(0)
+                        val uri = item?.uri
+                        if (uri != null) {
+                            context
+                                .contentResolver
+                                .openInputStream(uri)
+                                ?.use {
+                                    onAddImage(
+                                        it.readBytes()
+                                    )
+                                }
+                        }
+                    } catch (_: Throwable) {}
+                },
+                enabled = !isLoading,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.ContentPaste,
+                    contentDescription =
+                    "클립보드에서 붙여넣기",
+                    tint = if (!isLoading) {
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme
+                            .outline
+                    },
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            TextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f),
+                placeholder = {
+                    Text(
+                        "메시지를 입력하세요...",
+                        fontSize = 14.sp
+                    )
+                },
+                maxLines = 5,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor =
+                    MaterialTheme.colorScheme
+                        .surfaceVariant,
+                    unfocusedContainerColor =
+                    MaterialTheme.colorScheme
+                        .surfaceVariant,
+                    focusedIndicatorColor =
+                    Color.Transparent,
+                    unfocusedIndicatorColor =
+                    Color.Transparent
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            IconButton(
+                onClick = onSend,
+                enabled = canSend
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored
+                        .Filled.Send,
+                    contentDescription = "전송",
+                    tint = if (canSend) {
+                        MaterialTheme.colorScheme
+                            .primary
+                    } else {
+                        MaterialTheme.colorScheme
+                            .outline
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageThumbnail(bytes: ByteArray, onRemove: () -> Unit) {
+    val bitmap = remember(bytes) {
+        BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size
         )
-        Spacer(Modifier.width(4.dp))
-        IconButton(
-            onClick = onSend,
-            enabled = !isLoading &&
-                value.isNotBlank()
+    }
+    Box(modifier = Modifier.size(56.dp)) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "첨부 이미지",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        MaterialTheme.colorScheme
+                            .surfaceVariant
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Image,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme
+                        .outline
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(
+                    MaterialTheme.colorScheme.error
+                )
+                .clickable { onRemove() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = "전송",
-                tint = if (!isLoading &&
-                    value.isNotBlank()
-                ) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                }
+                Icons.Default.Close,
+                contentDescription = "제거",
+                modifier = Modifier.size(12.dp),
+                tint = MaterialTheme.colorScheme
+                    .onError
             )
+        }
+    }
+}
+
+@Composable
+private fun ConversationHistoryPanel(
+    conversations: List<ConversationSummary>,
+    currentId: String?,
+    onSelect: (ConversationSummary) -> Unit,
+    onDelete: (ConversationSummary) -> Unit
+) {
+    if (conversations.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "저장된 대화가 없습니다",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme
+                    .onSurfaceVariant
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalArrangement =
+            Arrangement.spacedBy(2.dp)
+        ) {
+            item { Spacer(Modifier.height(4.dp)) }
+            items(
+                conversations,
+                key = { it.id }
+            ) { conv ->
+                val isSelected =
+                    conv.id == currentId
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(
+                            RoundedCornerShape(8.dp)
+                        )
+                        .background(
+                            if (isSelected) {
+                                MaterialTheme
+                                    .colorScheme
+                                    .primaryContainer
+                            } else {
+                                Color.Transparent
+                            }
+                        )
+                        .clickable {
+                            onSelect(conv)
+                        }
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = 10.dp
+                        ),
+                    verticalAlignment =
+                    Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                    ) {
+                        Text(
+                            conv.title,
+                            fontSize = 13.sp,
+                            fontWeight =
+                            FontWeight.Medium,
+                            maxLines = 1,
+                            color = MaterialTheme
+                                .colorScheme
+                                .onSurface
+                        )
+                        val dateStr =
+                            java.text.SimpleDateFormat(
+                                "MM/dd HH:mm",
+                                java.util.Locale
+                                    .getDefault()
+                            ).format(
+                                java.util.Date(
+                                    conv.updated
+                                )
+                            )
+                        Text(
+                            dateStr,
+                            fontSize = 11.sp,
+                            color = MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = { onDelete(conv) },
+                        modifier = Modifier
+                            .size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription =
+                            "삭제",
+                            modifier = Modifier
+                                .size(16.dp),
+                            tint = MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(4.dp)) }
         }
     }
 }

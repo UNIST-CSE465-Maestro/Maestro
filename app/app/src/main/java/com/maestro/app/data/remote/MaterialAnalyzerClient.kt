@@ -108,7 +108,7 @@ class MaterialAnalyzerClient(
             )
         }
 
-    suspend fun pollUntilComplete(taskId: String, intervalMs: Long = 3000L): AnalysisTaskResponse {
+    suspend fun pollUntilComplete(taskId: String, intervalMs: Long = 5000L): AnalysisTaskResponse {
         while (true) {
             val resp = api.getTaskStatus(taskId)
             if (!resp.isSuccessful) {
@@ -117,10 +117,11 @@ class MaterialAnalyzerClient(
                     resp.errorBody()?.string() ?: ""
                 )
             }
-            val task = resp.body() ?: throw ServerException(
-                resp.code(),
-                "Empty response body"
-            )
+            val task = resp.body()
+                ?: throw ServerException(
+                    resp.code(),
+                    "Empty response body"
+                )
             if (task.status == "completed") return task
             if (task.status == "failed") {
                 throw ServerException(

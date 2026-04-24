@@ -58,7 +58,7 @@ def process_pdf(self, task_id: str, file_path: str, mode: str = "standard"):
             ],
             capture_output=True,
             text=True,
-            timeout=600,  # 10 min timeout
+            timeout=None,
         )
 
         if result.returncode != 0:
