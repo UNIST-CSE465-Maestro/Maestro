@@ -43,6 +43,9 @@ class SettingsViewModelTest {
 
         override suspend fun validateApiKey(apiKey: String): Boolean = nextValidationResult
         override suspend fun fetchModels(): List<String> = emptyList()
+
+        override suspend fun warmUp(): Result<Unit> =
+            Result.success(Unit)
     }
 
     @Before

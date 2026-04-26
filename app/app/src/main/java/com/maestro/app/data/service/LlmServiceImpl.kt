@@ -19,6 +19,9 @@ class LlmServiceImpl(
     private val settingsRepository: SettingsRepository
 ) : LlmService {
 
+    private val modelCache =
+        mutableMapOf<LlmProvider, List<String>>()
+
     override fun stream(
         messages: List<ChatMessage>,
         systemPrompt: String?,
@@ -121,7 +124,8 @@ class LlmServiceImpl(
 
     override suspend fun fetchModels(): List<String> {
         val provider = getProvider()
-        return when (provider) {
+        modelCache[provider]?.let { return it }
+        val models = when (provider) {
             LlmProvider.GEMINI -> {
                 val key = requireGeminiKey()
                 geminiClient.fetchModels(key)
@@ -132,6 +136,26 @@ class LlmServiceImpl(
             }
             LlmProvider.CLAUDE ->
                 claudeClient.fetchModels()
+        }
+        if (models.isNotEmpty()) {
+            modelCache[provider] = models
+        }
+        return models
+    }
+
+    override suspend fun warmUp(): Result<Unit> {
+        return try {
+            when (getProvider()) {
+                LlmProvider.GEMINI ->
+                    geminiClient.warmUp(requireGeminiKey())
+                LlmProvider.OPENAI ->
+                    openAiClient.warmUp(requireOpenAiKey())
+                LlmProvider.CLAUDE ->
+                    claudeClient.warmUp(requireClaudeKey())
+            }
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
         }
     }
 

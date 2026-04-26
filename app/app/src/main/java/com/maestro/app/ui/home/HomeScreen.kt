@@ -75,6 +75,9 @@ fun HomeScreen(
     val selectedDocIds by viewModel.selectedDocIds.collectAsState()
     val isMultiSelect by viewModel.isMultiSelectMode.collectAsState()
     val profile by profileDataSource.profile.collectAsState()
+    val docsWithExtractedContent by viewModel
+        .docsWithExtractedContent
+        .collectAsState()
 
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -85,6 +88,8 @@ fun HomeScreen(
 
     // PDF picker launcher
     val extractingDocIds by viewModel.extractingDocIds
+        .collectAsState()
+    val extractionProgress by viewModel.extractionProgress
         .collectAsState()
     val pendingImportUri by viewModel.pendingImportUri
         .collectAsState()
@@ -104,6 +109,7 @@ fun HomeScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showMergeOrderDialog by remember { mutableStateOf(false) }
+    var retryDoc by remember { mutableStateOf<PdfDocument?>(null) }
 
     // Drag-and-drop state
     data class DragItem(val id: String, val isFolder: Boolean, val label: String)
@@ -435,6 +441,65 @@ fun HomeScreen(
         )
     }
 
+    if (retryDoc != null) {
+        AlertDialog(
+            onDismissRequest = {
+                retryDoc = null
+            },
+            title = {
+                Text(
+                    "다시 추출",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "\"${retryDoc?.displayName.orEmpty()}\"의 " +
+                        "텍스트를 다시 추출할 방식을 선택하세요."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        retryDoc?.let {
+                            viewModel.retryExtraction(
+                                it.id,
+                                "ai"
+                            )
+                        }
+                        retryDoc = null
+                        contextPdf = null
+                    }
+                ) {
+                    Text(
+                        "AI 추출",
+                        fontWeight = FontWeight.Bold,
+                        color = MaestroPrimary
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        retryDoc?.let {
+                            viewModel.retryExtraction(
+                                it.id,
+                                "standard"
+                            )
+                        }
+                        retryDoc = null
+                        contextPdf = null
+                    }
+                ) {
+                    Text(
+                        "일반 추출",
+                        color = Slate500
+                    )
+                }
+            }
+        )
+    }
+
     // Extraction error dialog
     if (extractionError != null) {
         AlertDialog(
@@ -629,6 +694,10 @@ fun HomeScreen(
                                 isSelected = doc.id in selectedDocIds,
                                 isMultiSelectMode = isMultiSelect,
                                 isExtracting = doc.id in extractingDocIds,
+                                extractionProgress =
+                                extractionProgress[doc.id],
+                                hasExtractedContent =
+                                doc.id in docsWithExtractedContent,
                                 modifier = Modifier
                                     .onGloballyPositioned {
                                         itemPos = it.positionInWindow()
@@ -744,6 +813,24 @@ fun HomeScreen(
                                         )
                                     }
                                 )
+                                if (
+                                    doc.extractionStatus == ExtractionStatus.FAILED ||
+                                    doc.id !in docsWithExtractedContent
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("다시 추출") },
+                                        onClick = {
+                                            retryDoc = doc
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                tint = MaestroPrimary
+                                            )
+                                        }
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("이름 변경") },
                                     onClick = {
@@ -1260,6 +1347,8 @@ private fun PdfGridItem(
     isSelected: Boolean = false,
     isMultiSelectMode: Boolean = false,
     isExtracting: Boolean = false,
+    extractionProgress: Int? = null,
+    hasExtractedContent: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val thumbnail = remember(doc.uriString) {
@@ -1357,27 +1446,41 @@ private fun PdfGridItem(
                     )
                 }
             }
-            if (doc.extractionStatus ==
-                ExtractionStatus.DONE
-            ) {
+            val isExtractionDone =
+                doc.extractionStatus == ExtractionStatus.DONE &&
+                    hasExtractedContent
+            val isExtractionFailed =
+                doc.extractionStatus == ExtractionStatus.FAILED ||
+                    (
+                        !isExtracting &&
+                            doc.extractionStatus != ExtractionStatus.EXTRACTING &&
+                            !hasExtractedContent
+                        )
+            if (isExtractionDone || isExtractionFailed) {
                 Box(
                     modifier = Modifier
-                        .align(
-                            if (doc.isPinned) {
-                                Alignment.BottomStart
-                            } else {
-                                Alignment.TopStart
-                            }
-                        )
+                        .align(Alignment.TopStart)
                         .padding(6.dp)
                 ) {
                     Icon(
-                        Icons.Default.CheckCircle,
+                        if (isExtractionDone) {
+                            Icons.Default.CheckCircle
+                        } else {
+                            Icons.Default.Cancel
+                        },
                         contentDescription =
-                        "추출 완료",
+                        if (isExtractionDone) {
+                            "추출 완료"
+                        } else {
+                            "추출 실패 또는 누락"
+                        },
                         modifier = Modifier
                             .size(18.dp),
-                        tint = Color(0xFF10B981)
+                        tint = if (isExtractionDone) {
+                            Color(0xFF10B981)
+                        } else {
+                            MaestroError
+                        }
                     )
                 }
             }
@@ -1387,10 +1490,8 @@ private fun PdfGridItem(
                         .align(Alignment.BottomEnd)
                         .padding(6.dp)
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaestroPrimary
+                    ExtractionProgressBadge(
+                        progress = extractionProgress ?: 1
                     )
                 }
             }
@@ -1434,6 +1535,40 @@ private fun PdfGridItem(
                 "${doc.pageCount}페이지",
                 fontSize = UxConfig.Home.ITEM_META_FONT_SIZE,
                 color = Slate500
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtractionProgressBadge(progress: Int) {
+    Box(
+        modifier = Modifier
+            .background(
+                MaestroSurfaceContainerLowest.copy(alpha = 0.94f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            CircularProgressIndicator(
+                progress = {
+                    progress.coerceIn(0, 100) / 100f
+                },
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaestroPrimary,
+                trackColor = MaestroSurfaceContainerHigh
+            )
+            Text(
+                "${progress.coerceIn(0, 100)}%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaestroPrimary
             )
         }
     }

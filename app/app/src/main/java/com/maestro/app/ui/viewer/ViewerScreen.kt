@@ -4,7 +4,9 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -22,7 +24,16 @@ import com.maestro.app.ui.components.LlmSidebar
 import com.maestro.app.ui.components.TopAppBarSection
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroBackground
+import com.maestro.app.ui.theme.MaestroPrimary
+import com.maestro.app.ui.theme.MaestroSurfaceContainerHigh
+import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
 import com.maestro.app.ui.theme.Slate500
+
+enum class LlmConnectionState {
+    CONNECTING,
+    READY,
+    FAILED
+}
 
 @Composable
 fun ViewerScreen(
@@ -45,13 +56,36 @@ fun ViewerScreen(
         .isPinned.collectAsState()
     val isBookmarked by viewModel
         .isCurrentPageBookmarked.collectAsState()
+    val extractionProgress by viewModel
+        .extractionProgress.collectAsState()
     val context = LocalContext.current
+    var llmConnectionState by remember {
+        mutableStateOf(LlmConnectionState.CONNECTING)
+    }
+    var llmConnectionError by remember {
+        mutableStateOf<String?>(null)
+    }
 
-    // Warm up LLM connection pool on viewer entry
-    LaunchedEffect(Unit) {
-        try {
-            llmService.fetchModels()
-        } catch (_: Exception) {}
+    // Warm up the provider connection without loading/probing all models.
+    fun retryLlmConnection() {
+        llmConnectionState = LlmConnectionState.CONNECTING
+        llmConnectionError = null
+    }
+
+    LaunchedEffect(llmConnectionState) {
+        if (llmConnectionState ==
+            LlmConnectionState.CONNECTING
+        ) {
+            val result = llmService.warmUp()
+            if (result.isSuccess) {
+                llmConnectionState = LlmConnectionState.READY
+            } else {
+                llmConnectionState = LlmConnectionState.FAILED
+                llmConnectionError = result.exceptionOrNull()
+                    ?.message
+                    ?: "LLM 서버 연결에 실패했습니다"
+            }
+        }
     }
 
     val imagePicker = rememberLauncherForActivityResult(
@@ -188,18 +222,28 @@ fun ViewerScreen(
         )
 
         Row(modifier = Modifier.weight(1f)) {
-            CanvasSection(
-                pdfUri = safeUri,
-                pageCount = safePageCount,
-                drawingState = drawingState,
-                modifier = Modifier.weight(1f),
-                onCropLlm = { imageBytes ->
-                    viewModel.sendSelectionToLlm(
-                        imageBytes,
-                        "이 영역에 대해 설명해주세요"
+            Box(modifier = Modifier.weight(1f)) {
+                CanvasSection(
+                    pdfUri = safeUri,
+                    pageCount = safePageCount,
+                    drawingState = drawingState,
+                    modifier = Modifier.fillMaxSize(),
+                    onCropLlm = { imageBytes ->
+                        viewModel.sendSelectionToLlm(
+                            imageBytes,
+                            "이 영역에 대해 설명해주세요"
+                        )
+                    }
+                )
+                extractionProgress?.let { progress ->
+                    ExtractionProgressOverlay(
+                        progress = progress,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(12.dp)
                     )
                 }
-            )
+            }
             LlmSidebar(
                 isVisible = sidebarVisible,
                 onCollapse = { viewModel.toggleSidebar() },
@@ -209,6 +253,11 @@ fun ViewerScreen(
                 documentContent = documentContent,
                 pendingImage = pendingImage,
                 pendingPrompt = pendingPrompt,
+                llmConnectionState = llmConnectionState,
+                llmConnectionError = llmConnectionError,
+                onRetryConnection = {
+                    retryLlmConnection()
+                },
                 onLlmRequested = { prompt, hasImage ->
                     viewModel.recordLlmRequested(
                         prompt,
@@ -220,5 +269,38 @@ fun ViewerScreen(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun ExtractionProgressOverlay(
+    progress: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(
+                MaestroSurfaceContainerLowest,
+                RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        CircularProgressIndicator(
+            progress = {
+                progress.coerceIn(0, 100) / 100f
+            },
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.dp,
+            color = MaestroPrimary,
+            trackColor = MaestroSurfaceContainerHigh
+        )
+        Text(
+            "추출 ${progress.coerceIn(0, 100)}%",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaestroPrimary
+        )
     }
 }

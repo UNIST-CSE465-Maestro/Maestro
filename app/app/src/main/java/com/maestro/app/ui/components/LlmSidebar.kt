@@ -42,6 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -77,6 +78,7 @@ import com.maestro.app.domain.model.LlmProvider
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.ui.config.UxConfig
+import com.maestro.app.ui.viewer.LlmConnectionState
 import kotlinx.coroutines.launch
 
 private fun buildSystemPrompt(documentContent: String?): String {
@@ -92,6 +94,11 @@ private fun buildSystemPrompt(documentContent: String?): String {
         documentContent.take(5000)
 }
 
+private data class QueuedLlmRequest(
+    val text: String,
+    val images: List<ByteArray>
+)
+
 @Composable
 fun LlmSidebar(
     isVisible: Boolean,
@@ -102,6 +109,9 @@ fun LlmSidebar(
     documentContent: String? = null,
     pendingImage: ByteArray? = null,
     pendingPrompt: String? = null,
+    llmConnectionState: LlmConnectionState = LlmConnectionState.READY,
+    llmConnectionError: String? = null,
+    onRetryConnection: () -> Unit = {},
     onLlmRequested: (prompt: String, hasImage: Boolean) -> Unit = { _, _ -> },
     onPendingConsumed: () -> Unit = {}
 ) {
@@ -148,6 +158,18 @@ fun LlmSidebar(
         mutableStateOf(false)
     }
 
+    fun defaultModelsFor(provider: String): List<String> {
+        return when (provider) {
+            LlmProvider.OPENAI.name ->
+                listOf(OpenAiClient.DEFAULT_MODEL)
+            LlmProvider.CLAUDE.name ->
+                listOf(ClaudeClient.DEFAULT_MODEL)
+            else -> listOf(
+                LlmRequestBuilder.DEFAULT_MODEL
+            )
+        }
+    }
+
     var widthPx by remember {
         mutableStateOf(defaultWidthPx)
     }
@@ -166,21 +188,30 @@ fun LlmSidebar(
     var activeJob by remember {
         mutableStateOf<kotlinx.coroutines.Job?>(null)
     }
+    var queuedRequest by remember {
+        mutableStateOf<QueuedLlmRequest?>(null)
+    }
 
-    LaunchedEffect(hasApiKey, currentProvider) {
-        if (hasApiKey) {
+    LaunchedEffect(currentProvider) {
+        availableModels = defaultModelsFor(currentProvider)
+        modelsLoading = false
+    }
+
+    fun loadModelsIfNeeded() {
+        if (!hasApiKey || modelsLoading) return
+        scope.launch {
             modelsLoading = true
-            availableModels = emptyList()
             try {
-                availableModels =
-                    llmService.fetchModels()
+                val fetched = llmService.fetchModels()
+                if (fetched.isNotEmpty()) {
+                    availableModels = fetched
+                }
             } catch (e: Exception) {
                 errorMessage = "모델 목록 실패: " +
                     "${e.message}"
+            } finally {
+                modelsLoading = false
             }
-            modelsLoading = false
-        } else {
-            availableModels = emptyList()
         }
     }
 
@@ -252,6 +283,35 @@ fun LlmSidebar(
         }
     }
 
+    fun submitMessage(text: String, imgs: List<ByteArray> = emptyList()) {
+        when (llmConnectionState) {
+            LlmConnectionState.READY -> {
+                sendMessage(text, imgs)
+            }
+            LlmConnectionState.CONNECTING,
+            LlmConnectionState.FAILED -> {
+                queuedRequest = QueuedLlmRequest(text, imgs)
+                errorMessage = null
+                if (llmConnectionState ==
+                    LlmConnectionState.FAILED
+                ) {
+                    onRetryConnection()
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(llmConnectionState, queuedRequest) {
+        val request = queuedRequest
+        if (
+            llmConnectionState == LlmConnectionState.READY &&
+            request != null
+        ) {
+            queuedRequest = null
+            sendMessage(request.text, request.images)
+        }
+    }
+
     var lastProcessedPrompt by remember {
         mutableStateOf<String?>(null)
     }
@@ -270,7 +330,7 @@ fun LlmSidebar(
                 ""
             )
         onPendingConsumed()
-        sendMessage(text, imgs)
+        submitMessage(text, imgs)
     }
 
     if (!isVisible) return
@@ -340,6 +400,9 @@ fun LlmSidebar(
                 },
                 availableModels = availableModels,
                 modelsLoading = modelsLoading,
+                onModelMenuOpened = {
+                    loadModelsIfNeeded()
+                },
                 onModelSelected = { model ->
                     activeJob?.cancel()
                     activeJob = null
@@ -460,6 +523,17 @@ fun LlmSidebar(
                     }
                 }
             } else {
+                if (
+                    llmConnectionState != LlmConnectionState.READY ||
+                    queuedRequest != null
+                ) {
+                    LlmConnectionStatusBanner(
+                        connectionState = llmConnectionState,
+                        errorMessage = llmConnectionError,
+                        hasQueuedRequest = queuedRequest != null,
+                        onRetryConnection = onRetryConnection
+                    )
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -528,9 +602,103 @@ fun LlmSidebar(
                     val imgs = pendingImages
                     pendingImages = emptyList()
                     currentInput = ""
-                    sendMessage(msgText, imgs)
+                    submitMessage(msgText, imgs)
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun LlmConnectionStatusBanner(
+    connectionState: LlmConnectionState,
+    errorMessage: String?,
+    hasQueuedRequest: Boolean,
+    onRetryConnection: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme
+            .primaryContainer.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (connectionState ==
+                LlmConnectionState.CONNECTING
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Icon(
+                    Icons.Default.Key,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when (connectionState) {
+                        LlmConnectionState.CONNECTING ->
+                            if (hasQueuedRequest) {
+                                "LLM 서버와 연결 중입니다. 요청을 보관했고 연결되면 자동으로 전송합니다."
+                            } else {
+                                "LLM 서버와 연결을 준비하는 중입니다."
+                            }
+                        LlmConnectionState.FAILED ->
+                            if (hasQueuedRequest) {
+                                "LLM 서버 연결에 실패했습니다. 요청을 보관했고 재연결되면 자동으로 전송합니다."
+                            } else {
+                                "LLM 서버 연결에 실패했습니다."
+                            }
+                        LlmConnectionState.READY ->
+                            "LLM 서버 연결이 준비되었습니다."
+                    },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme
+                        .onPrimaryContainer,
+                    lineHeight = 16.sp
+                )
+                if (
+                    connectionState ==
+                    LlmConnectionState.FAILED &&
+                    !errorMessage.isNullOrBlank()
+                ) {
+                    Text(
+                        text = errorMessage,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+            if (connectionState == LlmConnectionState.FAILED) {
+                Text(
+                    "다시 연결",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onRetryConnection() }
+                        .padding(
+                            horizontal = 8.dp,
+                            vertical = 5.dp
+                        )
+                )
+            }
         }
     }
 }
@@ -546,18 +714,37 @@ private suspend fun streamAssistantResponse(
     onLoading: (Boolean) -> Unit
 ) {
     onLoading(true)
-    val assistantMsg = ChatMessage(
-        role = ChatMessage.Role.ASSISTANT,
-        content = ""
-    )
-    messages.add(assistantMsg)
-    val idx = messages.lastIndex
+    var assistantIndex: Int? = null
+
+    fun ensureAssistantMessage(initialContent: String = ""): Int {
+        val existing = assistantIndex
+        if (existing != null && existing in messages.indices) {
+            return existing
+        }
+        messages.add(
+            ChatMessage(
+                role = ChatMessage.Role.ASSISTANT,
+                content = initialContent
+            )
+        )
+        assistantIndex = messages.lastIndex
+        return messages.lastIndex
+    }
+
+    fun updateAssistant(content: String) {
+        val idx = ensureAssistantMessage(content)
+        if (idx in messages.indices) {
+            messages[idx] = messages[idx].copy(
+                content = content
+            )
+        }
+    }
 
     try {
         val sb = StringBuilder()
         var thinking = false
         llmService.stream(
-            messages = messages.dropLast(1).toList(),
+            messages = messages.toList(),
             systemPrompt = buildSystemPrompt(
                 documentContent
             ),
@@ -566,12 +753,7 @@ private suspend fun streamAssistantResponse(
             when (token) {
                 LlmClient.THINKING_TOKEN -> {
                     thinking = true
-                    if (idx in messages.indices) {
-                        messages[idx] =
-                            messages[idx].copy(
-                                content = "생각 중..."
-                            )
-                    }
+                    updateAssistant("생각 중...")
                 }
                 LlmClient.THINKING_DONE_TOKEN -> {
                     thinking = false
@@ -579,39 +761,26 @@ private suspend fun streamAssistantResponse(
                 }
                 ClaudeClient.GENERATING_TOKEN,
                 LlmClient.GENERATING_TOKEN -> {
-                    if (idx in messages.indices) {
-                        messages[idx] =
-                            messages[idx].copy(
-                                content =
-                                "응답 생성 중..."
-                            )
-                    }
+                    updateAssistant("응답 생성 중...")
                 }
                 LlmClient.RETRY_TOKEN -> {
-                    if (idx in messages.indices) {
-                        messages[idx] =
-                            messages[idx].copy(
-                                content =
-                                "서버 과부하, 재시도 중..."
-                            )
-                    }
+                    updateAssistant("서버 과부하, 재시도 중...")
                 }
                 else -> {
                     if (!thinking) {
                         sb.append(token)
-                        if (idx in messages.indices) {
-                            messages[idx] =
-                                messages[idx].copy(
-                                    content =
-                                    sb.toString()
-                                )
-                        }
+                        updateAssistant(sb.toString())
                     }
                 }
             }
         }
-        if (idx in messages.indices) {
-            if (messages[idx].content.isBlank()) {
+        val idx = assistantIndex
+        if (idx != null && idx in messages.indices) {
+            if (
+                messages[idx].content.isBlank() ||
+                messages[idx].content == "응답 생성 중..." ||
+                messages[idx].content == "생각 중..."
+            ) {
                 messages.removeAt(idx)
                 onError(
                     "이 모델에서 응답을 받지 못했습니다. " +
@@ -625,9 +794,8 @@ private suspend fun streamAssistantResponse(
             }
         }
     } catch (_: kotlin.coroutines.cancellation.CancellationException) {
-        if (idx in messages.indices &&
-            messages[idx].content.isBlank()
-        ) {
+        val idx = assistantIndex
+        if (idx != null && idx in messages.indices) {
             messages.removeAt(idx)
         }
     } catch (e: Exception) {
@@ -641,6 +809,11 @@ private suspend fun streamAssistantResponse(
                     "API 키가 유효하지 않습니다"
                 msg.contains("API error 429") ->
                     "요청 한도 초과: $msg"
+                msg.contains("Unable to resolve host", true) ||
+                    msg.contains("No address associated", true) ->
+                    "LLM 서버 주소를 찾을 수 없습니다. " +
+                        "네트워크/DNS/VPN 상태를 확인한 뒤 " +
+                        "다시 연결을 눌러주세요."
                 msg.contains("API error") -> msg
                 msg.contains("cancel", true) ||
                     msg.contains("closed") ->
@@ -648,9 +821,8 @@ private suspend fun streamAssistantResponse(
                 else -> "AI 응답을 받을 수 없습니다: $msg"
             }
         )
-        if (idx in messages.indices &&
-            messages[idx].content.isBlank()
-        ) {
+        val idx = assistantIndex
+        if (idx != null && idx in messages.indices) {
             messages.removeAt(idx)
         }
     } finally {
@@ -665,6 +837,7 @@ private fun SidebarTopBar(
     currentModel: String,
     availableModels: List<String>,
     modelsLoading: Boolean,
+    onModelMenuOpened: () -> Unit,
     onModelSelected: (String) -> Unit,
     onCollapse: () -> Unit,
     onNewConversation: () -> Unit,
@@ -760,6 +933,7 @@ private fun SidebarTopBar(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable {
+                        onModelMenuOpened()
                         showModelMenu = true
                     }
                     .padding(

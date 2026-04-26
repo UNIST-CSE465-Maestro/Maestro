@@ -110,18 +110,7 @@ class MaterialAnalyzerClient(
 
     suspend fun pollUntilComplete(taskId: String, intervalMs: Long = 5000L): AnalysisTaskResponse {
         while (true) {
-            val resp = api.getTaskStatus(taskId)
-            if (!resp.isSuccessful) {
-                throw ServerException(
-                    resp.code(),
-                    resp.errorBody()?.string() ?: ""
-                )
-            }
-            val task = resp.body()
-                ?: throw ServerException(
-                    resp.code(),
-                    "Empty response body"
-                )
+            val task = pollOnce(taskId)
             if (task.status == "completed") return task
             if (task.status == "failed") {
                 throw ServerException(
@@ -131,6 +120,21 @@ class MaterialAnalyzerClient(
             }
             delay(intervalMs)
         }
+    }
+
+    suspend fun pollOnce(taskId: String): AnalysisTaskResponse {
+        val resp = api.getTaskStatus(taskId)
+        if (!resp.isSuccessful) {
+            throw ServerException(
+                resp.code(),
+                resp.errorBody()?.string() ?: ""
+            )
+        }
+        return resp.body()
+            ?: throw ServerException(
+                resp.code(),
+                "Empty response body"
+            )
     }
 
     suspend fun getResultMd(taskId: String): String = withContext(Dispatchers.IO) {

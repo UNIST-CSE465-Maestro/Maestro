@@ -4,15 +4,14 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.PdfMerger
-import com.maestro.app.data.remote.MaterialAnalyzerClient
-import com.maestro.app.data.remote.MaterialAnalyzerHash
+import com.maestro.app.data.work.ExtractionWorkScheduler
 import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.domain.repository.DocumentRepository
 import java.io.File
-import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -21,7 +20,8 @@ import kotlinx.coroutines.withContext
 class HomeViewModel(
     private val repository: DocumentRepository,
     private val pdfMerger: PdfMerger,
-    private val analyzerClient: MaterialAnalyzerClient,
+    private val extractionProgressStore: ExtractionProgressStore,
+    private val extractionWorkScheduler: ExtractionWorkScheduler,
     private val appContext: Context
 ) : ViewModel() {
 
@@ -53,11 +53,16 @@ class HomeViewModel(
                 false
             )
 
-    // Tracks document IDs currently being extracted
-    private val _extractingDocIds =
-        MutableStateFlow<Set<String>>(emptySet())
     val extractingDocIds: StateFlow<Set<String>> =
-        _extractingDocIds.asStateFlow()
+        extractionProgressStore.activeDocumentIds
+
+    val extractionProgress: StateFlow<Map<String, Int>> =
+        extractionProgressStore.progress
+
+    private val _docsWithExtractedContent =
+        MutableStateFlow<Set<String>>(emptySet())
+    val docsWithExtractedContent: StateFlow<Set<String>> =
+        _docsWithExtractedContent.asStateFlow()
 
     // Pending URI waiting for mode selection
     private val _pendingImportUri =
@@ -74,17 +79,24 @@ class HomeViewModel(
     init {
         loadDocuments()
         loadFolders()
+        observeExtractionChanges()
         resumeExtracting()
+        recoverFailedExtractions()
     }
 
     private fun loadDocuments() {
         viewModelScope.launch {
-            _documents.value = repository.loadDocuments()
+            val docs = repository.loadDocuments()
                 .sortedWith(
                     compareByDescending<PdfDocument> {
                         it.isPinned
                     }.thenByDescending { it.addedTimestamp }
                 )
+            _documents.value = docs
+            _docsWithExtractedContent.value =
+                docs.filter { hasExtractedContent(it.id) }
+                    .map { it.id }
+                    .toSet()
         }
     }
 
@@ -97,6 +109,16 @@ class HomeViewModel(
     private fun refresh() {
         loadDocuments()
         loadFolders()
+    }
+
+    private fun observeExtractionChanges() {
+        viewModelScope.launch {
+            extractionProgressStore.activeDocumentIds
+                .drop(1)
+                .collect {
+                    refresh()
+                }
+        }
     }
 
     fun navigateFolder(folderId: String?) {
@@ -135,8 +157,16 @@ class HomeViewModel(
             // Use the imported file URI, not the
             // original content:// URI which may
             // have expired permissions
-            val localUri = Uri.parse(doc.uriString)
-            extractInBackground(doc, localUri, mode)
+            extractInBackground(doc, doc.uriString, mode)
+        }
+    }
+
+    fun retryExtraction(documentId: String, mode: String) {
+        viewModelScope.launch {
+            val doc = repository.loadDocuments()
+                .find { it.id == documentId }
+                ?: return@launch
+            extractInBackground(doc, doc.uriString, mode)
         }
     }
 
@@ -148,91 +178,77 @@ class HomeViewModel(
                     ExtractionStatus.EXTRACTING &&
                     it.extractionMode != null
             }.forEach { doc ->
-                val uri = Uri.parse(doc.uriString)
                 extractInBackground(
                     doc,
-                    uri,
-                    doc.extractionMode!!
+                    doc.uriString,
+                    doc.extractionMode!!,
+                    replaceExisting = false
                 )
             }
         }
     }
 
-    private fun extractInBackground(doc: PdfDocument, uri: Uri, mode: String) {
+    private fun recoverFailedExtractions() {
         viewModelScope.launch {
-            _extractingDocIds.value =
-                _extractingDocIds.value + doc.id
+            val docs = repository.loadDocuments()
+            docs.filter {
+                it.extractionStatus == ExtractionStatus.FAILED &&
+                    !hasExtractedContent(it.id)
+            }.forEach { doc ->
+                extractInBackground(
+                    doc,
+                    doc.uriString,
+                    doc.extractionMode ?: DEFAULT_RECOVERY_MODE,
+                    replaceExisting = false
+                )
+            }
+        }
+    }
+
+    private fun extractInBackground(
+        doc: PdfDocument,
+        uriString: String,
+        mode: String,
+        replaceExisting: Boolean = true
+    ) {
+        viewModelScope.launch {
+            extractionProgressStore.update(doc.id, 1)
             repository.updateDocument(
-                doc.copy(
+                latestDocument(doc.id, doc).copy(
                     extractionStatus =
                     ExtractionStatus.EXTRACTING,
                     extractionMode = mode
                 )
             )
-            try {
-                val hash =
-                    MaterialAnalyzerHash.compute(
-                        appContext,
-                        uri,
-                        mode
-                    )
-                val task =
-                    analyzerClient.upload(
-                        uri,
-                        mode,
-                        hash
-                    )
-                analyzerClient.pollUntilComplete(
-                    task.id
-                )
-                val md =
-                    analyzerClient.getResultMd(
-                        task.id
-                    )
-                val json =
-                    analyzerClient.getResultJson(
-                        task.id
-                    )
-                saveContent(doc.id, md, json)
-                repository.updateDocument(
-                    doc.copy(
-                        extractionStatus =
-                        ExtractionStatus.DONE,
-                        extractionMode = null
-                    )
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                repository.updateDocument(
-                    doc.copy(
-                        extractionStatus =
-                        ExtractionStatus.FAILED,
-                        extractionMode = null
-                    )
-                )
-                _extractionError.value =
-                    "텍스트 추출에 실패했습니다"
-            } finally {
-                _extractingDocIds.value =
-                    _extractingDocIds.value - doc.id
-                refresh()
-            }
+            extractionWorkScheduler.enqueue(
+                documentId = doc.id,
+                uriString = uriString,
+                mode = mode,
+                replaceExisting = replaceExisting
+            )
+            refresh()
         }
     }
 
-    private suspend fun saveContent(documentId: String, md: String, json: String) =
+    private suspend fun latestDocument(
+        documentId: String,
+        fallback: PdfDocument
+    ): PdfDocument {
+        return repository.loadDocuments()
+            .find { it.id == documentId }
+            ?: fallback
+    }
+
+    private suspend fun hasExtractedContent(documentId: String): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val dir = File(
+                val file = File(
                     appContext.filesDir,
-                    "documents/$documentId"
+                    "documents/$documentId/content.md"
                 )
-                dir.mkdirs()
-                File(dir, "content.md").writeText(md)
-                File(dir, "content.json").writeText(json)
+                file.exists() && file.length() > 0L
             } catch (_: Throwable) {
-                // Ignore file write failures
+                false
             }
         }
 
@@ -378,5 +394,9 @@ class HomeViewModel(
             _selectedDocIds.value = emptySet()
             refresh()
         }
+    }
+
+    private companion object {
+        const val DEFAULT_RECOVERY_MODE = "ai"
     }
 }

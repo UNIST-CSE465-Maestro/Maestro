@@ -185,6 +185,48 @@ class ClaudeClient(
 
     fun fetchModels(): List<String> = MODELS
 
+    suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("model", DEFAULT_MODEL)
+            put("max_tokens", 1)
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put("content", "hi")
+                        }
+                    )
+                }
+            )
+        }
+        val request = Request.Builder()
+            .url("$baseUrl/v1/messages")
+            .post(
+                body.toString().toRequestBody(
+                    JSON_MEDIA_TYPE
+                )
+            )
+            .addHeader("x-api-key", apiKey)
+            .addHeader(
+                "anthropic-version",
+                API_VERSION
+            )
+            .addHeader(
+                "Content-Type",
+                "application/json"
+            )
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception(
+                    "Claude 연결 확인 실패: HTTP ${response.code}"
+                )
+            }
+        }
+    }
+
     suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             put("model", DEFAULT_MODEL)

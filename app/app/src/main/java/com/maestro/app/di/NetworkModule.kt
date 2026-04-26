@@ -18,7 +18,7 @@ val networkModule = module {
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor
-                        .Level.HEADERS
+                        .Level.NONE
                 }
             )
             .build()

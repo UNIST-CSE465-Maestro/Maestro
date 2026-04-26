@@ -248,6 +248,20 @@ class LlmClient(
         }
     }
 
+    suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/v1beta/models?key=$apiKey")
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception(
+                    "Gemini 연결 확인 실패: HTTP ${response.code}"
+                )
+            }
+        }
+    }
+
     private fun probeModel(apiKey: String, modelId: String): Boolean {
         return try {
             val probeBody =

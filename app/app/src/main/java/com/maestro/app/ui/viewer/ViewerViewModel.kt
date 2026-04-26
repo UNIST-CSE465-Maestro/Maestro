@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.data.remote.MaterialAnalyzerClient
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +33,7 @@ class ViewerViewModel(
     private val settingsRepository: SettingsRepository,
     private val documentRepository: DocumentRepository,
     private val studyEvents: StudyEventLocalDataSource,
+    extractionProgressStore: ExtractionProgressStore,
     private val appContext: Context,
     val pdfId: String,
     val pageCount: Int,
@@ -73,6 +76,15 @@ class ViewerViewModel(
             viewModelScope,
             SharingStarted.Eagerly,
             false
+        )
+
+    val extractionProgress: StateFlow<Int?> =
+        extractionProgressStore.progress.map { progress ->
+            progress[pdfId]
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            null
         )
 
     private var lastSavedVersion = 0

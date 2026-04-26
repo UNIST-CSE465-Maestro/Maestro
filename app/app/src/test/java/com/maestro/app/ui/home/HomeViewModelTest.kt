@@ -1,21 +1,15 @@
 package com.maestro.app.ui.home
 
 import android.content.Context
-import android.net.Uri
+import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.PdfMerger
-import com.maestro.app.data.remote.AnalysisTaskResponse
-import com.maestro.app.data.remote.MaterialAnalyzerClient
-import com.maestro.app.data.remote.MaterialAnalyzerHash
+import com.maestro.app.data.work.ExtractionWorkScheduler
 import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.fake.FakeDocumentRepository
 import com.maestro.app.util.MainCoroutineRule
 import com.maestro.app.util.TestFixtures
-import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,6 +36,12 @@ class HomeViewModelTest {
     @Before
     fun setup() {
         repo = FakeDocumentRepository()
+        every {
+            appContext.filesDir
+        } returns File(
+            System.getProperty("java.io.tmpdir"),
+            "maestro-home-test-${System.nanoTime()}"
+        )
     }
 
     @After
@@ -52,16 +52,18 @@ class HomeViewModelTest {
     }
 
     private val pdfMerger: PdfMerger = mockk(relaxed = true)
-    private val analyzerClient: MaterialAnalyzerClient =
-        mockk(relaxed = true)
     private val appContext: Context =
         mockk(relaxed = true)
+    private val extractionProgressStore =
+        ExtractionProgressStore()
+    private val extractionScheduler = FakeExtractionWorkScheduler()
 
     private fun createViewModel(): HomeViewModel {
         return HomeViewModel(
             repo,
             pdfMerger,
-            analyzerClient,
+            extractionProgressStore,
+            extractionScheduler,
             appContext
         ).also {
             viewModel = it
@@ -261,47 +263,8 @@ class HomeViewModelTest {
         )
     }
 
-    private fun setupExtractionMocks() {
-        mockkStatic(Uri::class)
-        every {
-            Uri.parse(any())
-        } returns mockk(relaxed = true)
-        mockkObject(MaterialAnalyzerHash)
-        coEvery {
-            MaterialAnalyzerHash.compute(
-                any(),
-                any(),
-                any()
-            )
-        } returns "fakehash"
-        every {
-            appContext.filesDir
-        } returns File(
-            System.getProperty("java.io.tmpdir"),
-            "maestro-test"
-        )
-    }
-
     @Test
     fun `init resumes EXTRACTING documents`() = runTest {
-        setupExtractionMocks()
-        val taskResp = AnalysisTaskResponse(
-            id = "task-1",
-            status = "completed"
-        )
-        coEvery {
-            analyzerClient.upload(any(), any(), any())
-        } returns taskResp
-        coEvery {
-            analyzerClient.pollUntilComplete(any())
-        } returns taskResp
-        coEvery {
-            analyzerClient.getResultMd(any())
-        } returns "# Result"
-        coEvery {
-            analyzerClient.getResultJson(any())
-        } returns "{}"
-
         val doc = TestFixtures.pdfDocument(
             id = "d1",
             extractionStatus = ExtractionStatus.EXTRACTING,
@@ -312,13 +275,14 @@ class HomeViewModelTest {
         createViewModel()
         advanceUntilIdle()
 
-        coVerify {
-            analyzerClient.upload(
-                any(),
-                "standard",
-                any()
-            )
-        }
+        assertEquals(
+            FakeExtractionRequest(
+                documentId = "d1",
+                mode = "standard",
+                replaceExisting = false
+            ),
+            extractionScheduler.requests.single()
+        )
     }
 
     @Test
@@ -334,31 +298,46 @@ class HomeViewModelTest {
         createViewModel()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) {
-            analyzerClient.upload(
-                any(),
-                any(),
-                any()
-            )
-        }
+        assertTrue(extractionScheduler.requests.isEmpty())
     }
 
     @Test
-    fun `extraction failure sets FAILED status`() = runTest {
-        setupExtractionMocks()
-        coEvery {
-            analyzerClient.upload(
-                any(),
-                any(),
-                any()
-            )
-        } throws RuntimeException("server down")
-
+    fun `retry extraction schedules replacement work`() = runTest {
         val doc = TestFixtures.pdfDocument(
             id = "d1",
             extractionStatus =
-            ExtractionStatus.EXTRACTING,
+            ExtractionStatus.FAILED,
             extractionMode = "ai"
+        )
+        repo.docs += doc
+
+        createViewModel()
+        viewModel.retryExtraction("d1", "ai")
+        advanceUntilIdle()
+
+        assertEquals(
+            ExtractionStatus.EXTRACTING,
+            repo.docs.find { it.id == "d1" }
+                ?.extractionStatus
+        )
+        assertEquals(
+            true,
+            extractionScheduler.requests.any {
+                it == FakeExtractionRequest(
+                    documentId = "d1",
+                    mode = "ai",
+                    replaceExisting = true
+                )
+            }
+        )
+    }
+
+    @Test
+    fun `init recovers FAILED documents without extracted content`() = runTest {
+        val doc = TestFixtures.pdfDocument(
+            id = "d1",
+            extractionStatus = ExtractionStatus.FAILED,
+            extractionMode = null
         )
         repo.docs += doc
 
@@ -366,9 +345,37 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         assertEquals(
-            ExtractionStatus.FAILED,
-            repo.docs.find { it.id == "d1" }
-                ?.extractionStatus
+            true,
+            extractionScheduler.requests.any {
+                it == FakeExtractionRequest(
+                    documentId = "d1",
+                    mode = "ai",
+                    replaceExisting = false
+                )
+            }
         )
+    }
+
+    private data class FakeExtractionRequest(
+        val documentId: String,
+        val mode: String,
+        val replaceExisting: Boolean
+    )
+
+    private class FakeExtractionWorkScheduler : ExtractionWorkScheduler {
+        val requests = mutableListOf<FakeExtractionRequest>()
+
+        override fun enqueue(
+            documentId: String,
+            uriString: String,
+            mode: String,
+            replaceExisting: Boolean
+        ) {
+            requests += FakeExtractionRequest(
+                documentId = documentId,
+                mode = mode,
+                replaceExisting = replaceExisting
+            )
+        }
     }
 }

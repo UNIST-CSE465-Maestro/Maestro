@@ -12,7 +12,7 @@ import org.koin.dsl.module
 val appModule = module {
     viewModel { AuthViewModel(get(), get()) }
     viewModel {
-        HomeViewModel(get(), get(), get(), get())
+        HomeViewModel(get(), get(), get(), get(), get())
     }
     viewModel { params ->
         ViewerViewModel(
@@ -21,6 +21,7 @@ val appModule = module {
             settingsRepository = get(),
             documentRepository = get(),
             studyEvents = get(),
+            extractionProgressStore = get(),
             appContext = get(),
             pdfId = params.get<String>(),
             pageCount = params.get<Int>(),

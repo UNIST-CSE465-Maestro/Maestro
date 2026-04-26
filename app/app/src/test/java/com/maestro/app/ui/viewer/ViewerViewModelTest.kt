@@ -2,6 +2,7 @@ package com.maestro.app.ui.viewer
 
 import android.content.Context
 import android.net.Uri
+import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
@@ -37,6 +38,8 @@ class ViewerViewModelTest {
     private val settingsRepo: SettingsRepository =
         mockk(relaxed = true)
     private val appContext: Context = mockk(relaxed = true)
+    private val extractionProgressStore =
+        ExtractionProgressStore()
     private lateinit var studyEvents: StudyEventLocalDataSource
 
     @Before
@@ -70,6 +73,7 @@ class ViewerViewModelTest {
             settingsRepository = settingsRepo,
             documentRepository = docRepo,
             studyEvents = studyEvents,
+            extractionProgressStore = extractionProgressStore,
             appContext = appContext,
             pdfId = pdfId,
             pageCount = pageCount,
@@ -108,6 +112,7 @@ class ViewerViewModelTest {
 
         createViewModel()
         advanceUntilIdle()
+        Thread.sleep(50)
 
         assertEquals(
             setOf(1, 3),

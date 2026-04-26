@@ -199,6 +199,24 @@ class OpenAiClient(
         }
     }
 
+    suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/v1/models")
+            .get()
+            .addHeader(
+                "Authorization",
+                "Bearer $apiKey"
+            )
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception(
+                    "OpenAI 연결 확인 실패: HTTP ${response.code}"
+                )
+            }
+        }
+    }
+
     suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$baseUrl/v1/models")

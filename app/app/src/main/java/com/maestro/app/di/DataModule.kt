@@ -2,6 +2,7 @@ package com.maestro.app.di
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
@@ -18,6 +19,8 @@ import com.maestro.app.data.service.HeuristicKnowledgeTracer
 import com.maestro.app.data.service.LlmServiceImpl
 import com.maestro.app.data.service.OnnxRektKnowledgeTracer
 import com.maestro.app.data.service.QuizServiceImpl
+import com.maestro.app.data.work.ExtractionWorkScheduler
+import com.maestro.app.data.work.WorkManagerExtractionWorkScheduler
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
@@ -55,6 +58,10 @@ val dataModule = module {
         )
     }
     single { ConversationLocalDataSource(get()) }
+    single { ExtractionProgressStore() }
+    single<ExtractionWorkScheduler> {
+        WorkManagerExtractionWorkScheduler(get())
+    }
     single { ProfileLocalDataSource(get()) }
     single {
         StudyEventLocalDataSource(
