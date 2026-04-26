@@ -21,6 +21,7 @@ val appModule = module {
             settingsRepository = get(),
             documentRepository = get(),
             studyEvents = get(),
+            quizResponses = get(),
             extractionProgressStore = get(),
             appContext = get(),
             pdfId = params.get<String>(),

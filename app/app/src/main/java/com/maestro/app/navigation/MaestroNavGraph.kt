@@ -33,6 +33,7 @@ import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.remote.MaestroServerApi
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
+import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.auth.AuthScreen
 import com.maestro.app.ui.auth.AuthViewModel
 import com.maestro.app.ui.home.HomeScreen
@@ -278,6 +279,8 @@ fun MaestroNavGraph() {
                 }
             val llmService: LlmService =
                 koinInject()
+            val quizService: QuizService =
+                koinInject()
             val settingsRepo: SettingsRepository =
                 koinInject()
             val convDataSource:
@@ -291,6 +294,7 @@ fun MaestroNavGraph() {
             ViewerScreen(
                 viewModel = viewModel,
                 llmService = llmService,
+                quizService = quizService,
                 settingsRepository = settingsRepo,
                 conversationDataSource =
                 convDataSource,

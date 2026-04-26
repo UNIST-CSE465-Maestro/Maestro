@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.QuizResponseLocalDataSource
+import com.maestro.app.data.local.QuizResponseRecord
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.data.remote.MaterialAnalyzerClient
@@ -12,9 +14,12 @@ import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
+import com.maestro.app.ui.components.StudySidebarMode
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
 import java.io.File
+import java.security.MessageDigest
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +38,7 @@ class ViewerViewModel(
     private val settingsRepository: SettingsRepository,
     private val documentRepository: DocumentRepository,
     private val studyEvents: StudyEventLocalDataSource,
+    private val quizResponses: QuizResponseLocalDataSource,
     extractionProgressStore: ExtractionProgressStore,
     private val appContext: Context,
     val pdfId: String,
@@ -44,6 +50,10 @@ class ViewerViewModel(
 
     private val _sidebarVisible = MutableStateFlow(false)
     val sidebarVisible = _sidebarVisible.asStateFlow()
+
+    private val _sidebarMode =
+        MutableStateFlow(StudySidebarMode.CHAT)
+    val sidebarMode = _sidebarMode.asStateFlow()
 
     private val _pendingLlmImage =
         MutableStateFlow<ByteArray?>(null)
@@ -58,6 +68,14 @@ class ViewerViewModel(
         MutableStateFlow<String?>(null)
     val documentContent =
         _documentContent.asStateFlow()
+
+    private val _quizMastery =
+        MutableStateFlow(0.35f)
+    val quizMastery = _quizMastery.asStateFlow()
+
+    private val _quizHistory =
+        MutableStateFlow<List<QuizResponseRecord>>(emptyList())
+    val quizHistory = _quizHistory.asStateFlow()
 
     private val _isPinned = MutableStateFlow(false)
     val isPinned = _isPinned.asStateFlow()
@@ -94,6 +112,8 @@ class ViewerViewModel(
         loadAnnotations()
         loadDocumentContent()
         loadDocumentMeta()
+        loadQuizMastery()
+        loadQuizHistory()
     }
 
     private fun loadDocumentContent() {
@@ -197,13 +217,29 @@ class ViewerViewModel(
         )
     }
 
-    fun toggleSidebar() {
-        _sidebarVisible.value =
-            !_sidebarVisible.value
+    fun toggleChatSidebar() {
+        if (
+            _sidebarVisible.value &&
+            _sidebarMode.value == StudySidebarMode.CHAT
+        ) {
+            _sidebarVisible.value = false
+        } else {
+            _sidebarMode.value = StudySidebarMode.CHAT
+            _sidebarVisible.value = true
+        }
+    }
+
+    fun setSidebarMode(mode: StudySidebarMode) {
+        _sidebarMode.value = mode
+    }
+
+    fun collapseSidebar() {
+        _sidebarVisible.value = false
     }
 
     fun sendSelectionToLlm(bitmap: ByteArray, prompt: String) {
         _sidebarVisible.value = true
+        _sidebarMode.value = StudySidebarMode.CHAT
         _pendingLlmImage.value = bitmap
         _pendingLlmPrompt.value = prompt
     }
@@ -214,22 +250,77 @@ class ViewerViewModel(
     }
 
     fun extractAndQuiz() {
-        if (_documentContent.value.isNullOrBlank()) {
-            return
-        }
+        _sidebarMode.value = StudySidebarMode.QUIZ
+        _sidebarVisible.value = true
+    }
+
+    fun recordQuizRequested(
+        conceptId: String,
+        bloomLevel: Int
+    ) {
         studyEvents.append(
             type = StudyEventType.QUIZ_REQUESTED,
             documentId = pdfId,
             pageIndex = _currentPage.value,
-            promptLength = _documentContent.value?.length
+            conceptIds = listOf(conceptId),
+            promptLength = _documentContent.value?.length,
+            metadata = mapOf(
+                "bloomLevel" to bloomLevel.toString()
+            )
         )
-        _sidebarVisible.value = true
-        _pendingLlmPrompt.value =
-            "이 문서의 내용을 바탕으로 " +
-            "객관식 퀴즈 5개를 만들어줘. " +
-            "각 문제에 4개 선택지(A-D)와 " +
-            "정답을 포함해줘." +
-            "\n<!--${System.currentTimeMillis()}-->"
+    }
+
+    fun recordQuizAnswered(
+        conceptId: String,
+        bloomLevel: Int,
+        isCorrect: Boolean,
+        responseTimeMs: Long?,
+        question: String,
+        choices: Map<String, String>,
+        selectedAnswer: String,
+        correctAnswer: String,
+        explanation: String,
+        sourceSentence: String
+    ) {
+        val hash = hashQuestion(question)
+        quizResponses.append(
+            QuizResponseRecord(
+                conceptId = conceptId,
+                bloomLevel = bloomLevel,
+                isCorrect = isCorrect,
+                responseTimeMs = responseTimeMs,
+                questionHash = hash,
+                sourceDocId = pdfId,
+                question = question,
+                choices = choices,
+                selectedAnswer = selectedAnswer,
+                correctAnswer = correctAnswer,
+                explanation = explanation,
+                sourceSentence = sourceSentence
+            )
+        )
+        studyEvents.append(
+            type = StudyEventType.QUIZ_ANSWERED,
+            documentId = pdfId,
+            pageIndex = _currentPage.value,
+            conceptIds = listOf(conceptId),
+            correctness = isCorrect,
+            metadata = mapOf(
+                "bloomLevel" to bloomLevel.toString(),
+                "responseTimeMs" to (
+                    responseTimeMs?.toString() ?: ""
+                    ),
+                "questionHash" to hash
+            )
+        )
+        loadQuizMastery()
+        loadQuizHistory()
+    }
+
+    fun deleteQuizResponse(recordId: String) {
+        quizResponses.delete(recordId)
+        loadQuizMastery()
+        loadQuizHistory()
     }
 
     fun recordLlmRequested(prompt: String, hasImage: Boolean) {
@@ -249,6 +340,43 @@ class ViewerViewModel(
             type = StudyEventType.DOCUMENT_OPENED,
             documentId = pdfId
         )
+    }
+
+    private fun loadQuizMastery() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val answered = studyEvents.listEvents()
+                .filter {
+                    it.documentId == pdfId &&
+                        it.type == StudyEventType.QUIZ_ANSWERED &&
+                        it.correctness != null
+                }
+            _quizMastery.value = if (answered.isEmpty()) {
+                0.35f
+            } else {
+                answered.count { it.correctness == true }
+                    .toFloat() / answered.size.toFloat()
+            }.coerceIn(0f, 1f)
+        }
+    }
+
+    private fun loadQuizHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _quizHistory.value = quizResponses.listResponses()
+                .filter { it.sourceDocId == pdfId }
+                .sortedByDescending { it.answeredAt }
+        }
+    }
+
+    private fun hashQuestion(question: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val bytes = digest.digest(
+            question.trim()
+                .lowercase(Locale.US)
+                .toByteArray()
+        )
+        return bytes.joinToString("") {
+            "%02x".format(it)
+        }
     }
 
     private suspend fun loadOrExtract(uri: Uri, mode: String): String {

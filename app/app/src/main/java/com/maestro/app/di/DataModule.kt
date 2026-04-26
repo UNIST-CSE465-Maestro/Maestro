@@ -5,6 +5,7 @@ import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.local.ProfileLocalDataSource
+import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
@@ -59,6 +60,11 @@ val dataModule = module {
     }
     single { ConversationLocalDataSource(get()) }
     single { ExtractionProgressStore() }
+    single {
+        QuizResponseLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
     single<ExtractionWorkScheduler> {
         WorkManagerExtractionWorkScheduler(get())
     }

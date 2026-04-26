@@ -3,6 +3,7 @@ package com.maestro.app.ui.viewer
 import android.content.Context
 import android.net.Uri
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
@@ -41,6 +42,7 @@ class ViewerViewModelTest {
     private val extractionProgressStore =
         ExtractionProgressStore()
     private lateinit var studyEvents: StudyEventLocalDataSource
+    private lateinit var quizResponses: QuizResponseLocalDataSource
 
     @Before
     fun setup() {
@@ -55,6 +57,12 @@ class ViewerViewModelTest {
             java.io.File(
                 System.getProperty("java.io.tmpdir"),
                 "maestro-test-events-${System.nanoTime()}.json"
+            )
+        )
+        quizResponses = QuizResponseLocalDataSource(
+            java.io.File(
+                System.getProperty("java.io.tmpdir"),
+                "maestro-test-quiz-${System.nanoTime()}.json"
             )
         )
     }
@@ -73,6 +81,7 @@ class ViewerViewModelTest {
             settingsRepository = settingsRepo,
             documentRepository = docRepo,
             studyEvents = studyEvents,
+            quizResponses = quizResponses,
             extractionProgressStore = extractionProgressStore,
             appContext = appContext,
             pdfId = pdfId,

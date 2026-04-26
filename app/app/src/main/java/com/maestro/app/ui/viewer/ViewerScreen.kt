@@ -19,8 +19,10 @@ import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
+import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.components.CanvasSection
 import com.maestro.app.ui.components.LlmSidebar
+import com.maestro.app.ui.components.StudySidebarMode
 import com.maestro.app.ui.components.TopAppBarSection
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroBackground
@@ -39,6 +41,7 @@ enum class LlmConnectionState {
 fun ViewerScreen(
     viewModel: ViewerViewModel,
     llmService: LlmService,
+    quizService: QuizService,
     settingsRepository: SettingsRepository,
     conversationDataSource: ConversationLocalDataSource,
     onBack: () -> Unit
@@ -46,12 +49,18 @@ fun ViewerScreen(
     val drawingState = viewModel.drawingState
     val sidebarVisible by viewModel
         .sidebarVisible.collectAsState()
+    val sidebarMode by viewModel
+        .sidebarMode.collectAsState()
     val pendingImage by viewModel
         .pendingLlmImage.collectAsState()
     val pendingPrompt by viewModel
         .pendingLlmPrompt.collectAsState()
     val documentContent by viewModel
         .documentContent.collectAsState()
+    val quizMastery by viewModel
+        .quizMastery.collectAsState()
+    val quizHistory by viewModel
+        .quizHistory.collectAsState()
     val isPinned by viewModel
         .isPinned.collectAsState()
     val isBookmarked by viewModel
@@ -217,7 +226,7 @@ fun ViewerScreen(
                 viewModel.extractAndQuiz()
             },
             onToggleSidebar = {
-                viewModel.toggleSidebar()
+                viewModel.toggleChatSidebar()
             }
         )
 
@@ -246,11 +255,21 @@ fun ViewerScreen(
             }
             LlmSidebar(
                 isVisible = sidebarVisible,
-                onCollapse = { viewModel.toggleSidebar() },
+                onCollapse = { viewModel.collapseSidebar() },
                 llmService = llmService,
+                quizService = quizService,
                 settingsRepository = settingsRepository,
                 conversationDataSource = conversationDataSource,
                 documentContent = documentContent,
+                documentId = viewModel.pdfId,
+                pageIndex = drawingState.activePageIndex
+                    .coerceAtLeast(0),
+                quizMastery = quizMastery,
+                quizHistory = quizHistory,
+                sidebarMode = sidebarMode,
+                onSidebarModeChanged = {
+                    viewModel.setSidebarMode(it)
+                },
                 pendingImage = pendingImage,
                 pendingPrompt = pendingPrompt,
                 llmConnectionState = llmConnectionState,
@@ -263,6 +282,40 @@ fun ViewerScreen(
                         prompt,
                         hasImage
                     )
+                },
+                onQuizRequested = { conceptId, bloomLevel ->
+                    viewModel.recordQuizRequested(
+                        conceptId,
+                        bloomLevel
+                    )
+                },
+                onQuizAnswered = {
+                        conceptId,
+                        bloomLevel,
+                        isCorrect,
+                        responseTimeMs,
+                        question,
+                        choices,
+                        selectedAnswer,
+                        correctAnswer,
+                        explanation,
+                        sourceSentence
+                    ->
+                    viewModel.recordQuizAnswered(
+                        conceptId = conceptId,
+                        bloomLevel = bloomLevel,
+                        isCorrect = isCorrect,
+                        responseTimeMs = responseTimeMs,
+                        question = question,
+                        choices = choices,
+                        selectedAnswer = selectedAnswer,
+                        correctAnswer = correctAnswer,
+                        explanation = explanation,
+                        sourceSentence = sourceSentence
+                    )
+                },
+                onQuizHistoryDeleted = { recordId ->
+                    viewModel.deleteQuizResponse(recordId)
                 },
                 onPendingConsumed = {
                     viewModel.consumePendingLlm()
