@@ -22,6 +22,7 @@ val appModule = module {
             documentRepository = get(),
             studyEvents = get(),
             quizResponses = get(),
+            monitoringLogs = get(),
             extractionProgressStore = get(),
             appContext = get(),
             pdfId = params.get<String>(),
@@ -30,5 +31,5 @@ val appModule = module {
         )
     }
     viewModel { SettingsViewModel(get(), get()) }
-    viewModel { ProfileViewModel(get(), get(), get()) }
+    viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
 }

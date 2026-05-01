@@ -5,10 +5,12 @@ import com.maestro.app.data.local.StudyEvent
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.domain.model.ConceptKnowledge
+import com.maestro.app.domain.model.DocumentConceptKnowledge
 import com.maestro.app.domain.model.DocumentKnowledge
+import com.maestro.app.domain.model.EngineeringMechanicsConceptCatalog
 import com.maestro.app.domain.model.KnowledgeDashboard
-import com.maestro.app.domain.model.ProfileSummary
 import com.maestro.app.domain.model.PdfDocument
+import com.maestro.app.domain.model.ProfileSummary
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.service.RektKnowledgeTracer
@@ -17,9 +19,6 @@ import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class KnowledgeRepositoryImpl(
     private val context: Context,
@@ -27,28 +26,11 @@ class KnowledgeRepositoryImpl(
     private val studyEvents: StudyEventLocalDataSource,
     private val tracer: RektKnowledgeTracer
 ) : KnowledgeRepository {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
-    private val conceptsFile =
-        File(context.filesDir, "study_events/concepts.json")
-
     override suspend fun loadDashboard(): KnowledgeDashboard =
         withContext(Dispatchers.IO) {
             val docs = documentRepository.loadDocuments()
             val events = studyEvents.listEvents()
-            val concepts = loadOrGenerateConcepts(docs)
-            val docTrace = tracer.trace(
-                docs.map { doc ->
-                    RektTraceInput(
-                        keyId = doc.id,
-                        events = events.filter {
-                            it.documentId == doc.id
-                        }
-                    )
-                }
-            )
+            val concepts = engineeringMechanicsConcepts(docs, events)
             val conceptTrace = tracer.trace(
                 concepts.map { concept ->
                     RektTraceInput(
@@ -61,21 +43,63 @@ class KnowledgeRepositoryImpl(
                     )
                 }
             )
+            val docConceptInputs = docs.flatMap { doc ->
+                concepts
+                    .filter { it.documentIds.contains(doc.id) }
+                    .map { concept ->
+                        RektTraceInput(
+                            keyId = docConceptKey(doc.id, concept.id),
+                            events = events.filter { event ->
+                                event.documentId == doc.id &&
+                                    (
+                                        event.conceptIds.isEmpty() ||
+                                            event.conceptIds
+                                                .contains(concept.id)
+                                        )
+                            }
+                        )
+                    }
+            }
+            val docConceptTrace = tracer.trace(docConceptInputs)
             val documentRows = docs.map { doc ->
                 val docEvents = events.filter {
                     it.documentId == doc.id
                 }
-                val trace = docTrace[doc.id]
+                val docConcepts = concepts
+                    .filter { it.documentIds.contains(doc.id) }
+                    .map { concept ->
+                        val trace = docConceptTrace[
+                            docConceptKey(doc.id, concept.id)
+                        ]
+                        DocumentConceptKnowledge(
+                            conceptId = concept.id,
+                            name = concept.name,
+                            mastery = trace?.mastery ?: 0f,
+                            confidence = trace?.confidence ?: 0f
+                        )
+                    }
+                    .sortedByDescending { it.confidence }
+                val avgMastery = docConcepts
+                    .takeIf { it.isNotEmpty() }
+                    ?.map { it.mastery }
+                    ?.average()
+                    ?.toFloat() ?: 0f
+                val avgConfidence = docConcepts
+                    .takeIf { it.isNotEmpty() }
+                    ?.map { it.confidence }
+                    ?.average()
+                    ?.toFloat() ?: 0f
                 DocumentKnowledge(
                     documentId = doc.id,
                     title = doc.displayName,
                     pageCount = doc.pageCount,
                     activityCount = docEvents.size,
-                    mastery = trace?.mastery ?: 0f,
-                    confidence = trace?.confidence ?: 0f,
+                    mastery = avgMastery,
+                    confidence = avgConfidence,
                     lastStudiedAt = docEvents.maxOfOrNull {
                         it.timestamp
-                    }
+                    },
+                    concepts = docConcepts
                 )
             }.sortedWith(
                 compareByDescending<DocumentKnowledge> {
@@ -104,8 +128,8 @@ class KnowledgeRepositoryImpl(
             }
             val recentCutoff =
                 System.currentTimeMillis() - RECENT_WINDOW_MS
-            val usingModel = docTrace.values.any { it.usingModel } ||
-                conceptTrace.values.any { it.usingModel }
+            val usingModel = conceptTrace.values.any { it.usingModel } ||
+                docConceptTrace.values.any { it.usingModel }
             val avg = (documentRows.map { it.mastery } +
                 conceptRows.map { it.mastery })
                 .takeIf { it.isNotEmpty() }
@@ -125,9 +149,9 @@ class KnowledgeRepositoryImpl(
                     },
                     averageMastery = avg,
                     rektStatus = if (usingModel) {
-                        "ReKT local inference active"
+                        "KT ONNX local inference active"
                     } else {
-                        "로컬 ReKT 모델 준비 전, 활동 기반 추정으로 표시 중"
+                        "KT ONNX 모델 업로드 전, 활동 기반 추정으로 표시 중"
                     }
                 ),
                 documents = documentRows,
@@ -143,76 +167,72 @@ class KnowledgeRepositoryImpl(
             )
         }
 
-    private fun loadOrGenerateConcepts(docs: List<PdfDocument>): List<ConceptRecord> {
-        val generated = docs.flatMap { doc ->
-            extractConceptNames(doc).map { name ->
-                ConceptRecord(
-                    id = conceptId(doc.id, name),
-                    name = name,
-                    documentIds = listOf(doc.id)
-                )
+    private fun engineeringMechanicsConcepts(
+        docs: List<PdfDocument>,
+        events: List<StudyEvent>
+    ): List<ConceptRecord> {
+        val linksFromEvents = events
+            .flatMap { event ->
+                event.conceptIds.map { conceptId ->
+                    conceptId to event.documentId
+                }
             }
+            .groupBy({ it.first }, { it.second })
+        val docsByConcept = docs.flatMap { doc ->
+            assignedConceptIds(doc).map { conceptId ->
+                conceptId to doc.id
+            }
+        }.groupBy({ it.first }, { it.second })
+        return EngineeringMechanicsConceptCatalog.concepts.map { concept ->
+            ConceptRecord(
+                id = concept.id,
+                name = concept.name,
+                documentIds = (
+                    docsByConcept[concept.id].orEmpty() +
+                        linksFromEvents[concept.id]
+                            .orEmpty()
+                            .filterNotNull()
+                    ).distinct()
+            )
         }
-        saveConcepts(generated)
-        return generated
     }
 
-    private fun extractConceptNames(doc: PdfDocument): List<String> {
-        val names = linkedSetOf<String>()
-        names += doc.displayName
-            .removeSuffix(".pdf")
-            .replace('_', ' ')
-            .trim()
+    private fun documentText(doc: PdfDocument): String {
         val content = File(
             context.filesDir,
             "documents/${doc.id}/content.md"
         ).takeIf { it.exists() }?.readText().orEmpty()
-        Regex("^#{1,3}\\s+(.+)$", RegexOption.MULTILINE)
-            .findAll(content)
-            .map { it.groupValues[1].trim() }
-            .filter { it.length in 3..48 }
-            .take(4)
-            .forEach { names += it }
-        tokenize(content)
-            .groupingBy { it }
-            .eachCount()
-            .entries
-            .sortedByDescending { it.value }
-            .take(4)
-            .forEach { names += it.key }
-        return names.filter { it.isNotBlank() }.take(6)
+        return (doc.displayName + "\n" + content)
+            .lowercase(Locale.US)
     }
 
-    private fun tokenize(text: String): List<String> {
-        val stop = setOf(
-            "the", "and", "for", "with", "this", "that",
-            "from", "you", "are", "was", "were", "have",
-            "about", "into", "your", "문서", "내용", "설명"
+    private fun assignedConceptIds(doc: PdfDocument): List<String> {
+        val haystack = documentText(doc)
+        val scored = EngineeringMechanicsConceptCatalog.concepts
+            .map { concept ->
+                concept.id to concept.keywords.sumOf { keyword ->
+                    Regex("\\b${Regex.escape(keyword.lowercase(Locale.US))}\\b")
+                        .findAll(haystack)
+                        .count()
+                }
+            }
+            .filter { it.second > 0 }
+            .sortedByDescending { it.second }
+            .take(MAX_CONCEPTS_PER_DOCUMENT)
+            .map { it.first }
+        if (scored.isNotEmpty()) return scored
+        return listOf(
+            EngineeringMechanicsConceptCatalog
+                .bestMatch(haystack)
+                .id
         )
-        return Regex("[A-Za-z가-힣][A-Za-z가-힣0-9_-]{2,}")
-            .findAll(text)
-            .map { it.value.lowercase(Locale.US) }
-            .filter { it !in stop }
-            .toList()
     }
 
-    private fun saveConcepts(concepts: List<ConceptRecord>) {
-        try {
-            conceptsFile.parentFile?.mkdirs()
-            conceptsFile.writeText(json.encodeToString(concepts))
-        } catch (_: Throwable) {}
-    }
+    private fun docConceptKey(
+        documentId: String,
+        conceptId: String
+    ): String = "${documentId}_$conceptId"
 
-    private fun conceptId(documentId: String, name: String): String {
-        val slug = name.lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9가-힣]+"), "_")
-            .trim('_')
-            .take(40)
-            .ifBlank { "concept" }
-        return "${documentId.take(8)}_$slug"
-    }
-
-    @Serializable
     private data class ConceptRecord(
         val id: String,
         val name: String,
@@ -222,5 +242,6 @@ class KnowledgeRepositoryImpl(
     companion object {
         private const val RECENT_WINDOW_MS =
             7L * 24L * 60L * 60L * 1000L
+        private const val MAX_CONCEPTS_PER_DOCUMENT = 4
     }
 }

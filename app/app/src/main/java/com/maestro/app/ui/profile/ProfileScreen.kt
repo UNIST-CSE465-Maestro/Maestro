@@ -3,8 +3,10 @@ package com.maestro.app.ui.profile
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,11 +14,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.maestro.app.data.local.ModelArtifactState
+import com.maestro.app.data.local.ModelArtifactType
+import com.maestro.app.data.local.MonitoringLogCategory
+import com.maestro.app.data.local.MonitoringLogEntry
 import com.maestro.app.domain.model.ConceptKnowledge
 import com.maestro.app.domain.model.DocumentKnowledge
 import com.maestro.app.domain.model.ProfileSummary
@@ -52,6 +60,23 @@ fun ProfileScreen(
             viewModel.updateAvatar(uri)
         }
     }
+    val ktModelPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadModel(ModelArtifactType.KT_ONNX, uri)
+        }
+    }
+    val conceptModelPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadModel(
+                ModelArtifactType.CONCEPT_ONNX,
+                uri
+            )
+        }
+    }
     var editingName by remember {
         mutableStateOf(false)
     }
@@ -70,7 +95,10 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(MaestroBackground)
     ) {
-        ProfileTopBar(onBack = onBack)
+        ProfileTopBar(
+            onBack = onBack,
+            onRefresh = { viewModel.refresh() }
+        )
         if (state.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -112,6 +140,17 @@ fun ProfileScreen(
                     )
                 }
                 item {
+                    ModelUploadPanel(
+                        artifacts = state.modelArtifacts,
+                        onUploadKt = {
+                            ktModelPicker.launch("*/*")
+                        },
+                        onUploadConcept = {
+                            conceptModelPicker.launch("*/*")
+                        }
+                    )
+                }
+                item {
                     SummaryPanel(state.dashboard.summary)
                 }
             }
@@ -126,6 +165,12 @@ fun ProfileScreen(
                         summary = state.dashboard.summary,
                         strongConcepts = state.dashboard.strongConcepts,
                         weakConcepts = state.dashboard.weakConcepts
+                    )
+                }
+                item {
+                    MonitoringConsole(
+                        logs = state.monitoringLogs,
+                        onDeleteLogs = viewModel::deleteMonitoringLogs
                     )
                 }
                 item {
@@ -164,7 +209,10 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileTopBar(onBack: () -> Unit) {
+private fun ProfileTopBar(
+    onBack: () -> Unit,
+    onRefresh: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -193,6 +241,14 @@ private fun ProfileTopBar(onBack: () -> Unit) {
             fontSize = 13.sp,
             color = Slate500
         )
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onRefresh) {
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = "새로고침",
+                tint = Maestro900
+            )
+        }
     }
 }
 
@@ -304,6 +360,100 @@ private fun AvatarImage(avatarPath: String?, size: Int) {
             contentDescription = "프로필",
             modifier = modifier.padding(6.dp),
             tint = Slate500
+        )
+    }
+}
+
+@Composable
+private fun ModelUploadPanel(
+    artifacts: List<ModelArtifactState>,
+    onUploadKt: () -> Unit,
+    onUploadConcept: () -> Unit
+) {
+    Surface(
+        color = MaestroSurfaceContainerLowest,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SectionTitle("KT Experiment Models")
+            Text(
+                "공학역학 concept space 기준으로 ONNX 모델을 앱 내부에 저장합니다.",
+                fontSize = 12.sp,
+                color = Slate500,
+                lineHeight = 17.sp
+            )
+            ModelArtifactRow(
+                state = artifacts.firstOrNull {
+                    it.type == ModelArtifactType.KT_ONNX
+                },
+                fallbackLabel = "KT ONNX",
+                note = "업로드된 경우에만 KT 추론과 device resource logging이 활성화됩니다.",
+                onUpload = onUploadKt
+            )
+            ModelArtifactRow(
+                state = artifacts.firstOrNull {
+                    it.type == ModelArtifactType.CONCEPT_ONNX
+                },
+                fallbackLabel = "Concept ONNX",
+                note = "문서 -> 공학역학 concept 자동 지정 모델을 위한 슬롯입니다.",
+                onUpload = onUploadConcept
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModelArtifactRow(
+    state: ModelArtifactState?,
+    fallbackLabel: String,
+    note: String,
+    onUpload: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaestroSurfaceContainerLow,
+                RoundedCornerShape(8.dp)
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    state?.label ?: fallbackLabel,
+                    fontWeight = FontWeight.Bold,
+                    color = MaestroOnSurface
+                )
+                Text(
+                    if (state?.isReady == true) {
+                        "${formatBytes(state.fileSizeBytes)} · ${formatDate(state.updatedAt)}"
+                    } else {
+                        "Not uploaded"
+                    },
+                    fontSize = 12.sp,
+                    color = if (state?.isReady == true) {
+                        MaestroPrimary
+                    } else {
+                        Slate500
+                    }
+                )
+            }
+            Button(onClick = onUpload) {
+                Text("ONNX 업로드")
+            }
+        }
+        Text(
+            note,
+            fontSize = 11.sp,
+            color = Slate500,
+            lineHeight = 16.sp
         )
     }
 }
@@ -454,13 +604,345 @@ private fun ConceptList(
 }
 
 @Composable
-private fun DocumentKnowledgeRow(document: DocumentKnowledge) {
-    KnowledgeRow(
-        title = document.title,
-        subtitle = "${document.pageCount} pages · ${document.activityCount} activities · ${formatDate(document.lastStudiedAt)}",
-        mastery = document.mastery,
-        confidence = document.confidence
+private fun MonitoringConsole(
+    logs: List<MonitoringLogEntry>,
+    onDeleteLogs: (Set<String>) -> Unit
+) {
+    var selectedCategory by remember {
+        mutableStateOf(MonitoringLogCategory.KT_RUNTIME)
+    }
+    var deleteMode by remember {
+        mutableStateOf(false)
+    }
+    var selectedLogIds by remember {
+        mutableStateOf<Set<String>>(emptySet())
+    }
+    var showDeleteConfirm by remember {
+        mutableStateOf(false)
+    }
+    val categoryLogs = logs
+        .filter { it.category == selectedCategory }
+        .sortedByDescending { it.timestamp }
+        .take(12)
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("로그 삭제") },
+            text = {
+                Text("선택한 로그 ${selectedLogIds.size}개를 삭제할까요?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteLogs(selectedLogIds)
+                        selectedLogIds = emptySet()
+                        deleteMode = false
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text(
+                        "삭제",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirm = false }
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+    Surface(
+        color = MaestroSurfaceContainerLowest,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Experiment Monitoring",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaestroOnSurface
+                    )
+                    Text(
+                        "KT runtime, learning behavior, evaluation, device, reliability logs",
+                        fontSize = 12.sp,
+                        color = Slate500
+                    )
+                }
+                if (deleteMode) {
+                    TextButton(
+                        onClick = {
+                            deleteMode = false
+                            selectedLogIds = emptySet()
+                        }
+                    ) {
+                        Text("취소")
+                    }
+                    Button(
+                        onClick = {
+                            if (selectedLogIds.isNotEmpty()) {
+                                showDeleteConfirm = true
+                            }
+                        },
+                        enabled = selectedLogIds.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor =
+                            MaterialTheme.colorScheme.error,
+                            contentColor =
+                            MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("삭제")
+                    }
+                } else {
+                    TextButton(
+                        onClick = {
+                            deleteMode = true
+                            selectedLogIds = emptySet()
+                        }
+                    ) {
+                        Text("로그 지우기")
+                    }
+                }
+            }
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(MonitoringLogCategory.entries) { category ->
+                    val selected = category == selectedCategory
+                    Text(
+                        category.label(),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selected) {
+                                    MaestroPrimary
+                                } else {
+                                    MaestroSurfaceContainerLow
+                                }
+                            )
+                            .padding(
+                                horizontal = 10.dp,
+                                vertical = 7.dp
+                            )
+                            .clickable {
+                                selectedCategory = category
+                                selectedLogIds = emptySet()
+                            },
+                        color = if (selected) {
+                            Color.White
+                        } else {
+                            Slate500
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            if (categoryLogs.isEmpty()) {
+                EmptyPanel("${selectedCategory.label()} 로그가 아직 없습니다")
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    categoryLogs.forEach { log ->
+                        MonitoringLogRow(
+                            log = log,
+                            deleteMode = deleteMode,
+                            selected = log.id in selectedLogIds,
+                            onSelectionChange = { checked ->
+                                selectedLogIds = if (checked) {
+                                    selectedLogIds + log.id
+                                } else {
+                                    selectedLogIds - log.id
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonitoringLogRow(log: MonitoringLogEntry) {
+    MonitoringLogRow(
+        log = log,
+        deleteMode = false,
+        selected = false,
+        onSelectionChange = {}
     )
+}
+
+@Composable
+private fun MonitoringLogRow(
+    log: MonitoringLogEntry,
+    deleteMode: Boolean,
+    selected: Boolean,
+    onSelectionChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaestroSurfaceContainerLow,
+                RoundedCornerShape(8.dp)
+            )
+            .clickable(enabled = deleteMode) {
+                onSelectionChange(!selected)
+            }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                log.eventType,
+                modifier = Modifier.weight(1f),
+                fontWeight = FontWeight.Bold,
+                color = MaestroOnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                formatDate(log.timestamp),
+                fontSize = 11.sp,
+                color = Slate500
+            )
+            if (deleteMode) {
+                Spacer(Modifier.width(8.dp))
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = onSelectionChange
+                )
+            }
+        }
+        val contextLine = listOfNotNull(
+            log.documentId?.let { "doc=$it" },
+            log.conceptId?.let { "concept=$it" }
+        ).joinToString(" · ")
+        if (contextLine.isNotBlank()) {
+            Text(
+                contextLine,
+                fontSize = 11.sp,
+                color = Slate500,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            log.metadata.entries
+                .take(6)
+                .joinToString(" · ") {
+                    "${it.key}=${it.value}"
+                }
+                .ifBlank { "no metadata" },
+            fontSize = 11.sp,
+            color = Slate500,
+            lineHeight = 15.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun DocumentKnowledgeRow(document: DocumentKnowledge) {
+    Surface(
+        color = MaestroSurfaceContainerLowest,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        document.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaestroOnSurface
+                    )
+                    Text(
+                        "${document.pageCount} pages · ${document.activityCount} activities · ${formatDate(document.lastStudiedAt)}",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 12.sp,
+                        color = Slate500
+                    )
+                }
+                Text(
+                    "avg ${percent(document.mastery)}",
+                    fontWeight = FontWeight.Bold,
+                    color = MaestroPrimary
+                )
+            }
+            if (document.concepts.isEmpty()) {
+                Text(
+                    "연결된 공학역학 concept이 없습니다",
+                    fontSize = 12.sp,
+                    color = Slate500
+                )
+            } else {
+                document.concepts.forEach { concept ->
+                    DocumentConceptRow(concept)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentConceptRow(
+    concept: com.maestro.app.domain.model.DocumentConceptKnowledge
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                concept.name,
+                modifier = Modifier.weight(1f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaestroOnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "${percent(concept.mastery)} · conf ${percent(concept.confidence)}",
+                fontSize = 11.sp,
+                color = Slate500
+            )
+        }
+        LinearProgressIndicator(
+            progress = { concept.mastery },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(5.dp)),
+            color = MaestroPrimary,
+            trackColor = MaestroSurfaceContainerHigh
+        )
+    }
 }
 
 @Composable
@@ -609,6 +1091,25 @@ private fun MasteryBadge(mastery: Float) {
 
 private fun percent(value: Float): String =
     "${(value.coerceIn(0f, 1f) * 100).toInt()}%"
+
+private fun MonitoringLogCategory.label(): String =
+    when (this) {
+        MonitoringLogCategory.DEVICE_RESOURCE -> "Device"
+        MonitoringLogCategory.KT_RUNTIME -> "KT Runtime"
+        MonitoringLogCategory.LEARNING_BEHAVIOR -> "Learning"
+        MonitoringLogCategory.DOMAIN_EVALUATION -> "Evaluation"
+        MonitoringLogCategory.UX_RELIABILITY -> "Reliability"
+    }
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val mb = bytes / (1024f * 1024f)
+    return if (mb >= 1f) {
+        String.format(Locale.US, "%.1f MB", mb)
+    } else {
+        "${bytes / 1024L} KB"
+    }
+}
 
 private fun formatDate(value: Long?): String {
     if (value == null || value <= 0L) return "-"

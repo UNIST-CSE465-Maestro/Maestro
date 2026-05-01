@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.MonitoringLogCategory
+import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.QuizResponseRecord
 import com.maestro.app.data.local.StudyEventLocalDataSource
@@ -20,6 +22,7 @@ import com.maestro.app.ui.drawing.DrawingState
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +42,7 @@ class ViewerViewModel(
     private val documentRepository: DocumentRepository,
     private val studyEvents: StudyEventLocalDataSource,
     private val quizResponses: QuizResponseLocalDataSource,
+    private val monitoringLogs: MonitoringLogLocalDataSource,
     extractionProgressStore: ExtractionProgressStore,
     private val appContext: Context,
     val pdfId: String,
@@ -149,6 +153,16 @@ class ViewerViewModel(
             pageIndex = drawingState.activePageIndex
                 .coerceAtLeast(0)
         )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "annotation_saved",
+            documentId = pdfId,
+            metadata = mapOf(
+                "page_index" to drawingState.activePageIndex
+                    .coerceAtLeast(0)
+                    .toString()
+            )
+        )
         viewModelScope.launch {
             delay(UxConfig.Timing.AUTOSAVE_DEBOUNCE_MS)
             withContext(Dispatchers.IO) {
@@ -205,6 +219,15 @@ class ViewerViewModel(
                     "bookmarked" to (page in updated).toString()
                 )
             )
+            monitoringLogs.append(
+                category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+                eventType = "bookmark_toggled",
+                documentId = pdfId,
+                metadata = mapOf(
+                    "page_index" to page.toString(),
+                    "bookmarked" to (page in updated).toString()
+                )
+            )
         }
     }
 
@@ -214,6 +237,14 @@ class ViewerViewModel(
             type = StudyEventType.PAGE_VIEWED,
             documentId = pdfId,
             pageIndex = page
+        )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "page_viewed",
+            documentId = pdfId,
+            metadata = mapOf(
+                "page_index" to page.toString()
+            )
         )
     }
 
@@ -268,6 +299,19 @@ class ViewerViewModel(
                 "bloomLevel" to bloomLevel.toString()
             )
         )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "quiz_generated",
+            documentId = pdfId,
+            conceptId = conceptId,
+            metadata = mapOf(
+                "bloom_level" to bloomLevel.toString(),
+                "mastery_before" to _quizMastery.value.toString(),
+                "content_length" to (
+                    _documentContent.value?.length ?: 0
+                    ).toString()
+            )
+        )
     }
 
     fun recordQuizAnswered(
@@ -283,6 +327,7 @@ class ViewerViewModel(
         sourceSentence: String
     ) {
         val hash = hashQuestion(question)
+        val masteryBefore = _quizMastery.value
         quizResponses.append(
             QuizResponseRecord(
                 conceptId = conceptId,
@@ -315,6 +360,47 @@ class ViewerViewModel(
         )
         loadQuizMastery()
         loadQuizHistory()
+        val conceptRecords = quizResponses.listResponses()
+            .filter {
+                it.sourceDocId == pdfId &&
+                    it.conceptId == conceptId
+            }
+        val masteryAfter = if (conceptRecords.isEmpty()) {
+            0.35f
+        } else {
+            conceptRecords.count { it.isCorrect }.toFloat() /
+                conceptRecords.size.toFloat()
+        }.coerceIn(0f, 1f)
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "quiz_answered",
+            documentId = pdfId,
+            conceptId = conceptId,
+            metadata = mapOf(
+                "bloom_level" to bloomLevel.toString(),
+                "is_correct" to isCorrect.toString(),
+                "response_time_ms" to (
+                    responseTimeMs?.toString() ?: ""
+                    ),
+                "question_hash" to hash,
+                "mastery_before" to masteryBefore.toString(),
+                "mastery_after" to masteryAfter.toString()
+            )
+        )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.DOMAIN_EVALUATION,
+            eventType = "kt_prediction_observed",
+            documentId = pdfId,
+            conceptId = conceptId,
+            metadata = mapOf(
+                "predicted_mastery_before" to masteryBefore.toString(),
+                "actual_correctness" to isCorrect.toString(),
+                "prediction_error" to abs(
+                    masteryBefore - if (isCorrect) 1f else 0f
+                ).toString(),
+                "bloom_level" to bloomLevel.toString()
+            )
+        )
     }
 
     fun deleteQuizResponse(recordId: String) {
@@ -333,12 +419,30 @@ class ViewerViewModel(
                 "hasImage" to hasImage.toString()
             )
         )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "llm_requested",
+            documentId = pdfId,
+            metadata = mapOf(
+                "page_index" to _currentPage.value.toString(),
+                "prompt_length" to prompt.length.toString(),
+                "has_image" to hasImage.toString()
+            )
+        )
     }
 
     private fun recordDocumentOpened() {
         studyEvents.append(
             type = StudyEventType.DOCUMENT_OPENED,
             documentId = pdfId
+        )
+        monitoringLogs.append(
+            category = MonitoringLogCategory.LEARNING_BEHAVIOR,
+            eventType = "document_opened",
+            documentId = pdfId,
+            metadata = mapOf(
+                "page_count" to pageCount.toString()
+            )
         )
     }
 

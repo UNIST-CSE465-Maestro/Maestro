@@ -18,7 +18,15 @@ data class DocumentKnowledge(
     val activityCount: Int,
     val mastery: Float,
     val confidence: Float,
-    val lastStudiedAt: Long?
+    val lastStudiedAt: Long?,
+    val concepts: List<DocumentConceptKnowledge> = emptyList()
+)
+
+data class DocumentConceptKnowledge(
+    val conceptId: String,
+    val name: String,
+    val mastery: Float,
+    val confidence: Float
 )
 
 data class ConceptKnowledge(

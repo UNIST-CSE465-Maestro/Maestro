@@ -2,7 +2,10 @@ package com.maestro.app.di
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.DeviceResourceSampler
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.ModelArtifactLocalDataSource
+import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
@@ -61,6 +64,21 @@ val dataModule = module {
     single { ConversationLocalDataSource(get()) }
     single { ExtractionProgressStore() }
     single {
+        ModelArtifactLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
+    single {
+        MonitoringLogLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
+    single {
+        DeviceResourceSampler(
+            get<android.content.Context>()
+        )
+    }
+    single {
         QuizResponseLocalDataSource(
             get<android.content.Context>()
         )
@@ -79,6 +97,9 @@ val dataModule = module {
     single<RektKnowledgeTracer> {
         OnnxRektKnowledgeTracer(
             context = get<android.content.Context>(),
+            modelArtifacts = get(),
+            monitoringLogs = get(),
+            resourceSampler = get(),
             fallback = HeuristicKnowledgeTracer()
         )
     }

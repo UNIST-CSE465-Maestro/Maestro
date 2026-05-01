@@ -84,6 +84,7 @@ import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.domain.model.ChatMessage
+import com.maestro.app.domain.model.EngineeringMechanicsConceptCatalog
 import com.maestro.app.domain.model.GeneratedQuizQuestion
 import com.maestro.app.domain.model.QuizGenerationRequest
 import com.maestro.app.domain.model.LlmProvider
@@ -1406,22 +1407,21 @@ private fun QuizMessage(
 }
 
 private fun extractQuizConcept(content: String): String {
-    if (content.isBlank()) return "현재 문서"
-    Regex("^#{1,3}\\s+(.+)$", RegexOption.MULTILINE)
-        .find(content)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return it.take(48) }
-    return content.lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.length in 4..80 }
-        ?.take(48)
-        ?: "현재 문서"
+    if (content.isBlank()) {
+        return EngineeringMechanicsConceptCatalog
+            .concepts
+            .first()
+            .name
+    }
+    return EngineeringMechanicsConceptCatalog
+        .bestMatch(content)
+        .name
 }
 
 private fun stableConceptId(documentId: String, conceptName: String): String {
+    EngineeringMechanicsConceptCatalog.concepts
+        .find { it.name == conceptName }
+        ?.let { return it.id }
     val slug = conceptName.lowercase()
         .replace(Regex("[^a-z0-9가-힣]+"), "_")
         .trim('_')
