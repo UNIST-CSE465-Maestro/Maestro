@@ -4,6 +4,7 @@ import android.app.Application
 import com.maestro.app.di.appModule
 import com.maestro.app.di.dataModule
 import com.maestro.app.di.networkModule
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -16,6 +17,7 @@ import org.koin.core.context.startKoin
 class MaestroApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        PDFBoxResourceLoader.init(this)
 
         startKoin {
             androidContext(this@MaestroApp)

@@ -120,9 +120,33 @@ object StructuredContentCropExtractor {
             .joinToString("\n\n")
         return CropContentSelection(
             content = body,
-            label = "선택 영역 · 페이지 ${payload.pageIndex + 1} · ${matched.size} blocks",
+            label = selectionLabel(body, payload, matched.size),
             matchedBlockCount = matched.size
         )
+    }
+
+    private fun selectionLabel(
+        body: String,
+        payload: CropCapturePayload,
+        blockCount: Int
+    ): String {
+        val preview = body
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .let { text ->
+                if (text.length > LABEL_PREVIEW_CHARS) {
+                    text.take(LABEL_PREVIEW_CHARS)
+                        .trimEnd() + "..."
+                } else {
+                    text
+                }
+            }
+        val prefix = if (preview.isBlank()) {
+            "선택 영역"
+        } else {
+            "선택 영역: $preview"
+        }
+        return "$prefix · 페이지 ${payload.pageIndex + 1} · $blockCount blocks"
     }
 
     private fun pageForIndex(
@@ -287,4 +311,5 @@ object StructuredContentCropExtractor {
     }
 
     private const val MIN_OVERLAP_RATIO = 0.12f
+    private const val LABEL_PREVIEW_CHARS = 42
 }

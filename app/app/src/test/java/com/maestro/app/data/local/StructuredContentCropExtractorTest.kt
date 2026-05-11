@@ -57,6 +57,11 @@ class StructuredContentCropExtractorTest {
         assertEquals(1, result.matchedBlockCount)
         assertTrue(result.content.contains("Inside concept"))
         assertFalse(result.content.contains("Outside concept"))
+        assertTrue(
+            result.label.startsWith(
+                "선택 영역: Inside concept"
+            )
+        )
     }
 
     @Test
@@ -111,5 +116,10 @@ class StructuredContentCropExtractorTest {
             )
         )
         assertFalse(result.content.contains("7"))
+        assertTrue(
+            result.label.startsWith(
+                "선택 영역: A Running Example"
+            )
+        )
     }
 }

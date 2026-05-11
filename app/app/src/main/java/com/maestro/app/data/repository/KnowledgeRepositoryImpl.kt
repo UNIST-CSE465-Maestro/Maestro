@@ -130,6 +130,11 @@ class KnowledgeRepositoryImpl(
                 System.currentTimeMillis() - RECENT_WINDOW_MS
             val usingModel = conceptTrace.values.any { it.usingModel } ||
                 docConceptTrace.values.any { it.usingModel }
+            val activeModelName = (
+                conceptTrace.values + docConceptTrace.values
+                ).firstOrNull {
+                    it.usingModel && !it.modelName.isNullOrBlank()
+                }?.modelName
             val avg = (documentRows.map { it.mastery } +
                 conceptRows.map { it.mastery })
                 .takeIf { it.isNotEmpty() }
@@ -149,7 +154,7 @@ class KnowledgeRepositoryImpl(
                     },
                     averageMastery = avg,
                     rektStatus = if (usingModel) {
-                        "KT ONNX local inference active"
+                        "${activeModelName ?: "KT ONNX"} local inference active"
                     } else {
                         "KT ONNX 모델 업로드 전, 활동 기반 추정으로 표시 중"
                     }

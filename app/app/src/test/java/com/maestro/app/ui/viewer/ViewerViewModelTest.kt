@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
+import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.MaterialAnalyzerClient
@@ -45,6 +46,7 @@ class ViewerViewModelTest {
     private lateinit var studyEvents: StudyEventLocalDataSource
     private lateinit var quizResponses: QuizResponseLocalDataSource
     private lateinit var monitoringLogs: MonitoringLogLocalDataSource
+    private lateinit var pdfTextIndex: PdfTextIndexLocalDataSource
 
     @Before
     fun setup() {
@@ -73,6 +75,12 @@ class ViewerViewModelTest {
                 "maestro-test-monitoring-${System.nanoTime()}.json"
             )
         )
+        pdfTextIndex = PdfTextIndexLocalDataSource(
+            java.io.File(
+                System.getProperty("java.io.tmpdir"),
+                "maestro-test-text-index-${System.nanoTime()}"
+            )
+        )
     }
 
     @After
@@ -91,6 +99,7 @@ class ViewerViewModelTest {
             studyEvents = studyEvents,
             quizResponses = quizResponses,
             monitoringLogs = monitoringLogs,
+            pdfTextIndex = pdfTextIndex,
             extractionProgressStore = extractionProgressStore,
             appContext = appContext,
             pdfId = pdfId,

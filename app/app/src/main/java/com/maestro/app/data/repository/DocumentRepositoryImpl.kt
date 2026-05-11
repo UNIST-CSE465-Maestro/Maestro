@@ -5,6 +5,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.model.DocumentDto
 import com.maestro.app.data.model.FolderDto
 import com.maestro.app.domain.model.Folder
@@ -17,7 +18,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-class DocumentRepositoryImpl(private val context: Context) : DocumentRepository {
+class DocumentRepositoryImpl(
+    private val context: Context,
+    private val pdfTextIndex: PdfTextIndexLocalDataSource
+) : DocumentRepository {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -50,6 +54,11 @@ class DocumentRepositoryImpl(private val context: Context) : DocumentRepository 
             } ?: throw IllegalStateException("Cannot open input stream for $uri")
 
             val pageCount = countPages(destFile)
+            pdfTextIndex.ensureIndex(
+                documentId = id,
+                pdfFile = destFile,
+                displayName = name
+            )
             val doc = PdfDocument(
                 id = id,
                 uriString = Uri.fromFile(destFile).toString(),
@@ -68,6 +77,7 @@ class DocumentRepositoryImpl(private val context: Context) : DocumentRepository 
         val doc = all.find { it.id == documentId } ?: return@withContext
         val path = Uri.parse(doc.uriString).path
         if (path != null) File(path).delete()
+        pdfTextIndex.deleteIndex(documentId)
         saveAllDocs(all.filter { it.id != documentId })
     }
 
@@ -183,6 +193,12 @@ class DocumentRepositoryImpl(private val context: Context) : DocumentRepository 
             val updated = all.toMutableList()
             updated += copy
             saveAllDocs(updated)
+            pdfTextIndex.copyIndex(doc.id, newId)
+            pdfTextIndex.ensureIndex(
+                documentId = newId,
+                pdfFile = destFile,
+                displayName = copyName
+            )
             copy
         }
 

@@ -60,6 +60,13 @@ fun ProfileScreen(
             viewModel.updateAvatar(uri)
         }
     }
+    val miktModelPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadModel(ModelArtifactType.MIKT_ONNX, uri)
+        }
+    }
     val ktModelPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
@@ -142,6 +149,9 @@ fun ProfileScreen(
                 item {
                     ModelUploadPanel(
                         artifacts = state.modelArtifacts,
+                        onUploadMikt = {
+                            miktModelPicker.launch("*/*")
+                        },
                         onUploadKt = {
                             ktModelPicker.launch("*/*")
                         },
@@ -367,6 +377,7 @@ private fun AvatarImage(avatarPath: String?, size: Int) {
 @Composable
 private fun ModelUploadPanel(
     artifacts: List<ModelArtifactState>,
+    onUploadMikt: () -> Unit,
     onUploadKt: () -> Unit,
     onUploadConcept: () -> Unit
 ) {
@@ -382,17 +393,25 @@ private fun ModelUploadPanel(
         ) {
             SectionTitle("KT Experiment Models")
             Text(
-                "공학역학 concept space 기준으로 ONNX 모델을 앱 내부에 저장합니다.",
+                "공학역학 concept space 기준으로 ONNX 모델을 앱 내부에 저장합니다. MIKT ONNX가 있으면 MobileKT 백본 테스트에 우선 사용됩니다.",
                 fontSize = 12.sp,
                 color = Slate500,
                 lineHeight = 17.sp
             )
             ModelArtifactRow(
                 state = artifacts.firstOrNull {
+                    it.type == ModelArtifactType.MIKT_ONNX
+                },
+                fallbackLabel = "MIKT ONNX",
+                note = "업로드된 경우 MobileKT 백본 후보로 우선 사용하고, KT runtime/device resource logging을 수집합니다.",
+                onUpload = onUploadMikt
+            )
+            ModelArtifactRow(
+                state = artifacts.firstOrNull {
                     it.type == ModelArtifactType.KT_ONNX
                 },
-                fallbackLabel = "KT ONNX",
-                note = "업로드된 경우에만 KT 추론과 device resource logging이 활성화됩니다.",
+                fallbackLabel = "Generic/ReKT KT ONNX",
+                note = "MIKT 파일이 없을 때 사용하는 기존 KT ONNX 슬롯입니다.",
                 onUpload = onUploadKt
             )
             ModelArtifactRow(

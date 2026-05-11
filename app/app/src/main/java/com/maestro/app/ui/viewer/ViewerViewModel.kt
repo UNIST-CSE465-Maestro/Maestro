@@ -7,14 +7,18 @@ import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.MonitoringLogCategory
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
+import com.maestro.app.data.local.PdfTextIndex
+import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.QuizResponseRecord
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.StudyEventType
+import com.maestro.app.data.local.StructuredContentSearchExtractor
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.domain.model.CropCapturePayload
+import com.maestro.app.domain.model.PdfSearchMatch
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.ui.components.StudySidebarMode
@@ -25,6 +29,7 @@ import java.security.MessageDigest
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +49,7 @@ class ViewerViewModel(
     private val studyEvents: StudyEventLocalDataSource,
     private val quizResponses: QuizResponseLocalDataSource,
     private val monitoringLogs: MonitoringLogLocalDataSource,
+    private val pdfTextIndex: PdfTextIndexLocalDataSource,
     extractionProgressStore: ExtractionProgressStore,
     private val appContext: Context,
     val pdfId: String,
@@ -84,6 +90,16 @@ class ViewerViewModel(
     val documentJsonContent =
         _documentJsonContent.asStateFlow()
 
+    private val _documentTextIndex =
+        MutableStateFlow<PdfTextIndex?>(null)
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    private val _searchMatches =
+        MutableStateFlow<List<PdfSearchMatch>>(emptyList())
+    val searchMatches = _searchMatches.asStateFlow()
+
     private val _quizMastery =
         MutableStateFlow(0.35f)
     val quizMastery = _quizMastery.asStateFlow()
@@ -121,6 +137,7 @@ class ViewerViewModel(
         )
 
     private var lastSavedVersion = 0
+    private var searchJob: Job? = null
 
     init {
         recordDocumentOpened()
@@ -138,6 +155,9 @@ class ViewerViewModel(
                     loadContentMd(pdfId)
                 _documentJsonContent.value =
                     loadContentJson(pdfId)
+                _documentTextIndex.value =
+                    loadOrBuildTextIndex()
+                scheduleSearch()
             } catch (_: Throwable) {}
         }
     }
@@ -270,6 +290,43 @@ class ViewerViewModel(
         } else {
             _sidebarMode.value = StudySidebarMode.CHAT
             _sidebarVisible.value = true
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        if (_searchQuery.value != query) {
+            _searchMatches.value = emptyList()
+        }
+        _searchQuery.value = query
+        scheduleSearch()
+    }
+
+    private fun scheduleSearch() {
+        searchJob?.cancel()
+        val query = _searchQuery.value
+        val textIndex = _documentTextIndex.value
+        val rawJson = _documentJsonContent.value
+        if (query.isBlank()) {
+            _searchMatches.value = emptyList()
+            return
+        }
+        searchJob = viewModelScope.launch(Dispatchers.Default) {
+            val matches = if (textIndex?.hasText == true) {
+                pdfTextIndex.search(textIndex, query)
+            } else {
+                StructuredContentSearchExtractor.search(
+                    rawJson = rawJson,
+                    query = query
+                )
+            }
+            withContext(Dispatchers.Main) {
+                if (_searchQuery.value == query &&
+                    _documentTextIndex.value == textIndex &&
+                    _documentJsonContent.value == rawJson
+                ) {
+                    _searchMatches.value = matches
+                }
+            }
         }
     }
 
@@ -564,5 +621,21 @@ class ViewerViewModel(
                 "documents/$documentId/content.json"
             )
             if (file.exists()) file.readText() else null
+        }
+
+    private suspend fun loadOrBuildTextIndex(): PdfTextIndex? =
+        withContext(Dispatchers.IO) {
+            val existing = pdfTextIndex.loadIndex(pdfId)
+            if (existing != null) return@withContext existing
+            val doc = documentRepository.loadDocuments()
+                .find { it.id == pdfId }
+                ?: return@withContext null
+            val path = Uri.parse(doc.uriString).path
+                ?: return@withContext null
+            pdfTextIndex.ensureIndex(
+                documentId = doc.id,
+                pdfFile = File(path),
+                displayName = doc.displayName
+            )
         }
 }

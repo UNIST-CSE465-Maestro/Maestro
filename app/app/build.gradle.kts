@@ -85,6 +85,9 @@ dependencies {
     // Local ML inference
     implementation(libs.onnxruntime.android)
 
+    // PDF text layer indexing
+    implementation(libs.pdfbox.android)
+
     // Test
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

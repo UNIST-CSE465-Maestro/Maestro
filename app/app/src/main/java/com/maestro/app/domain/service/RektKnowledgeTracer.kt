@@ -10,7 +10,8 @@ data class RektTraceInput(
 data class KnowledgeTraceResult(
     val mastery: Float,
     val confidence: Float,
-    val usingModel: Boolean
+    val usingModel: Boolean,
+    val modelName: String? = null
 )
 
 interface RektKnowledgeTracer {

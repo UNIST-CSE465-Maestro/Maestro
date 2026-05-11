@@ -184,11 +184,23 @@ Category: `KT_RUNTIME`
 
 These are written by `OnnxRektKnowledgeTracer`.
 
-Important: these logs are generated only when a KT ONNX file has been uploaded through the Profile page and the knowledge tracer runs with that model. If no KT ONNX exists, the app falls back to `HeuristicKnowledgeTracer` and KT runtime/device resource logs are not produced.
+Important: these logs are generated only when a KT ONNX file has been uploaded through the Profile page and the knowledge tracer runs with that model. If no KT ONNX exists, the app falls back to `HeuristicKnowledgeTracer` and KT runtime/device resource logs are not produced. When both MIKT and generic KT files exist, the app uses MIKT first as the MobileKT backbone candidate.
 
-The KT ONNX file is stored under:
+KT ONNX files are stored under:
 
-- `filesDir/models/kt_model.onnx`
+- `filesDir/models/mikt_model.onnx` for `MIKT_ONNX`
+- `filesDir/models/kt_model.onnx` for generic/ReKT-compatible `KT_ONNX`
+
+Current ONNX input mapping:
+
+- question/problem/item/exercise/pid/qseq inputs receive stable local problem ids.
+- skill/concept/kc/cseq inputs receive stable local concept ids.
+- answer/correct/response/label/rseq inputs receive correctness values (`0` or `1`).
+- qa/interaction inputs receive answer-coded interaction ids.
+- domain/coarse/subject inputs receive stable local domain ids.
+- mask inputs receive `1` for each event timestep.
+
+This mapping is intended for runtime smoke tests and local experiment instrumentation. For semantically valid pretrained MIKT mastery, the uploaded model's dataset id space must later be aligned with Maestro's collected `question_id`, `concept_id`, and `domain_id` logs.
 
 ### `kt_inference_requested`
 
@@ -196,7 +208,8 @@ Triggered immediately before ONNX Runtime inference.
 
 Metadata:
 
-- `model_type`: currently `kt_onnx`.
+- `model_type`: `mikt_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
 - `input_count`: number of trace inputs.
 - `sequence_event_count`: total number of study events across all sequences.
 - `model_path`: local model file path.
@@ -213,7 +226,8 @@ Triggered after successful ONNX Runtime inference.
 
 Metadata:
 
-- `model_type`: currently `kt_onnx`.
+- `model_type`: `mikt_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
 - `latency_ms`: wall-clock inference duration.
 - `output_count`: number of returned mastery results.
 - `average_mastery`: average mastery across returned results.
@@ -232,7 +246,8 @@ Triggered if ONNX inference fails and the app falls back to the heuristic tracer
 
 Metadata:
 
-- `model_type`: currently `kt_onnx`.
+- `model_type`: `mikt_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
 - `fallback`: currently `heuristic`.
 - `error`: exception message or exception class name.
 
@@ -303,7 +318,7 @@ Triggered when an ONNX file is uploaded from the Profile page.
 
 Metadata:
 
-- `model_type`: `KT_ONNX` or `CONCEPT_ONNX`.
+- `model_type`: `MIKT_ONNX`, `KT_ONNX`, or `CONCEPT_ONNX`.
 - `file_size_bytes`
 - `file_path`
 

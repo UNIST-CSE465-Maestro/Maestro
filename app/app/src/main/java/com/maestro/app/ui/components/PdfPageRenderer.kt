@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.*
 import java.io.File
+import java.util.LinkedHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -38,20 +39,31 @@ private data class PageResult(
 @Composable
 fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val cacheKey = remember(uri, pageIndex) {
+        PageRenderCache.key(uri, pageIndex)
+    }
     var result by remember(uri, pageIndex) {
-        mutableStateOf<PageResult?>(null)
+        mutableStateOf(PageRenderCache.get(cacheKey))
     }
     var error by remember(uri, pageIndex) {
         mutableStateOf(false)
     }
 
     LaunchedEffect(uri, pageIndex) {
-        result = null
+        val cached = PageRenderCache.get(cacheKey)
+        if (cached != null) {
+            result = cached
+            error = false
+            return@LaunchedEffect
+        }
         error = false
         val r = withContext(Dispatchers.IO) {
             renderPage(context, uri, pageIndex)
         }
         result = r
+        if (r != null) {
+            PageRenderCache.put(cacheKey, r)
+        }
         if (r == null) error = true
     }
 
@@ -102,6 +114,31 @@ fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
             }
             else -> LoadingDots()
         }
+    }
+}
+
+private object PageRenderCache {
+    private const val MAX_ENTRIES = 72
+    private val entries =
+        object : LinkedHashMap<String, PageResult>(
+            MAX_ENTRIES,
+            0.75f,
+            true
+        ) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, PageResult>?
+            ): Boolean = size > MAX_ENTRIES
+        }
+
+    fun key(uri: Uri, pageIndex: Int): String =
+        "${uri}#page=$pageIndex"
+
+    @Synchronized
+    fun get(key: String): PageResult? = entries[key]
+
+    @Synchronized
+    fun put(key: String, result: PageResult) {
+        entries[key] = result
     }
 }
 

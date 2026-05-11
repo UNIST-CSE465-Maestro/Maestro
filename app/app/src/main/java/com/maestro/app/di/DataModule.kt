@@ -7,9 +7,11 @@ import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.ModelArtifactLocalDataSource
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.PdfMerger
+import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
+import com.maestro.app.data.local.ViewerTabStateLocalDataSource
 import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.MaestroServerApi
@@ -44,7 +46,7 @@ private val json = Json { ignoreUnknownKeys = true }
 
 val dataModule = module {
     single<DocumentRepository> {
-        DocumentRepositoryImpl(get())
+        DocumentRepositoryImpl(get(), get())
     }
     single<SettingsRepository> {
         SettingsRepositoryImpl(get())
@@ -93,6 +95,16 @@ val dataModule = module {
         )
     }
     single { PdfMerger(get()) }
+    single {
+        PdfTextIndexLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
+    single {
+        ViewerTabStateLocalDataSource(
+            get<android.content.Context>()
+        )
+    }
     single<QuizService> { QuizServiceImpl(get()) }
     single<RektKnowledgeTracer> {
         OnnxRektKnowledgeTracer(

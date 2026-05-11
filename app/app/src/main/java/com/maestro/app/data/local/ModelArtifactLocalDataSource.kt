@@ -12,6 +12,7 @@ enum class ModelArtifactType(
     val fileName: String,
     val label: String
 ) {
+    MIKT_ONNX("mikt_model.onnx", "MIKT ONNX"),
     KT_ONNX("kt_model.onnx", "KT ONNX"),
     CONCEPT_ONNX("concept_model.onnx", "Engineering Mechanics Concept ONNX")
 }

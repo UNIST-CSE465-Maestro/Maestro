@@ -23,6 +23,7 @@ val appModule = module {
             studyEvents = get(),
             quizResponses = get(),
             monitoringLogs = get(),
+            pdfTextIndex = get(),
             extractionProgressStore = get(),
             appContext = get(),
             pdfId = params.get<String>(),

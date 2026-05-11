@@ -3,6 +3,7 @@ package com.maestro.app.ui.components
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
@@ -31,21 +33,27 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -55,6 +63,7 @@ import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
+import com.maestro.app.domain.model.PdfSearchMatch
 import com.maestro.app.domain.model.StrokePoint
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
@@ -66,6 +75,7 @@ import com.maestro.app.ui.theme.MaestroSurfaceContainerLow
 import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * Serializable data classes for clipboard stroke JSON
@@ -89,18 +99,58 @@ private val clipboardJson = Json {
     ignoreUnknownKeys = true
 }
 
+private val SearchHighlightFill = Color(0xFFFFD54F)
+    .copy(alpha = 0.42f)
+private val SearchHighlightStroke = Color(0xFFFFA000)
+    .copy(alpha = 0.72f)
+private val ActiveSearchHighlightFill = Color(0xFFFFF176)
+    .copy(alpha = 0.68f)
+private val ActiveSearchHighlightStroke = MaestroPrimary
+    .copy(alpha = 0.88f)
+
 @Composable
 fun CanvasSection(
     pdfUri: Uri?,
     pageCount: Int,
     drawingState: DrawingState,
     modifier: Modifier = Modifier,
+    viewportKey: Any? = pdfUri,
+    initialFirstVisiblePageIndex: Int = 0,
+    initialFirstVisiblePageScrollOffset: Int = 0,
+    searchMatches: List<PdfSearchMatch> = emptyList(),
+    activeSearchMatch: PdfSearchMatch? = null,
+    searchNavigationRequest: Int = 0,
+    onScrollPositionChanged: (pageIndex: Int, scrollOffset: Int) -> Unit = { _, _ -> },
     onCropLlm: ((CropCapturePayload) -> Unit)? = null,
     onCropQuiz: ((CropCapturePayload) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val listState = remember(viewportKey) {
+        LazyListState(
+            initialFirstVisiblePageIndex
+                .coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
+            initialFirstVisiblePageScrollOffset.coerceAtLeast(0)
+        )
+    }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
+
+    LaunchedEffect(listState, pageCount) {
+        snapshotFlow {
+            listState.firstVisibleItemIndex to
+                listState.firstVisibleItemScrollOffset
+        }.distinctUntilChanged()
+            .collect { (pageIndex, scrollOffset) ->
+                val safePageIndex = pageIndex
+                    .coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                drawingState.activePageIndex = safePageIndex
+                onScrollPositionChanged(
+                    safePageIndex,
+                    scrollOffset.coerceAtLeast(0)
+                )
+            }
+    }
 
     // Paste popup state
     var showPasteMenu by remember { mutableStateOf(false) }
@@ -120,6 +170,7 @@ fun CanvasSection(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    focusManager.clearFocus(force = true)
                     do {
                         val event = awaitPointerEvent()
                         val blocked =
@@ -222,8 +273,71 @@ fun CanvasSection(
             ) {
                 val viewHeight = maxHeight
                 val viewWidth = maxWidth
+                LaunchedEffect(
+                    searchNavigationRequest,
+                    activeSearchMatch,
+                    pdfUri,
+                    pageCount,
+                    viewWidth,
+                    viewHeight
+                ) {
+                    val match = activeSearchMatch
+                        ?: return@LaunchedEffect
+                    if (pdfUri == null || pageCount <= 0) {
+                        return@LaunchedEffect
+                    }
+                    val pageIndex = match.pageIndex
+                        .coerceIn(0, pageCount - 1)
+                    val aspectRatio = readPageAspectRatio(
+                        context,
+                        pdfUri,
+                        pageIndex
+                    )
+                    val viewWidthPx = with(density) {
+                        viewWidth.toPx()
+                    }
+                    val viewHeightPx = with(density) {
+                        viewHeight.toPx()
+                    }
+                    val defaultPadPx = with(density) {
+                        UxConfig.Canvas.PAGE_DEFAULT_HORIZONTAL_PADDING
+                            .toPx()
+                    }
+                    val minPadPx = with(density) {
+                        UxConfig.Canvas.PAGE_MIN_HORIZONTAL_PADDING
+                            .toPx()
+                    }
+                    val pageHeightAtFullWidth =
+                        viewWidthPx / aspectRatio
+                    val horizontalPadPx = if (
+                        pageHeightAtFullWidth >= viewHeightPx
+                    ) {
+                        ((viewWidthPx - viewHeightPx * aspectRatio) / 2f)
+                            .coerceAtLeast(minPadPx)
+                    } else {
+                        defaultPadPx
+                    }
+                    val pageWidthPx = (viewWidthPx -
+                        horizontalPadPx * 2f)
+                        .coerceAtLeast(1f)
+                    val pageHeightPx = pageWidthPx / aspectRatio
+                    val matchCenterY =
+                        ((match.top + match.bottom) / 2f) /
+                            match.pageHeight.coerceAtLeast(1f) *
+                            pageHeightPx
+                    val scrollOffset = (matchCenterY -
+                        viewHeightPx * 0.32f)
+                        .coerceAtLeast(0f)
+                        .toInt()
+                    drawingState.activePageIndex = pageIndex
+                    listState.animateScrollToItem(
+                        index = pageIndex,
+                        scrollOffset = scrollOffset
+                    )
+                }
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer(
@@ -314,6 +428,21 @@ fun CanvasSection(
                                 modifier =
                                 Modifier.fillMaxWidth()
                             )
+                            val pageSearchMatches =
+                                searchMatches.filter {
+                                    it.pageIndex == pageIndex
+                                }
+                            if (pageSearchMatches.isNotEmpty()) {
+                                SearchHighlightOverlay(
+                                    matches = pageSearchMatches,
+                                    activeMatch = activeSearchMatch
+                                        ?.takeIf {
+                                            it.pageIndex == pageIndex
+                                        },
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                )
+                            }
                             StylusDrawingCanvas(
                                 state = drawingState,
                                 pageIndex = pageIndex,
@@ -417,6 +546,66 @@ fun CanvasSection(
             )
         }
     }
+}
+
+@Composable
+private fun SearchHighlightOverlay(
+    matches: List<PdfSearchMatch>,
+    activeMatch: PdfSearchMatch? = null,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        matches.forEach { match ->
+            if (match != activeMatch) {
+                drawSearchHighlight(
+                    match = match,
+                    fill = SearchHighlightFill,
+                    stroke = SearchHighlightStroke,
+                    strokeWidth = 1.2.dp.toPx()
+                )
+            }
+        }
+        activeMatch?.let { match ->
+            drawSearchHighlight(
+                match = match,
+                fill = ActiveSearchHighlightFill,
+                stroke = ActiveSearchHighlightStroke,
+                strokeWidth = 2.dp.toPx()
+            )
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSearchHighlight(
+    match: PdfSearchMatch,
+    fill: Color,
+    stroke: Color,
+    strokeWidth: Float
+) {
+            val scaleX = size.width /
+                match.pageWidth.coerceAtLeast(1f)
+            val scaleY = size.height /
+                match.pageHeight.coerceAtLeast(1f)
+            val left = match.left * scaleX
+            val top = match.top * scaleY
+            val right = match.right * scaleX
+            val bottom = match.bottom * scaleY
+            val width = (right - left).coerceAtLeast(4f)
+            val height = (bottom - top).coerceAtLeast(8f)
+            val corner = 3.dp.toPx()
+            drawRoundRect(
+                color = fill,
+                topLeft = Offset(left, top),
+                size = Size(width, height),
+                cornerRadius = CornerRadius(corner, corner)
+            )
+            drawRoundRect(
+                color = stroke,
+                topLeft = Offset(left, top),
+                size = Size(width, height),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = strokeWidth)
+            )
 }
 
 /**
@@ -549,44 +738,50 @@ private fun PageActionMenu(
 @Composable
 private fun getPageAspectRatioSync(context: Context, uri: Uri, pageIndex: Int): Float {
     return remember(uri, pageIndex) {
-        try {
-            val fd = if (uri.scheme == "file") {
-                val file = java.io.File(
-                    uri.path
-                        ?: return@remember
-                        1f / 1.414f
-                )
-                if (!file.exists()) {
-                    return@remember 1f / 1.414f
-                }
-                android.os.ParcelFileDescriptor.open(
-                    file,
-                    android.os.ParcelFileDescriptor
-                        .MODE_READ_ONLY
-                )
-            } else {
-                context.contentResolver
-                    .openFileDescriptor(uri, "r")
-                    ?: return@remember 1f / 1.414f
+        readPageAspectRatio(context, uri, pageIndex)
+    }
+}
+
+private fun readPageAspectRatio(
+    context: Context,
+    uri: Uri,
+    pageIndex: Int
+): Float {
+    return try {
+        val fd = if (uri.scheme == "file") {
+            val file = java.io.File(
+                uri.path ?: return 1f / 1.414f
+            )
+            if (!file.exists()) {
+                return 1f / 1.414f
             }
-            val renderer =
-                android.graphics.pdf.PdfRenderer(fd)
-            if (pageIndex >= renderer.pageCount) {
-                renderer.close()
-                fd.close()
-                return@remember 1f / 1.414f
-            }
-            val page = renderer.openPage(pageIndex)
-            val r =
-                page.width.toFloat() /
-                    page.height.toFloat()
-            page.close()
+            android.os.ParcelFileDescriptor.open(
+                file,
+                android.os.ParcelFileDescriptor
+                    .MODE_READ_ONLY
+            )
+        } else {
+            context.contentResolver
+                .openFileDescriptor(uri, "r")
+                ?: return 1f / 1.414f
+        }
+        val renderer =
+            android.graphics.pdf.PdfRenderer(fd)
+        if (pageIndex >= renderer.pageCount) {
             renderer.close()
             fd.close()
-            r
-        } catch (_: Throwable) {
-            1f / 1.414f
+            return 1f / 1.414f
         }
+        val page = renderer.openPage(pageIndex)
+        val r =
+            page.width.toFloat() /
+                page.height.toFloat()
+        page.close()
+        renderer.close()
+        fd.close()
+        r
+    } catch (_: Throwable) {
+        1f / 1.414f
     }
 }
 

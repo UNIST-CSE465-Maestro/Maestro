@@ -4,9 +4,19 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -14,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
@@ -26,9 +37,15 @@ import com.maestro.app.ui.components.StudySidebarMode
 import com.maestro.app.ui.components.TopAppBarSection
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroBackground
+import com.maestro.app.ui.theme.MaestroOnSurface
+import com.maestro.app.ui.theme.MaestroOnSurfaceVariant
+import com.maestro.app.ui.theme.MaestroOutline
 import com.maestro.app.ui.theme.MaestroPrimary
+import com.maestro.app.ui.theme.MaestroSurfaceContainer
 import com.maestro.app.ui.theme.MaestroSurfaceContainerHigh
 import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
+import com.maestro.app.ui.theme.Slate100
+import com.maestro.app.ui.theme.Slate200
 import com.maestro.app.ui.theme.Slate500
 
 enum class LlmConnectionState {
@@ -44,6 +61,14 @@ fun ViewerScreen(
     quizService: QuizService,
     settingsRepository: SettingsRepository,
     conversationDataSource: ConversationLocalDataSource,
+    openTabs: List<OpenPdfTab> = emptyList(),
+    activeTabId: String = viewModel.pdfId,
+    initialFirstVisiblePageIndex: Int = 0,
+    initialFirstVisiblePageScrollOffset: Int = 0,
+    onSelectTab: (OpenPdfTab) -> Unit = {},
+    onCloseTab: (OpenPdfTab) -> Unit = {},
+    onOpenNewTab: () -> Unit = {},
+    onScrollPositionChanged: (pageIndex: Int, scrollOffset: Int) -> Unit = { _, _ -> },
     onBack: () -> Unit
 ) {
     val drawingState = viewModel.drawingState
@@ -61,6 +86,10 @@ fun ViewerScreen(
         .documentContent.collectAsState()
     val documentJsonContent by viewModel
         .documentJsonContent.collectAsState()
+    val searchQuery by viewModel
+        .searchQuery.collectAsState()
+    val searchMatches by viewModel
+        .searchMatches.collectAsState()
     val quizMastery by viewModel
         .quizMastery.collectAsState()
     val quizHistory by viewModel
@@ -77,6 +106,51 @@ fun ViewerScreen(
     }
     var llmConnectionError by remember {
         mutableStateOf<String?>(null)
+    }
+    var activeSearchMatchIndex by remember {
+        mutableIntStateOf(-1)
+    }
+    var searchNavigationRequest by remember {
+        mutableIntStateOf(0)
+    }
+
+    LaunchedEffect(searchQuery, searchMatches) {
+        if (searchQuery.isBlank() || searchMatches.isEmpty()) {
+            activeSearchMatchIndex = -1
+        } else {
+            activeSearchMatchIndex = 0
+            searchNavigationRequest++
+        }
+    }
+
+    fun goToNextSearchMatch() {
+        if (searchQuery.isBlank() || searchMatches.isEmpty()) {
+            return
+        }
+        activeSearchMatchIndex =
+            if (activeSearchMatchIndex < 0) {
+                0
+            } else {
+                (activeSearchMatchIndex + 1) %
+                    searchMatches.size
+            }
+        searchNavigationRequest++
+    }
+
+    fun goToPreviousSearchMatch() {
+        if (searchQuery.isBlank() || searchMatches.isEmpty()) {
+            return
+        }
+        activeSearchMatchIndex =
+            if (activeSearchMatchIndex < 0) {
+                searchMatches.lastIndex
+            } else {
+                (
+                    activeSearchMatchIndex - 1 +
+                        searchMatches.size
+                    ) % searchMatches.size
+            }
+        searchNavigationRequest++
     }
 
     // Warm up the provider connection without loading/probing all models.
@@ -226,6 +300,19 @@ fun ViewerScreen(
             onInsertImage = {
                 imagePicker.launch("image/*")
             },
+            searchQuery = searchQuery,
+            searchResultCount = searchMatches.size,
+            activeSearchResultIndex =
+            activeSearchMatchIndex,
+            onSearchQueryChange = {
+                viewModel.setSearchQuery(it)
+            },
+            onSearchPrevious = {
+                goToPreviousSearchMatch()
+            },
+            onSearchNext = {
+                goToNextSearchMatch()
+            },
             onQuiz = {
                 viewModel.extractAndQuiz()
             },
@@ -234,6 +321,16 @@ fun ViewerScreen(
             }
         )
 
+        if (openTabs.size > 1) {
+            PdfViewerTabStrip(
+                tabs = openTabs,
+                activeTabId = activeTabId,
+                onSelectTab = onSelectTab,
+                onCloseTab = onCloseTab,
+                onOpenNewTab = onOpenNewTab
+            )
+        }
+
         Row(modifier = Modifier.weight(1f)) {
             Box(modifier = Modifier.weight(1f)) {
                 CanvasSection(
@@ -241,6 +338,18 @@ fun ViewerScreen(
                     pageCount = safePageCount,
                     drawingState = drawingState,
                     modifier = Modifier.fillMaxSize(),
+                    viewportKey = activeTabId,
+                    initialFirstVisiblePageIndex =
+                    initialFirstVisiblePageIndex,
+                    initialFirstVisiblePageScrollOffset =
+                    initialFirstVisiblePageScrollOffset,
+                    searchMatches = searchMatches,
+                    activeSearchMatch = searchMatches
+                        .getOrNull(activeSearchMatchIndex),
+                    searchNavigationRequest =
+                    searchNavigationRequest,
+                    onScrollPositionChanged =
+                    onScrollPositionChanged,
                     onCropLlm = { payload ->
                         viewModel.sendSelectionToLlm(
                             payload.imageBytes,
@@ -334,6 +443,136 @@ fun ViewerScreen(
                 onPendingQuizCropConsumed = {
                     viewModel.consumePendingQuizCrop()
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfViewerTabStrip(
+    tabs: List<OpenPdfTab>,
+    activeTabId: String,
+    onSelectTab: (OpenPdfTab) -> Unit,
+    onCloseTab: (OpenPdfTab) -> Unit,
+    onOpenNewTab: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .background(Slate100)
+            .border(1.dp, Slate200),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            items(
+                items = tabs,
+                key = { it.documentId }
+            ) { tab ->
+                PdfViewerTab(
+                    tab = tab,
+                    selected = tab.documentId == activeTabId,
+                    onSelect = {
+                        onSelectTab(tab)
+                    },
+                    onClose = {
+                        onCloseTab(tab)
+                    }
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onOpenNewTab,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "새 PDF 탭 열기",
+                tint = MaestroPrimary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(Modifier.width(4.dp))
+    }
+}
+
+@Composable
+private fun PdfViewerTab(
+    tab: OpenPdfTab,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit
+) {
+    val background = if (selected) {
+        MaestroSurfaceContainerLowest
+    } else {
+        MaestroSurfaceContainer
+    }
+    val border = if (selected) {
+        MaestroPrimary
+    } else {
+        Slate200
+    }
+    Row(
+        modifier = Modifier
+            .widthIn(min = 148.dp, max = 238.dp)
+            .height(32.dp)
+            .background(
+                color = background,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = border,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .clickable(onClick = onSelect)
+            .padding(start = 9.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Description,
+            contentDescription = null,
+            tint = if (selected) {
+                MaestroPrimary
+            } else {
+                MaestroOutline
+            },
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            tab.title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 12.sp,
+            fontWeight = if (selected) {
+                FontWeight.SemiBold
+            } else {
+                FontWeight.Medium
+            },
+            color = if (selected) {
+                MaestroOnSurface
+            } else {
+                MaestroOnSurfaceVariant
+            }
+        )
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(26.dp)
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "탭 닫기",
+                tint = Slate500,
+                modifier = Modifier.size(15.dp)
             )
         }
     }

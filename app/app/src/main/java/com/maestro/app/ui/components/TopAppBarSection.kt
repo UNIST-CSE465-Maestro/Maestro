@@ -3,8 +3,11 @@ package com.maestro.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -16,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,9 +39,18 @@ fun TopAppBarSection(
     onTogglePin: () -> Unit = {},
     onToggleBookmark: () -> Unit = {},
     onInsertImage: () -> Unit = {},
+    searchQuery: String = "",
+    searchResultCount: Int = 0,
+    activeSearchResultIndex: Int = -1,
+    onSearchQueryChange: (String) -> Unit = {},
+    onSearchPrevious: () -> Unit = {},
+    onSearchNext: () -> Unit = {},
     onQuiz: () -> Unit = {},
     onToggleSidebar: () -> Unit = {}
 ) {
+    val canNavigateSearch =
+        searchQuery.isNotBlank() && searchResultCount > 0
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -161,44 +175,111 @@ fun TopAppBarSection(
 
         Spacer(Modifier.width(4.dp))
 
-        Box(
+        Row(
             modifier = Modifier.weight(0.5f),
-            contentAlignment = Alignment.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
-                value = "",
-                onValueChange = {},
-                placeholder = {
-                    Text(
-                        "검색",
-                        fontSize = 11.sp,
-                        color = MaestroOnSurfaceVariant.copy(
-                            alpha = UxConfig.TopBar.SEARCH_PLACEHOLDER_ALPHA
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(UxConfig.TopBar.SEARCH_FIELD_HEIGHT)
+                    .background(
+                        color = MaestroSurfaceContainerHigh,
+                        shape = RoundedCornerShape(
+                            UxConfig.TopBar.SEARCH_FIELD_CORNER
                         )
                     )
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "검색",
-                        tint = MaestroOutline,
-                        modifier = Modifier.size(UxConfig.TopBar.SEARCH_ICON_SIZE)
-                    )
-                },
-                singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    fontSize = 11.sp
-                ),
-                colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor =
-                    MaestroSurfaceContainerHigh,
-                    focusedContainerColor =
-                    MaestroSurfaceContainer,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent
-                ),
-                shape = RoundedCornerShape(UxConfig.TopBar.SEARCH_FIELD_CORNER),
-                modifier = Modifier.fillMaxWidth().height(UxConfig.TopBar.SEARCH_FIELD_HEIGHT)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = "검색",
+                    tint = MaestroOutline,
+                    modifier = Modifier.size(UxConfig.TopBar.SEARCH_ICON_SIZE)
+                )
+                Spacer(Modifier.width(10.dp))
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 14.sp,
+                        color = MaestroOnSurface,
+                        lineHeight = 18.sp
+                    ),
+                    cursorBrush = SolidColor(MaestroPrimary),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (searchQuery.isBlank()) {
+                                Text(
+                                    "검색",
+                                    fontSize = 14.sp,
+                                    lineHeight = 18.sp,
+                                    color = MaestroOnSurfaceVariant.copy(
+                                        alpha =
+                                        UxConfig.TopBar.SEARCH_PLACEHOLDER_ALPHA
+                                    )
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+                if (searchQuery.isNotBlank()) {
+                    IconButton(
+                        onClick = {
+                            onSearchQueryChange("")
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "검색어 지우기",
+                            tint = MaestroOutline,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(6.dp))
+            SearchMoveButton(
+                enabled = canNavigateSearch,
+                onClick = onSearchPrevious,
+                direction = SearchMoveDirection.Previous
+            )
+            Spacer(Modifier.width(2.dp))
+            Box(
+                modifier = Modifier
+                    .width(38.dp)
+                    .height(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (canNavigateSearch) {
+                        "${activeSearchResultIndex + 1}/$searchResultCount"
+                    } else {
+                        "0/0"
+                    },
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (canNavigateSearch) {
+                        MaestroOnSurfaceVariant
+                    } else {
+                        MaestroOutline
+                    }
+                )
+            }
+            SearchMoveButton(
+                enabled = canNavigateSearch,
+                onClick = onSearchNext,
+                direction = SearchMoveDirection.Next
             )
         }
 
@@ -252,5 +333,51 @@ fun TopAppBarSection(
                 tint = MaestroPrimary
             )
         }
+    }
+}
+
+private enum class SearchMoveDirection {
+    Previous,
+    Next
+}
+
+@Composable
+private fun SearchMoveButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    direction: SearchMoveDirection
+) {
+    IconButton(
+        enabled = enabled,
+        onClick = onClick,
+        modifier = Modifier.size(32.dp),
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = if (enabled) {
+                MaestroSurfaceContainerLowest
+            } else {
+                MaestroSurfaceContainerHigh
+            },
+            contentColor = if (enabled) {
+                MaestroPrimary
+            } else {
+                MaestroOutline
+            },
+            disabledContainerColor = MaestroSurfaceContainerHigh,
+            disabledContentColor = MaestroOutline
+        )
+    ) {
+        Icon(
+            imageVector = if (direction == SearchMoveDirection.Previous) {
+                Icons.AutoMirrored.Filled.KeyboardArrowLeft
+            } else {
+                Icons.AutoMirrored.Filled.KeyboardArrowRight
+            },
+            contentDescription = if (direction == SearchMoveDirection.Previous) {
+                "이전 검색 결과"
+            } else {
+                "다음 검색 결과"
+            },
+            modifier = Modifier.size(21.dp)
+        )
     }
 }

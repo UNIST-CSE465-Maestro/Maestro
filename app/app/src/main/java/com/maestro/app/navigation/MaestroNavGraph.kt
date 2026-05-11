@@ -30,7 +30,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.PersistedPdfTab
+import com.maestro.app.data.local.PersistedViewerTabState
+import com.maestro.app.data.local.ViewerTabStateLocalDataSource
 import com.maestro.app.data.remote.MaestroServerApi
+import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
@@ -44,21 +48,44 @@ import com.maestro.app.ui.settings.SettingsScreen
 import com.maestro.app.ui.settings.SettingsViewModel
 import com.maestro.app.ui.theme.MaestroBackground
 import com.maestro.app.ui.theme.MaestroPrimary
+import com.maestro.app.ui.viewer.OpenPdfTab
+import com.maestro.app.ui.viewer.PdfTabViewportState
 import com.maestro.app.ui.viewer.ViewerScreen
 import com.maestro.app.ui.viewer.ViewerViewModel
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
+@OptIn(FlowPreview::class)
 @Composable
 fun MaestroNavGraph() {
     val navController = rememberNavController()
     val activity = LocalContext.current as? Activity
     var showExitDialog by remember { mutableStateOf(false) }
+    val openPdfTabs = remember {
+        mutableStateListOf<OpenPdfTab>()
+    }
+    val pdfTabViewports = remember {
+        mutableStateMapOf<String, PdfTabViewportState>()
+    }
+    var activePdfTabId by remember {
+        mutableStateOf<String?>(null)
+    }
+    var tabsRestored by remember {
+        mutableStateOf(false)
+    }
 
     val settingsRepository: SettingsRepository =
+        koinInject()
+    val documentRepository: DocumentRepository =
+        koinInject()
+    val viewerTabStore: ViewerTabStateLocalDataSource =
         koinInject()
     val serverApi: MaestroServerApi = koinInject()
 
@@ -77,7 +104,49 @@ fun MaestroNavGraph() {
         // Determine start destination
         val token =
             settingsRepository.getAccessToken().first()
-        startDest = if (!token.isNullOrBlank()) {
+        val authenticated = !token.isNullOrBlank()
+        if (authenticated) {
+            val savedState = viewerTabStore.load()
+            val docsById = documentRepository
+                .loadDocuments()
+                .associateBy { it.id }
+            pdfTabViewports.clear()
+            val restoredTabs = savedState.tabs
+                .mapNotNull { tab ->
+                    docsById[tab.documentId]?.let { doc ->
+                        pdfTabViewports[doc.id] =
+                            PdfTabViewportState(
+                                firstVisiblePageIndex =
+                                tab.firstVisiblePageIndex
+                                    .coerceIn(
+                                        0,
+                                        (doc.pageCount - 1)
+                                            .coerceAtLeast(0)
+                                    ),
+                                firstVisiblePageScrollOffset =
+                                tab.firstVisiblePageScrollOffset
+                                    .coerceAtLeast(0)
+                            )
+                        OpenPdfTab(
+                            documentId = doc.id,
+                            title = doc.displayName,
+                            pageCount = doc.pageCount,
+                            uriString = doc.uriString
+                        )
+                    }
+                }
+            openPdfTabs.clear()
+            openPdfTabs.addAll(restoredTabs)
+            activePdfTabId = savedState.activeDocumentId
+                ?.takeIf { id ->
+                    restoredTabs.any {
+                        it.documentId == id
+                    }
+                }
+                ?: restoredTabs.firstOrNull()?.documentId
+        }
+        tabsRestored = true
+        startDest = if (authenticated) {
             Screen.Home.route
         } else {
             Screen.Auth.route
@@ -95,6 +164,44 @@ fun MaestroNavGraph() {
         if (resp == null || !resp.isSuccessful) {
             serverError =
                 "서버에 연결할 수 없습니다"
+        }
+    }
+
+    LaunchedEffect(tabsRestored) {
+        if (!tabsRestored) return@LaunchedEffect
+        snapshotFlow {
+            Triple(
+                openPdfTabs.toList(),
+                activePdfTabId,
+                pdfTabViewports.toMap()
+            )
+        }.distinctUntilChanged()
+            .debounce(400L)
+            .collect { (tabs, activeId, viewports) ->
+            viewerTabStore.save(
+                PersistedViewerTabState(
+                    tabs = tabs.map { tab ->
+                        val viewport = viewports[tab.documentId]
+                            ?: PdfTabViewportState()
+                        PersistedPdfTab(
+                            documentId = tab.documentId,
+                            title = tab.title,
+                            pageCount = tab.pageCount,
+                            uriString = tab.uriString,
+                            firstVisiblePageIndex =
+                            viewport.firstVisiblePageIndex,
+                            firstVisiblePageScrollOffset =
+                            viewport.firstVisiblePageScrollOffset
+                        )
+                    },
+                    activeDocumentId = activeId
+                        ?.takeIf { id ->
+                            tabs.any {
+                                it.documentId == id
+                            }
+                        }
+                )
+            )
         }
     }
 
@@ -178,6 +285,93 @@ fun MaestroNavGraph() {
         )
     }
 
+    fun viewerRouteFor(tab: OpenPdfTab): String {
+        return Screen.Viewer.createRoute(
+            tab.documentId,
+            tab.pageCount,
+            Uri.encode(tab.uriString)
+        )
+    }
+
+    fun openPdfTab(tab: OpenPdfTab) {
+        val existingIndex = openPdfTabs.indexOfFirst {
+            it.documentId == tab.documentId
+        }
+        if (existingIndex >= 0) {
+            openPdfTabs[existingIndex] = tab
+        } else {
+            openPdfTabs += tab
+        }
+        if (pdfTabViewports[tab.documentId] == null) {
+            pdfTabViewports[tab.documentId] =
+                PdfTabViewportState()
+        }
+        activePdfTabId = tab.documentId
+        navController.navigate(viewerRouteFor(tab)) {
+            launchSingleTop = true
+        }
+    }
+
+    fun selectPdfTab(tab: OpenPdfTab) {
+        activePdfTabId = tab.documentId
+    }
+
+    fun closePdfTab(documentId: String) {
+        val closingIndex = openPdfTabs.indexOfFirst {
+            it.documentId == documentId
+        }
+        if (closingIndex < 0) return
+        val wasActive = activePdfTabId == documentId
+        openPdfTabs.removeAt(closingIndex)
+        pdfTabViewports.remove(documentId)
+        if (!wasActive) return
+        val nextTab = openPdfTabs.getOrNull(
+            closingIndex.coerceAtMost(
+                openPdfTabs.lastIndex
+            )
+        )
+        activePdfTabId = nextTab?.documentId
+        if (nextTab == null) {
+            navController.navigate(Screen.Home.route) {
+                popUpTo(Screen.Home.route) {
+                    inclusive = false
+                }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    fun updatePdfTabViewport(
+        documentId: String,
+        pageIndex: Int,
+        scrollOffset: Int
+    ) {
+        val tab = openPdfTabs.find {
+            it.documentId == documentId
+        } ?: return
+        val normalizedPageIndex = pageIndex.coerceIn(
+            0,
+            (tab.pageCount - 1).coerceAtLeast(0)
+        )
+        val normalizedScrollOffset =
+            (scrollOffset.coerceAtLeast(0) / 24) * 24
+        val current = pdfTabViewports[documentId]
+        if (
+            current?.firstVisiblePageIndex ==
+            normalizedPageIndex &&
+            current.firstVisiblePageScrollOffset ==
+            normalizedScrollOffset
+        ) {
+            return
+        }
+        pdfTabViewports[documentId] =
+            PdfTabViewportState(
+                firstVisiblePageIndex = normalizedPageIndex,
+                firstVisiblePageScrollOffset =
+                normalizedScrollOffset
+            )
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDest!!
@@ -223,13 +417,12 @@ fun MaestroNavGraph() {
             HomeScreen(
                 viewModel = viewModel,
                 onOpenPdf = { doc ->
-                    val encoded =
-                        Uri.encode(doc.uriString)
-                    navController.navigate(
-                        Screen.Viewer.createRoute(
-                            doc.id,
-                            doc.pageCount,
-                            encoded
+                    openPdfTab(
+                        OpenPdfTab(
+                            documentId = doc.id,
+                            title = doc.displayName,
+                            pageCount = doc.pageCount,
+                            uriString = doc.uriString
                         )
                     )
                 },
@@ -270,13 +463,47 @@ fun MaestroNavGraph() {
                 ?: return@composable
             val pdfUri =
                 Uri.parse(Uri.decode(uriEncoded))
+            LaunchedEffect(pdfId, pageCount, pdfUri) {
+                if (openPdfTabs.none {
+                        it.documentId == pdfId
+                    }
+                ) {
+                    openPdfTabs += OpenPdfTab(
+                        documentId = pdfId,
+                        title = "PDF",
+                        pageCount = pageCount,
+                        uriString = pdfUri.toString()
+                    )
+                }
+                if (pdfTabViewports[pdfId] == null) {
+                    pdfTabViewports[pdfId] =
+                        PdfTabViewportState()
+                }
+                activePdfTabId = pdfId
+            }
+
+            val routeTab = OpenPdfTab(
+                documentId = pdfId,
+                title = "PDF",
+                pageCount = pageCount,
+                uriString = pdfUri.toString()
+            )
+            val activeTab = openPdfTabs.find {
+                it.documentId == activePdfTabId
+            } ?: routeTab
+            val activeViewport =
+                pdfTabViewports[activeTab.documentId]
+                    ?: PdfTabViewportState()
+            val activePdfUri = Uri.parse(activeTab.uriString)
 
             val viewModel: ViewerViewModel =
-                koinViewModel {
+                koinViewModel(
+                    key = "viewer-${activeTab.documentId}"
+                ) {
                     parametersOf(
-                        pdfId,
-                        pageCount,
-                        pdfUri
+                        activeTab.documentId,
+                        activeTab.pageCount,
+                        activePdfUri
                     )
                 }
             val llmService: LlmService =
@@ -300,6 +527,30 @@ fun MaestroNavGraph() {
                 settingsRepository = settingsRepo,
                 conversationDataSource =
                 convDataSource,
+                openTabs = openPdfTabs,
+                activeTabId = activeTab.documentId,
+                initialFirstVisiblePageIndex =
+                activeViewport.firstVisiblePageIndex,
+                initialFirstVisiblePageScrollOffset =
+                activeViewport.firstVisiblePageScrollOffset,
+                onSelectTab = { tab ->
+                    selectPdfTab(tab)
+                },
+                onCloseTab = { tab ->
+                    closePdfTab(tab.documentId)
+                },
+                onOpenNewTab = {
+                    navController.navigate(Screen.Home.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onScrollPositionChanged = { pageIndex, scrollOffset ->
+                    updatePdfTabViewport(
+                        activeTab.documentId,
+                        pageIndex,
+                        scrollOffset
+                    )
+                },
                 onBack = {
                     navController.popBackStack()
                 }
@@ -347,4 +598,5 @@ fun MaestroNavGraph() {
             )
         }
     }
+
 }
