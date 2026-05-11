@@ -55,8 +55,12 @@ fun ViewerScreen(
         .pendingLlmImage.collectAsState()
     val pendingPrompt by viewModel
         .pendingLlmPrompt.collectAsState()
+    val pendingQuizCrop by viewModel
+        .pendingQuizCrop.collectAsState()
     val documentContent by viewModel
         .documentContent.collectAsState()
+    val documentJsonContent by viewModel
+        .documentJsonContent.collectAsState()
     val quizMastery by viewModel
         .quizMastery.collectAsState()
     val quizHistory by viewModel
@@ -237,11 +241,14 @@ fun ViewerScreen(
                     pageCount = safePageCount,
                     drawingState = drawingState,
                     modifier = Modifier.fillMaxSize(),
-                    onCropLlm = { imageBytes ->
+                    onCropLlm = { payload ->
                         viewModel.sendSelectionToLlm(
-                            imageBytes,
+                            payload.imageBytes,
                             "이 영역에 대해 설명해주세요"
                         )
+                    },
+                    onCropQuiz = { payload ->
+                        viewModel.sendSelectionToQuiz(payload)
                     }
                 )
                 extractionProgress?.let { progress ->
@@ -261,6 +268,7 @@ fun ViewerScreen(
                 settingsRepository = settingsRepository,
                 conversationDataSource = conversationDataSource,
                 documentContent = documentContent,
+                documentJsonContent = documentJsonContent,
                 documentId = viewModel.pdfId,
                 pageIndex = drawingState.activePageIndex
                     .coerceAtLeast(0),
@@ -272,6 +280,7 @@ fun ViewerScreen(
                 },
                 pendingImage = pendingImage,
                 pendingPrompt = pendingPrompt,
+                pendingQuizCrop = pendingQuizCrop,
                 llmConnectionState = llmConnectionState,
                 llmConnectionError = llmConnectionError,
                 onRetryConnection = {
@@ -299,6 +308,7 @@ fun ViewerScreen(
                         selectedAnswer,
                         correctAnswer,
                         explanation,
+                        choiceExplanations,
                         sourceSentence
                     ->
                     viewModel.recordQuizAnswered(
@@ -311,6 +321,7 @@ fun ViewerScreen(
                         selectedAnswer = selectedAnswer,
                         correctAnswer = correctAnswer,
                         explanation = explanation,
+                        choiceExplanations = choiceExplanations,
                         sourceSentence = sourceSentence
                     )
                 },
@@ -319,6 +330,9 @@ fun ViewerScreen(
                 },
                 onPendingConsumed = {
                     viewModel.consumePendingLlm()
+                },
+                onPendingQuizCropConsumed = {
+                    viewModel.consumePendingQuizCrop()
                 }
             )
         }

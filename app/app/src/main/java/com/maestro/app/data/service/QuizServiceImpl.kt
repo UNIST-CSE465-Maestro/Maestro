@@ -64,8 +64,12 @@ class QuizServiceImpl(
         request: QuizGenerationRequest,
         bloom: BloomLevel
     ): String {
+        val sourceLabel = request.sourceLabel
+            ?.takeIf { it.isNotBlank() }
+            ?.let { " ($it)" }
+            .orEmpty()
         return """
-            ## 학습 자료
+            ## 학습 자료$sourceLabel
             ${request.documentContent.take(MAX_CONTEXT_CHARS)}
 
             ## 학생 정보
@@ -84,6 +88,7 @@ class QuizServiceImpl(
             3. 오답 보기는 그럴듯하지만 원문 기반으로 명확히 틀린 것으로 구성하세요.
             4. source_sentence는 원문에서 답의 근거가 되는 문장을 그대로 발췌하세요.
             5. answer는 반드시 A, B, C, D 중 하나여야 합니다.
+            6. choice_explanations에는 A, B, C, D 각각에 대해 정답 보기는 왜 맞는지, 오답 보기는 원문 근거상 왜 틀렸는지 1문장으로 작성하세요.
 
             ## JSON 형식
             {
@@ -96,6 +101,12 @@ class QuizServiceImpl(
               },
               "answer": "B",
               "explanation": "원문에 따르면 ...",
+              "choice_explanations": {
+                "A": "A가 틀린 이유 또는 맞는 이유",
+                "B": "B가 정답인 이유",
+                "C": "C가 틀린 이유",
+                "D": "D가 틀린 이유"
+              },
               "source_sentence": "원문에서 발췌한 근거 문장",
               "bloom_level": ${bloom.level},
               "target_concept": "${request.conceptName}"
@@ -127,6 +138,10 @@ class QuizServiceImpl(
             choices = choices,
             answer = answer,
             explanation = dto.explanation.trim(),
+            choiceExplanations = normalizeChoiceExplanations(
+                dto.choiceExplanations,
+                choices.keys
+            ),
             sourceSentence = dto.sourceSentence.trim(),
             bloomLevel = dto.bloomLevel.takeIf {
                 it in 1..6
@@ -150,12 +165,27 @@ class QuizServiceImpl(
         return withoutFence.substring(start, end + 1)
     }
 
+    private fun normalizeChoiceExplanations(
+        explanations: Map<String, String>,
+        choiceKeys: Set<String>
+    ): Map<String, String> {
+        return choiceKeys.associateWith { key ->
+            explanations[key].orEmpty()
+                .ifBlank {
+                    explanations[key.lowercase()].orEmpty()
+                }
+                .trim()
+        }.filterValues { it.isNotBlank() }
+    }
+
     @Serializable
     private data class LlmQuizQuestionDto(
         val question: String = "",
         val choices: Map<String, String> = emptyMap(),
         val answer: String = "",
         val explanation: String = "",
+        @SerialName("choice_explanations")
+        val choiceExplanations: Map<String, String> = emptyMap(),
         @SerialName("source_sentence")
         val sourceSentence: String = "",
         @SerialName("bloom_level")

@@ -17,6 +17,10 @@ class TokenManager(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
+        if (shouldSkipAuth(original.url.encodedPath)) {
+            return chain.proceed(original)
+        }
+
         val token = runBlocking {
             settingsRepository.getAccessToken()
                 .firstOrNull()
@@ -76,5 +80,12 @@ class TokenManager(
             )
             .build()
         return chain.proceed(retry)
+    }
+
+    private fun shouldSkipAuth(path: String): Boolean {
+        return path == "/api/v1/health" ||
+            path == "/api/v1/auth/login" ||
+            path == "/api/v1/auth/register" ||
+            path == "/api/v1/auth/refresh"
     }
 }

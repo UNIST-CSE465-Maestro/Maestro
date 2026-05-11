@@ -47,6 +47,7 @@ import com.maestro.app.ui.theme.MaestroPrimary
 import com.maestro.app.ui.viewer.ViewerScreen
 import com.maestro.app.ui.viewer.ViewerViewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -73,18 +74,6 @@ fun MaestroNavGraph() {
     }
 
     LaunchedEffect(Unit) {
-        // Silent health check
-        try {
-            val resp = serverApi.health()
-            if (!resp.isSuccessful) {
-                serverError =
-                    "서버에 연결할 수 없습니다"
-            }
-        } catch (_: Exception) {
-            serverError =
-                "서버에 연결할 수 없습니다"
-        }
-
         // Determine start destination
         val token =
             settingsRepository.getAccessToken().first()
@@ -94,6 +83,19 @@ fun MaestroNavGraph() {
             Screen.Auth.route
         }
         healthChecked = true
+
+        // Silent health check must not block local startup.
+        val resp = try {
+            withTimeoutOrNull(3_000L) {
+                serverApi.health()
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (resp == null || !resp.isSuccessful) {
+            serverError =
+                "서버에 연결할 수 없습니다"
+        }
     }
 
     // Server error dialog

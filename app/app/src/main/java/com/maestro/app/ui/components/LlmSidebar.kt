@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -79,11 +81,13 @@ import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.ConversationSummary
 import com.maestro.app.data.local.QuizResponseRecord
+import com.maestro.app.data.local.StructuredContentCropExtractor
 import com.maestro.app.data.model.LlmRequestBuilder
 import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.domain.model.ChatMessage
+import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.EngineeringMechanicsConceptCatalog
 import com.maestro.app.domain.model.GeneratedQuizQuestion
 import com.maestro.app.domain.model.QuizGenerationRequest
@@ -127,6 +131,11 @@ private enum class HistoryPane {
     QUIZ
 }
 
+private data class QuizSourceOverride(
+    val content: String,
+    val label: String
+)
+
 @Composable
 fun LlmSidebar(
     isVisible: Boolean,
@@ -136,6 +145,7 @@ fun LlmSidebar(
     settingsRepository: SettingsRepository,
     conversationDataSource: ConversationLocalDataSource,
     documentContent: String? = null,
+    documentJsonContent: String? = null,
     documentId: String,
     pageIndex: Int = 0,
     quizMastery: Float = 0.35f,
@@ -159,10 +169,13 @@ fun LlmSidebar(
         selectedAnswer: String,
         correctAnswer: String,
         explanation: String,
+        choiceExplanations: Map<String, String>,
         sourceSentence: String
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> },
     onQuizHistoryDeleted: (String) -> Unit = {},
-    onPendingConsumed: () -> Unit = {}
+    onPendingConsumed: () -> Unit = {},
+    pendingQuizCrop: CropCapturePayload? = null,
+    onPendingQuizCropConsumed: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -285,7 +298,12 @@ fun LlmSidebar(
         mutableStateOf<List<ByteArray>>(emptyList())
     }
 
-    val quizContent = documentContent.orEmpty()
+    var quizSourceOverride by remember(documentId) {
+        mutableStateOf<QuizSourceOverride?>(null)
+    }
+    val quizContent = quizSourceOverride?.content
+        ?: documentContent.orEmpty()
+    val quizSourceLabel = quizSourceOverride?.label
     val quizConceptName = remember(quizContent) {
         extractQuizConcept(quizContent)
     }
@@ -320,6 +338,32 @@ fun LlmSidebar(
         mutableStateOf<Long?>(null)
     }
 
+    LaunchedEffect(pendingQuizCrop, documentJsonContent) {
+        val payload = pendingQuizCrop
+            ?: return@LaunchedEffect
+        val selection = StructuredContentCropExtractor.extract(
+            documentJsonContent,
+            payload
+        )
+        currentQuiz = null
+        selectedQuizChoice = null
+        quizAnswered = false
+        quizStartedAt = null
+        quizLoading = false
+        if (selection.content.isBlank()) {
+            quizSourceOverride = null
+            quizError =
+                "선택한 영역에서 추출 가능한 텍스트를 찾지 못했습니다. 텍스트가 포함된 영역을 선택하거나 AI 설명 기능을 사용해 주세요."
+        } else {
+            quizSourceOverride = QuizSourceOverride(
+                content = selection.content,
+                label = selection.label
+            )
+            quizError = null
+        }
+        onPendingQuizCropConsumed()
+    }
+
     fun generateQuizQuestion() {
         if (quizContent.isBlank() ||
             quizLoading ||
@@ -341,7 +385,8 @@ fun LlmSidebar(
                         documentContent = quizContent,
                         conceptName = quizConceptName,
                         mastery = quizMastery,
-                        bloomLevel = selectedBloomLevel
+                        bloomLevel = selectedBloomLevel,
+                        sourceLabel = quizSourceLabel
                     )
                 )
                 quizStartedAt = System.currentTimeMillis()
@@ -628,6 +673,14 @@ fun LlmSidebar(
                 QuizPanel(
                     quizService = quizService,
                     documentContent = quizContent,
+                    sourceLabel = quizSourceLabel,
+                    onClearSource = {
+                        quizSourceOverride = null
+                        currentQuiz = null
+                        selectedQuizChoice = null
+                        quizAnswered = false
+                        quizError = null
+                    },
                     pageIndex = pageIndex,
                     conceptName = quizConceptName,
                     conceptId = quizConceptId,
@@ -666,6 +719,7 @@ fun LlmSidebar(
                                 choice,
                                 current.answer,
                                 current.explanation,
+                                current.choiceExplanations,
                                 current.sourceSentence
                             )
                         }
@@ -929,6 +983,8 @@ private fun SidebarTab(
 private fun QuizPanel(
     quizService: QuizService,
     documentContent: String?,
+    sourceLabel: String?,
+    onClearSource: () -> Unit,
     pageIndex: Int,
     conceptName: String,
     conceptId: String,
@@ -969,6 +1025,15 @@ private fun QuizPanel(
                 },
                 quizService = quizService
             )
+        }
+
+        sourceLabel?.let { label ->
+            item {
+                QuizSourceCard(
+                    label = label,
+                    onClear = onClearSource
+                )
+            }
         }
 
         if (!hasApiKey) {
@@ -1037,6 +1102,56 @@ private fun QuizPanel(
                 }
             )
             Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun QuizSourceCard(
+    label: String,
+    onClear: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                MaterialTheme.colorScheme.primaryContainer
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Quiz,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        TextButton(
+            onClick = onClear,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White),
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary
+            ),
+            contentPadding = PaddingValues(
+                horizontal = 10.dp,
+                vertical = 4.dp
+            )
+        ) {
+            Text(
+                "문서 전체",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -1167,6 +1282,11 @@ private fun QuizQuestionCard(
                 correct = selectedChoice == quiz.answer,
                 answer = quiz.answer,
                 explanation = quiz.explanation,
+                selectedChoice = selectedChoice,
+                selectedChoiceExplanation =
+                    selectedChoice?.let {
+                        quiz.choiceExplanations[it]
+                    },
                 sourceSentence = quiz.sourceSentence
             )
         }
@@ -1247,6 +1367,8 @@ private fun QuizExplanation(
     correct: Boolean,
     answer: String,
     explanation: String,
+    selectedChoice: String?,
+    selectedChoiceExplanation: String?,
     sourceSentence: String
 ) {
     Column(
@@ -1271,6 +1393,32 @@ private fun QuizExplanation(
             }
         )
         Spacer(Modifier.height(6.dp))
+        if (!correct &&
+            !selectedChoice.isNullOrBlank() &&
+            !selectedChoiceExplanation.isNullOrBlank()
+        ) {
+            Text(
+                "선택한 $selectedChoice 보기의 오답 이유",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                selectedChoiceExplanation,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "정답 해설",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(3.dp))
+        }
         Text(
             explanation,
             fontSize = 13.sp,
@@ -1324,7 +1472,8 @@ private fun QuizActionButton(
                 strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.onPrimary
             )
-        } else {
+            Spacer(Modifier.width(8.dp))
+        } else if (hasQuestion) {
             Icon(
                 Icons.Default.Refresh,
                 contentDescription = null,
@@ -1335,8 +1484,8 @@ private fun QuizActionButton(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
+            Spacer(Modifier.width(8.dp))
         }
-        Spacer(Modifier.width(8.dp))
         Text(
             if (hasQuestion) "새 문제 생성" else "문제 생성",
             fontSize = 13.sp,
@@ -2393,6 +2542,33 @@ private fun QuizHistoryCard(
         )
         if (record.explanation.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
+            val selectedExplanation =
+                record.choiceExplanations[record.selectedAnswer]
+            if (!record.isCorrect &&
+                !selectedExplanation.isNullOrBlank()
+            ) {
+                Text(
+                    "선택한 ${record.selectedAnswer} 보기의 오답 이유",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    selectedExplanation,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "정답 해설",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(3.dp))
+            }
             Text(
                 record.explanation,
                 fontSize = 12.sp,

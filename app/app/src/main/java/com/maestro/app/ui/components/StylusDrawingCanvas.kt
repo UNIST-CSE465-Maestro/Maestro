@@ -3,6 +3,8 @@ package com.maestro.app.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -30,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -39,6 +42,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.maestro.app.domain.model.CropCapturePhase
+import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
@@ -83,6 +87,7 @@ private var deleteButtonRect: Rect? = null
 private var cropCopyButtonRect: Rect? = null
 private var cropCancelButtonRect: Rect? = null
 private var cropLlmButtonRect: Rect? = null
+private var cropQuizButtonRect: Rect? = null
 private var imgDeleteRect: Rect? = null
 private var imgCopyRect: Rect? = null
 private var imgCutRect: Rect? = null
@@ -97,7 +102,8 @@ fun StylusDrawingCanvas(
     state: DrawingState,
     pageIndex: Int,
     modifier: Modifier = Modifier,
-    onCropLlm: ((ByteArray) -> Unit)? = null
+    onCropLlm: ((CropCapturePayload) -> Unit)? = null,
+    onCropQuiz: ((CropCapturePayload) -> Unit)? = null
 ) {
     val pageStrokes = state.strokesForPage(pageIndex)
     val view = LocalView.current
@@ -226,6 +232,7 @@ fun StylusDrawingCanvas(
                             canvasScreenY,
                             view, context,
                             onCropLlm,
+                            onCropQuiz,
                             { buttonTapConsumed = true }
                         )
                         return@pointerInteropFilter true
@@ -2007,7 +2014,8 @@ private fun handleCropCaptureAdjust(
     cy: Float,
     view: View,
     context: Context,
-    onCropLlm: ((ByteArray) -> Unit)?,
+    onCropLlm: ((CropCapturePayload) -> Unit)?,
+    onCropQuiz: ((CropCapturePayload) -> Unit)?,
     onButtonTap: () -> Unit
 ) {
     val refW = state.getPageRefWidth(pageIndex)
@@ -2037,6 +2045,23 @@ private fun handleCropCaptureAdjust(
                     cx,
                     cy,
                     onCropLlm
+                )
+                onButtonTap()
+                return
+            }
+            if (cropQuizButtonRect?.contains(
+                    Offset(ex, ey)
+                ) == true && onCropQuiz != null
+            ) {
+                captureCropCaptureAndSend(
+                    context,
+                    view,
+                    state,
+                    cw,
+                    ch,
+                    cx,
+                    cy,
+                    onCropQuiz
                 )
                 onButtonTap()
                 return
@@ -2161,10 +2186,13 @@ private fun captureCropCaptureAndSend(
     ch: Float,
     cx: Float,
     cy: Float,
-    callback: (ByteArray) -> Unit
+    callback: (CropCapturePayload) -> Unit
 ) {
     try {
         val savedPhase = state.cropCapturePhase
+        val pageIndex = state.cropCapturePageIndex
+        val cropTopLeft = state.cropCaptureTopLeft
+        val cropBottomRight = state.cropCaptureBottomRight
         state.cropCapturePhase = CropCapturePhase.IDLE
 
         val rootView = view.rootView
@@ -2181,26 +2209,25 @@ private fun captureCropCaptureAndSend(
 
         state.cropCapturePhase = savedPhase
 
-        val refW = state.getPageRefWidth(
-            state.cropCapturePageIndex
-        )
+        val refW = state.getPageRefWidth(pageIndex)
         val rs = if (refW > 0f && cw > 0f) {
             cw / refW
         } else {
             1f
         }
+        val refH = if (rs > 0f) ch / rs else ch
 
         val left = (
-            cx + state.cropCaptureTopLeft.x * rs
+            cx + cropTopLeft.x * rs
             ).toInt().coerceIn(0, fullBitmap.width - 1)
         val top = (
-            cy + state.cropCaptureTopLeft.y * rs
+            cy + cropTopLeft.y * rs
             ).toInt().coerceIn(0, fullBitmap.height - 1)
         val right = (
-            cx + state.cropCaptureBottomRight.x * rs
+            cx + cropBottomRight.x * rs
             ).toInt().coerceIn(left + 1, fullBitmap.width)
         val bottom = (
-            cy + state.cropCaptureBottomRight.y * rs
+            cy + cropBottomRight.y * rs
             ).toInt()
             .coerceIn(top + 1, fullBitmap.height)
 
@@ -2226,7 +2253,18 @@ private fun captureCropCaptureAndSend(
         cropped.recycle()
 
         state.clearCropCapture()
-        callback(bytes)
+        callback(
+            CropCapturePayload(
+                imageBytes = bytes,
+                pageIndex = pageIndex,
+                left = cropTopLeft.x,
+                top = cropTopLeft.y,
+                right = cropBottomRight.x,
+                bottom = cropBottomRight.y,
+                pageRefWidth = refW.takeIf { it > 0f } ?: cw,
+                pageRefHeight = refH.takeIf { it > 0f } ?: ch
+            )
+        )
     } catch (_: Throwable) {
         state.clearCropCapture()
     }
@@ -2369,12 +2407,45 @@ private fun DrawScope.drawCropCaptureOverlay(
         )
         drawCircle(Color.White, 1.5f, Offset(acx, acy - 10f))
 
-        // Cancel button (left of AI button)
-        val cancelRect = Rect(
+        // Quiz button (left of AI button)
+        val quizRect = Rect(
             aiRect.left - btnSize - gap,
             aiRect.top,
             aiRect.left - gap,
             aiRect.bottom
+        )
+        cropQuizButtonRect = quizRect
+        drawRoundRect(
+            Color(0xFF10B981),
+            Offset(quizRect.left, quizRect.top),
+            Size(btnSize, btnSize),
+            CornerRadius(
+                UxConfig.Selection
+                    .BUTTON_CORNER_RADIUS
+            ),
+            style = Fill
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            "Q",
+            quizRect.center.x,
+            quizRect.center.y + 6f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textAlign = Paint.Align.CENTER
+                textSize = 20f
+                typeface = Typeface.create(
+                    Typeface.DEFAULT,
+                    Typeface.BOLD
+                )
+            }
+        )
+
+        // Cancel button (left of Quiz button)
+        val cancelRect = Rect(
+            quizRect.left - btnSize - gap,
+            quizRect.top,
+            quizRect.left - gap,
+            quizRect.bottom
         )
         cropCaptureCancelRect = cancelRect
         drawRoundRect(

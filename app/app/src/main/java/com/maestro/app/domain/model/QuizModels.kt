@@ -13,6 +13,7 @@ data class GeneratedQuizQuestion(
     val choices: Map<String, String>,
     val answer: String,
     val explanation: String,
+    val choiceExplanations: Map<String, String> = emptyMap(),
     val sourceSentence: String,
     val bloomLevel: Int,
     val targetConcept: String
@@ -22,5 +23,6 @@ data class QuizGenerationRequest(
     val documentContent: String,
     val conceptName: String,
     val mastery: Float,
-    val bloomLevel: Int
+    val bloomLevel: Int,
+    val sourceLabel: String? = null
 )

@@ -32,6 +32,8 @@ data class QuizResponseRecord(
     @SerialName("correct_answer")
     val correctAnswer: String = "",
     val explanation: String = "",
+    @SerialName("choice_explanations")
+    val choiceExplanations: Map<String, String> = emptyMap(),
     @SerialName("source_sentence")
     val sourceSentence: String = ""
 )

@@ -46,6 +46,7 @@ val networkModule = module {
             .addInterceptor(get<TokenManager>())
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
+                    redactHeader("Authorization")
                     level = HttpLoggingInterceptor
                         .Level.HEADERS
                 }

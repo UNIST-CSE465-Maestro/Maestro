@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.domain.model.CropCapturePhase
+import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
@@ -94,7 +95,8 @@ fun CanvasSection(
     pageCount: Int,
     drawingState: DrawingState,
     modifier: Modifier = Modifier,
-    onCropLlm: ((ByteArray) -> Unit)? = null
+    onCropLlm: ((CropCapturePayload) -> Unit)? = null,
+    onCropQuiz: ((CropCapturePayload) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -319,7 +321,9 @@ fun CanvasSection(
                                 Modifier
                                     .matchParentSize(),
                                 onCropLlm =
-                                onCropLlm
+                                onCropLlm,
+                                onCropQuiz =
+                                onCropQuiz
                             )
 
                             // Long-press action menu

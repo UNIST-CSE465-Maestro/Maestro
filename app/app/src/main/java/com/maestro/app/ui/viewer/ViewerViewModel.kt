@@ -14,6 +14,7 @@ import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
+import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.ui.components.StudySidebarMode
@@ -68,10 +69,20 @@ class ViewerViewModel(
     val pendingLlmPrompt =
         _pendingLlmPrompt.asStateFlow()
 
+    private val _pendingQuizCrop =
+        MutableStateFlow<CropCapturePayload?>(null)
+    val pendingQuizCrop =
+        _pendingQuizCrop.asStateFlow()
+
     private val _documentContent =
         MutableStateFlow<String?>(null)
     val documentContent =
         _documentContent.asStateFlow()
+
+    private val _documentJsonContent =
+        MutableStateFlow<String?>(null)
+    val documentJsonContent =
+        _documentJsonContent.asStateFlow()
 
     private val _quizMastery =
         MutableStateFlow(0.35f)
@@ -125,6 +136,8 @@ class ViewerViewModel(
             try {
                 _documentContent.value =
                     loadContentMd(pdfId)
+                _documentJsonContent.value =
+                    loadContentJson(pdfId)
             } catch (_: Throwable) {}
         }
     }
@@ -275,14 +288,31 @@ class ViewerViewModel(
         _pendingLlmPrompt.value = prompt
     }
 
+    fun sendSelectionToQuiz(payload: CropCapturePayload) {
+        _sidebarVisible.value = true
+        _sidebarMode.value = StudySidebarMode.QUIZ
+        _pendingQuizCrop.value = payload
+    }
+
     fun consumePendingLlm() {
         _pendingLlmImage.value = null
         _pendingLlmPrompt.value = null
     }
 
+    fun consumePendingQuizCrop() {
+        _pendingQuizCrop.value = null
+    }
+
     fun extractAndQuiz() {
-        _sidebarMode.value = StudySidebarMode.QUIZ
-        _sidebarVisible.value = true
+        if (
+            _sidebarVisible.value &&
+            _sidebarMode.value == StudySidebarMode.QUIZ
+        ) {
+            _sidebarVisible.value = false
+        } else {
+            _sidebarMode.value = StudySidebarMode.QUIZ
+            _sidebarVisible.value = true
+        }
     }
 
     fun recordQuizRequested(
@@ -324,6 +354,7 @@ class ViewerViewModel(
         selectedAnswer: String,
         correctAnswer: String,
         explanation: String,
+        choiceExplanations: Map<String, String>,
         sourceSentence: String
     ) {
         val hash = hashQuestion(question)
@@ -341,6 +372,7 @@ class ViewerViewModel(
                 selectedAnswer = selectedAnswer,
                 correctAnswer = correctAnswer,
                 explanation = explanation,
+                choiceExplanations = choiceExplanations,
                 sourceSentence = sourceSentence
             )
         )
@@ -524,4 +556,13 @@ class ViewerViewModel(
         )
         if (file.exists()) file.readText() else null
     }
+
+    private suspend fun loadContentJson(documentId: String): String? =
+        withContext(Dispatchers.IO) {
+            val file = File(
+                appContext.filesDir,
+                "documents/$documentId/content.json"
+            )
+            if (file.exists()) file.readText() else null
+        }
 }
