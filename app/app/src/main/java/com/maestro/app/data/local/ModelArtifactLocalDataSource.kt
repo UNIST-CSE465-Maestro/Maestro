@@ -13,6 +13,10 @@ enum class ModelArtifactType(
     val label: String
 ) {
     MIKT_ONNX("mikt_model.onnx", "MIKT ONNX"),
+    MIKT_STATICS2011_MAPPING(
+        "mikt_statics2011_mapping.json",
+        "Statics2011 KT Mapping JSON"
+    ),
     KT_ONNX("kt_model.onnx", "KT ONNX"),
     CONCEPT_ONNX("concept_model.onnx", "Engineering Mechanics Concept ONNX")
 }

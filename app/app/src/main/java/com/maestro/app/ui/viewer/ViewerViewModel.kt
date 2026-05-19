@@ -19,6 +19,7 @@ import com.maestro.app.data.remote.MaterialAnalyzerHash
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.PdfSearchMatch
+import com.maestro.app.domain.model.SelectedTextQuizPayload
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.ui.components.StudySidebarMode
@@ -80,6 +81,11 @@ class ViewerViewModel(
     val pendingQuizCrop =
         _pendingQuizCrop.asStateFlow()
 
+    private val _pendingQuizText =
+        MutableStateFlow<SelectedTextQuizPayload?>(null)
+    val pendingQuizText =
+        _pendingQuizText.asStateFlow()
+
     private val _documentContent =
         MutableStateFlow<String?>(null)
     val documentContent =
@@ -92,6 +98,8 @@ class ViewerViewModel(
 
     private val _documentTextIndex =
         MutableStateFlow<PdfTextIndex?>(null)
+    val documentTextIndex =
+        _documentTextIndex.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -208,7 +216,7 @@ class ViewerViewModel(
     }
 
     private fun loadDocumentMeta() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             val doc = documentRepository.loadDocuments()
                 .find { it.id == pdfId }
             if (doc != null) {
@@ -351,6 +359,12 @@ class ViewerViewModel(
         _pendingQuizCrop.value = payload
     }
 
+    fun sendTextSelectionToQuiz(payload: SelectedTextQuizPayload) {
+        _sidebarVisible.value = true
+        _sidebarMode.value = StudySidebarMode.QUIZ
+        _pendingQuizText.value = payload
+    }
+
     fun consumePendingLlm() {
         _pendingLlmImage.value = null
         _pendingLlmPrompt.value = null
@@ -358,6 +372,10 @@ class ViewerViewModel(
 
     fun consumePendingQuizCrop() {
         _pendingQuizCrop.value = null
+    }
+
+    fun consumePendingQuizText() {
+        _pendingQuizText.value = null
     }
 
     fun extractAndQuiz() {

@@ -92,6 +92,7 @@ import com.maestro.app.domain.model.EngineeringMechanicsConceptCatalog
 import com.maestro.app.domain.model.GeneratedQuizQuestion
 import com.maestro.app.domain.model.QuizGenerationRequest
 import com.maestro.app.domain.model.LlmProvider
+import com.maestro.app.domain.model.SelectedTextQuizPayload
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
@@ -175,7 +176,9 @@ fun LlmSidebar(
     onQuizHistoryDeleted: (String) -> Unit = {},
     onPendingConsumed: () -> Unit = {},
     pendingQuizCrop: CropCapturePayload? = null,
-    onPendingQuizCropConsumed: () -> Unit = {}
+    onPendingQuizCropConsumed: () -> Unit = {},
+    pendingQuizText: SelectedTextQuizPayload? = null,
+    onPendingQuizTextConsumed: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -337,6 +340,9 @@ fun LlmSidebar(
     var quizStartedAt by remember(documentId) {
         mutableStateOf<Long?>(null)
     }
+    var pendingTextQuizGeneration by remember(documentId) {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(pendingQuizCrop, documentJsonContent) {
         val payload = pendingQuizCrop
@@ -395,6 +401,62 @@ fun LlmSidebar(
             } finally {
                 quizLoading = false
             }
+        }
+    }
+
+    LaunchedEffect(pendingQuizText) {
+        val payload = pendingQuizText
+            ?: return@LaunchedEffect
+        currentQuiz = null
+        selectedQuizChoice = null
+        quizAnswered = false
+        quizStartedAt = null
+        quizLoading = false
+        if (payload.text.isBlank()) {
+            quizSourceOverride = null
+            quizError =
+                "선택한 텍스트가 비어 있어 퀴즈를 만들 수 없습니다."
+            pendingTextQuizGeneration = false
+        } else {
+            quizSourceOverride = QuizSourceOverride(
+                content = payload.text,
+                label = payload.label
+            )
+            quizError = null
+            pendingTextQuizGeneration = true
+        }
+        onPendingQuizTextConsumed()
+    }
+
+    LaunchedEffect(
+        pendingTextQuizGeneration,
+        quizContent,
+        llmConnectionState,
+        hasApiKey,
+        quizLoading
+    ) {
+        if (!pendingTextQuizGeneration) {
+            return@LaunchedEffect
+        }
+        if (!hasApiKey) {
+            quizError =
+                "현재 LLM provider의 API 키가 없어 선택 텍스트 퀴즈를 생성할 수 없습니다."
+            pendingTextQuizGeneration = false
+            return@LaunchedEffect
+        }
+        if (llmConnectionState == LlmConnectionState.FAILED) {
+            quizError =
+                "LLM 서버 연결이 준비되지 않아 선택 텍스트 퀴즈를 생성하지 못했습니다. 연결 재시도 후 다시 선택해 주세요."
+            pendingTextQuizGeneration = false
+            return@LaunchedEffect
+        }
+        if (
+            llmConnectionState == LlmConnectionState.READY &&
+            quizContent.isNotBlank() &&
+            !quizLoading
+        ) {
+            pendingTextQuizGeneration = false
+            generateQuizQuestion()
         }
     }
 

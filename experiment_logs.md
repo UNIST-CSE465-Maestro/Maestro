@@ -189,9 +189,40 @@ Important: these logs are generated only when a KT ONNX file has been uploaded t
 KT ONNX files are stored under:
 
 - `filesDir/models/mikt_model.onnx` for `MIKT_ONNX`
+- `filesDir/models/mikt_statics2011_mapping.json` for `MIKT_STATICS2011_MAPPING`
 - `filesDir/models/kt_model.onnx` for generic/ReKT-compatible `KT_ONNX`
 
-Current ONNX input mapping:
+Current MIKT path:
+
+- If `mikt_model.onnx` exists, the app treats it as a Statics2011-trained MIKT candidate.
+- The CPU adapter uses only `QUIZ_ANSWERED` study events with non-null `correctness` as KT sequence inputs.
+- The default Statics2011 F2011 contract is `question_as_concept=true`, `concept_count=85`, `question_count=85`, `index_base=1`, `answer_offset=86`, and `max_sequence_length=200`.
+- If `mikt_statics2011_mapping.json` exists, it can override the default contract and provide `concept_id_map`, `question_id_map`, and `domain_id_map`.
+- If Statics2011 has no explicit question id for a timestep, the adapter uses `q_t = c_t`.
+
+Expected optional mapping JSON:
+
+```json
+{
+  "name": "statics2011_f2011_v1",
+  "dataset": "statics2011",
+  "kc_model": "F2011",
+  "concept_count": 85,
+  "question_count": 85,
+  "domain_count": 1,
+  "max_sequence_length": 200,
+  "question_as_concept": true,
+  "index_base": 1,
+  "answer_offset": 86,
+  "concept_id_map": {
+    "em_statics_equilibrium": 1
+  },
+  "question_id_map": {},
+  "domain_id_map": {}
+}
+```
+
+Generic KT ONNX input mapping:
 
 - question/problem/item/exercise/pid/qseq inputs receive stable local problem ids.
 - skill/concept/kc/cseq inputs receive stable local concept ids.
@@ -208,8 +239,12 @@ Triggered immediately before ONNX Runtime inference.
 
 Metadata:
 
-- `model_type`: `mikt_onnx` or `kt_onnx`.
-- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
+- `model_type`: `mikt_statics2011_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT Statics2011 ONNX` or `KT ONNX`.
+- `dataset`: `statics2011` for the MIKT path.
+- `contract`: active KT input contract name.
+- `sequence_window`: active max sequence length.
+- `question_as_concept`: whether `q_t = c_t` is being used.
 - `input_count`: number of trace inputs.
 - `sequence_event_count`: total number of study events across all sequences.
 - `model_path`: local model file path.
@@ -226,8 +261,8 @@ Triggered after successful ONNX Runtime inference.
 
 Metadata:
 
-- `model_type`: `mikt_onnx` or `kt_onnx`.
-- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
+- `model_type`: `mikt_statics2011_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT Statics2011 ONNX` or `KT ONNX`.
 - `latency_ms`: wall-clock inference duration.
 - `output_count`: number of returned mastery results.
 - `average_mastery`: average mastery across returned results.
@@ -246,8 +281,8 @@ Triggered if ONNX inference fails and the app falls back to the heuristic tracer
 
 Metadata:
 
-- `model_type`: `mikt_onnx` or `kt_onnx`.
-- `model_display_name`: `MIKT ONNX` or `KT ONNX`.
+- `model_type`: `mikt_statics2011_onnx` or `kt_onnx`.
+- `model_display_name`: `MIKT Statics2011 ONNX` or `KT ONNX`.
 - `fallback`: currently `heuristic`.
 - `error`: exception message or exception class name.
 
@@ -318,7 +353,7 @@ Triggered when an ONNX file is uploaded from the Profile page.
 
 Metadata:
 
-- `model_type`: `MIKT_ONNX`, `KT_ONNX`, or `CONCEPT_ONNX`.
+- `model_type`: `MIKT_ONNX`, `MIKT_STATICS2011_MAPPING`, `KT_ONNX`, or `CONCEPT_ONNX`.
 - `file_size_bytes`
 - `file_path`
 

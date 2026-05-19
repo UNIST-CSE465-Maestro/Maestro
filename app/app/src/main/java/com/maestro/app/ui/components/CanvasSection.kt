@@ -5,11 +5,12 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,16 +23,23 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -56,14 +64,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maestro.app.data.local.PdfTextIndex
+import com.maestro.app.data.local.PdfTextIndexPage
+import com.maestro.app.data.local.PdfTextIndexWord
 import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
 import com.maestro.app.domain.model.PdfSearchMatch
+import com.maestro.app.domain.model.SelectedTextQuizPayload
 import com.maestro.app.domain.model.StrokePoint
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.drawing.DrawingState
@@ -76,6 +89,7 @@ import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.roundToInt
 
 /**
  * Serializable data classes for clipboard stroke JSON
@@ -107,6 +121,19 @@ private val ActiveSearchHighlightFill = Color(0xFFFFF176)
     .copy(alpha = 0.68f)
 private val ActiveSearchHighlightStroke = MaestroPrimary
     .copy(alpha = 0.88f)
+private val TextSelectionFill = Color(0xFFFFE082)
+    .copy(alpha = 0.58f)
+private val TextSelectionStroke = MaestroPrimary
+    .copy(alpha = 0.85f)
+private const val TextSelectionVisualYOffsetRatio = 0.28f
+
+private data class TextSelectionState(
+    val pageIndex: Int,
+    val startWordIndex: Int,
+    val endWordIndex: Int,
+    val menuOffset: Offset,
+    val isDragging: Boolean = false
+)
 
 @Composable
 fun CanvasSection(
@@ -120,9 +147,11 @@ fun CanvasSection(
     searchMatches: List<PdfSearchMatch> = emptyList(),
     activeSearchMatch: PdfSearchMatch? = null,
     searchNavigationRequest: Int = 0,
+    textIndex: PdfTextIndex? = null,
     onScrollPositionChanged: (pageIndex: Int, scrollOffset: Int) -> Unit = { _, _ -> },
     onCropLlm: ((CropCapturePayload) -> Unit)? = null,
-    onCropQuiz: ((CropCapturePayload) -> Unit)? = null
+    onCropQuiz: ((CropCapturePayload) -> Unit)? = null,
+    onTextQuiz: ((SelectedTextQuizPayload) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -160,6 +189,9 @@ fun CanvasSection(
     }
     var pasteMenuOffset by remember {
         mutableStateOf(DpOffset.Zero)
+    }
+    var textSelection by remember(viewportKey) {
+        mutableStateOf<TextSelectionState?>(null)
     }
 
     Box(
@@ -283,7 +315,7 @@ fun CanvasSection(
                 ) {
                     val match = activeSearchMatch
                         ?: return@LaunchedEffect
-                    if (pdfUri == null || pageCount <= 0) {
+                    if (pageCount <= 0) {
                         return@LaunchedEffect
                     }
                     val pageIndex = match.pageIndex
@@ -392,34 +424,130 @@ fun CanvasSection(
                                     horizontalPad
                                 )
                                 .clipToBounds()
-                                .pointerInput(pageIndex) {
-                                    detectTapGestures(
-                                        onLongPress =
-                                        { offset ->
+                                .pointerInput(
+                                    pageIndex,
+                                    textIndex,
+                                    onTextQuiz
+                                ) {
+                                    awaitEachGesture {
+                                        val down =
+                                            awaitFirstDown(
+                                                requireUnconsumed = false
+                                            )
+                                        val longPress =
+                                            awaitLongPressOrCancellation(
+                                                down.id
+                                            ) ?: return@awaitEachGesture
+                                        val blocked =
+                                            drawingState.isCropping ||
+                                                drawingState.activeTool ==
+                                                DrawingTool.CROP_CAPTURE ||
+                                                drawingState.selectedImage !=
+                                                null
+                                        if (blocked) {
+                                            return@awaitEachGesture
+                                        }
+                                        val pageText =
+                                            textIndex
+                                                ?.pages
+                                                ?.firstOrNull {
+                                                    it.pageIndex ==
+                                                        pageIndex
+                                                }
+                                        val startWord =
+                                            pageText?.let {
+                                                hitWordIndexAtPosition(
+                                                    page = it,
+                                                    position =
+                                                    longPress.position,
+                                                    pageWidthPx =
+                                                    size.width
+                                                        .toFloat(),
+                                                    pageHeightPx =
+                                                    size.height
+                                                        .toFloat()
+                                                )
+                                            }
+                                        if (
+                                            startWord != null &&
+                                            onTextQuiz != null
+                                        ) {
+                                            showPasteMenu = false
+                                            textSelection =
+                                                TextSelectionState(
+                                                    pageIndex = pageIndex,
+                                                    startWordIndex =
+                                                    startWord,
+                                                    endWordIndex =
+                                                    startWord,
+                                                    menuOffset =
+                                                    longPress.position,
+                                                    isDragging = true
+                                                )
+                                            longPress.consume()
+                                            do {
+                                                val event =
+                                                    awaitPointerEvent()
+                                                val change =
+                                                    event.changes
+                                                        .firstOrNull {
+                                                            it.id == down.id
+                                                        }
+                                                if (change != null) {
+                                                    val endWord =
+                                                        nearestWordIndexAtPosition(
+                                                            page = pageText,
+                                                            position =
+                                                            change.position,
+                                                            pageWidthPx =
+                                                            size.width
+                                                                .toFloat(),
+                                                            pageHeightPx =
+                                                            size.height
+                                                                .toFloat()
+                                                        )
+                                                    if (endWord != null) {
+                                                        textSelection =
+                                                            textSelection
+                                                                ?.copy(
+                                                                    endWordIndex =
+                                                                    endWord,
+                                                                    menuOffset =
+                                                                    change
+                                                                        .position,
+                                                                    isDragging =
+                                                                    change
+                                                                        .pressed
+                                                                )
+                                                    }
+                                                    change.consume()
+                                                }
+                                            } while (
+                                                event.changes.any {
+                                                    it.pressed
+                                                }
+                                            )
+                                            textSelection =
+                                                textSelection?.copy(
+                                                    isDragging = false
+                                                )
+                                        } else {
                                             onPageLongPress(
                                                 drawingState,
                                                 pageIndex,
-                                                offset,
+                                                longPress.position,
                                                 size.width,
                                                 aspectRatio,
-                                                density
-                                                    .density
-                                            ) {
-                                                    pi,
-                                                    tap,
-                                                    menu
-                                                ->
-                                                pastePageIndex =
-                                                    pi
-                                                pasteTapPosition =
-                                                    tap
-                                                pasteMenuOffset =
-                                                    menu
-                                                showPasteMenu =
-                                                    true
+                                                density.density
+                                            ) { pi, tap, menu ->
+                                                textSelection = null
+                                                pastePageIndex = pi
+                                                pasteTapPosition = tap
+                                                pasteMenuOffset = menu
+                                                showPasteMenu = true
                                             }
                                         }
-                                    )
+                                    }
                                 }
                         ) {
                             PdfPageView(
@@ -443,6 +571,25 @@ fun CanvasSection(
                                         .matchParentSize()
                                 )
                             }
+                            val pageText =
+                                textIndex?.pages?.firstOrNull {
+                                    it.pageIndex == pageIndex
+                                }
+                            val currentTextSelection =
+                                textSelection?.takeIf {
+                                    it.pageIndex == pageIndex
+                                }
+                            if (
+                                pageText != null &&
+                                currentTextSelection != null
+                            ) {
+                                TextSelectionOverlay(
+                                    page = pageText,
+                                    selection = currentTextSelection,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                )
+                            }
                             StylusDrawingCanvas(
                                 state = drawingState,
                                 pageIndex = pageIndex,
@@ -454,6 +601,43 @@ fun CanvasSection(
                                 onCropQuiz =
                                 onCropQuiz
                             )
+
+                            if (
+                                pageText != null &&
+                                currentTextSelection != null &&
+                                !currentTextSelection.isDragging &&
+                                onTextQuiz != null
+                            ) {
+                                val selectedText =
+                                    selectedTextFor(
+                                        pageText,
+                                        currentTextSelection
+                                    )
+                                TextSelectionActionMenu(
+                                    selection = currentTextSelection,
+                                    selectedText = selectedText,
+                                    pageIndex = pageIndex,
+                                    onDismiss = {
+                                        textSelection = null
+                                    },
+                                    onQuiz = {
+                                        if (selectedText.isNotBlank()) {
+                                            onTextQuiz(
+                                                SelectedTextQuizPayload(
+                                                    text = selectedText,
+                                                    pageIndex = pageIndex,
+                                                    label =
+                                                    textQuizLabel(
+                                                        selectedText,
+                                                        pageIndex
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        textSelection = null
+                                    }
+                                )
+                            }
 
                             // Long-press action menu
                             if (
@@ -606,6 +790,365 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSearchHighlight
                 cornerRadius = CornerRadius(corner, corner),
                 style = Stroke(width = strokeWidth)
             )
+}
+
+@Composable
+private fun TextSelectionOverlay(
+    page: PdfTextIndexPage,
+    selection: TextSelectionState,
+    modifier: Modifier = Modifier
+) {
+    val words = selectedWordsFor(page, selection)
+    Canvas(modifier = modifier) {
+        words.forEach { word ->
+            val scaleX = size.width /
+                page.width.coerceAtLeast(1f)
+            val scaleY = size.height /
+                page.height.coerceAtLeast(1f)
+            val rect = word.visualRect(page)
+            val left = rect.left * scaleX
+            val top = rect.top * scaleY
+            val right = rect.right * scaleX
+            val bottom = rect.bottom * scaleY
+            val width = (right - left).coerceAtLeast(4f)
+            val height = (bottom - top).coerceAtLeast(8f)
+            val corner = 3.dp.toPx()
+            drawRoundRect(
+                color = TextSelectionFill,
+                topLeft = Offset(left, top),
+                size = Size(width, height),
+                cornerRadius = CornerRadius(corner, corner)
+            )
+            drawRoundRect(
+                color = TextSelectionStroke,
+                topLeft = Offset(left, top),
+                size = Size(width, height),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = 1.4.dp.toPx())
+            )
+        }
+    }
+}
+
+@Composable
+private fun TextSelectionActionMenu(
+    selection: TextSelectionState,
+    selectedText: String,
+    pageIndex: Int,
+    onDismiss: () -> Unit,
+    onQuiz: () -> Unit
+) {
+    val x = selection.menuOffset.x
+        .coerceAtLeast(8f)
+        .roundToInt()
+    val y = (selection.menuOffset.y - 76f)
+        .coerceAtLeast(8f)
+        .roundToInt()
+    Surface(
+        modifier = Modifier
+            .offset { IntOffset(x, y) },
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFF202124),
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 8.dp,
+                vertical = 6.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .clipToBounds()
+                    .clickable(enabled = selectedText.isNotBlank()) {
+                        onQuiz()
+                    }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Quiz,
+                    contentDescription = null,
+                    tint = MaestroSurfaceContainerLowest,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "선택 텍스트로 퀴즈 생성",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaestroSurfaceContainerLowest
+                )
+            }
+            Text(
+                "p.${pageIndex + 1}",
+                fontSize = 11.sp,
+                color = MaestroSurfaceContainerLowest
+                    .copy(alpha = 0.78f),
+                modifier = Modifier.padding(horizontal = 6.dp)
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "선택 해제",
+                    tint = MaestroSurfaceContainerLowest,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+        }
+    }
+}
+
+private data class TextWordRect(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    val centerX: Float
+        get() = (left + right) / 2f
+    val centerY: Float
+        get() = (top + bottom) / 2f
+    val height: Float
+        get() = (bottom - top).coerceAtLeast(1f)
+}
+
+private data class PdfPoint(
+    val x: Float,
+    val y: Float
+)
+
+private fun PdfTextIndexWord.visualRect(
+    page: PdfTextIndexPage
+): TextWordRect {
+    val height = (bottom - top).coerceAtLeast(1f)
+    val yOffset = height * TextSelectionVisualYOffsetRatio
+    val visualTop = (top - yOffset).coerceIn(0f, page.height)
+    val visualBottom = (bottom - yOffset)
+        .coerceAtLeast(visualTop + 1f)
+        .coerceAtMost(page.height)
+    return TextWordRect(
+        left = left.coerceIn(0f, page.width),
+        top = visualTop,
+        right = right.coerceIn(left, page.width),
+        bottom = visualBottom
+    )
+}
+
+private fun toPdfPoint(
+    page: PdfTextIndexPage,
+    position: Offset,
+    pageWidthPx: Float,
+    pageHeightPx: Float
+): PdfPoint? {
+    if (
+        pageWidthPx <= 0f ||
+        pageHeightPx <= 0f
+    ) {
+        return null
+    }
+    return PdfPoint(
+        x = position.x / pageWidthPx *
+            page.width.coerceAtLeast(1f),
+        y = position.y / pageHeightPx *
+            page.height.coerceAtLeast(1f)
+    )
+}
+
+private fun hitWordIndexAtPosition(
+    page: PdfTextIndexPage,
+    position: Offset,
+    pageWidthPx: Float,
+    pageHeightPx: Float
+): Int? {
+    if (
+        page.words.isEmpty() ||
+        pageWidthPx <= 0f ||
+        pageHeightPx <= 0f
+    ) {
+        return null
+    }
+    val point = toPdfPoint(
+        page,
+        position,
+        pageWidthPx,
+        pageHeightPx
+    ) ?: return null
+    val averageHeight = page.words
+        .map {
+            it.visualRect(page).height
+        }
+        .average()
+        .takeIf { !it.isNaN() }
+        ?.toFloat()
+        ?: 12f
+    val xPad = averageHeight * 0.35f
+    val yPad = averageHeight * 0.45f
+    return page.words
+        .withIndex()
+        .filter { (_, word) ->
+            val rect = word.visualRect(page)
+            point.x >= rect.left - xPad &&
+                point.x <= rect.right + xPad &&
+                point.y >= rect.top - yPad &&
+                point.y <= rect.bottom + yPad
+        }
+        .minByOrNull { (_, word) ->
+            val rect = word.visualRect(page)
+            val dx = point.x - rect.centerX
+            val dy = point.y - rect.centerY
+            dx * dx + dy * dy
+        }
+        ?.index
+}
+
+private fun nearestWordIndexAtPosition(
+    page: PdfTextIndexPage,
+    position: Offset,
+    pageWidthPx: Float,
+    pageHeightPx: Float
+): Int? {
+    if (page.words.isEmpty()) return null
+    val point = toPdfPoint(
+        page,
+        position,
+        pageWidthPx,
+        pageHeightPx
+    ) ?: return null
+    val rows = page.words
+        .withIndex()
+        .map { (index, word) ->
+            IndexedTextWord(
+                index = index,
+                word = word,
+                rect = word.visualRect(page)
+            )
+        }
+        .groupIntoVisualRows()
+    val row = rows.minByOrNull { rowWords ->
+        val centerY = rowWords
+            .map { it.rect.centerY }
+            .average()
+            .toFloat()
+        kotlin.math.abs(point.y - centerY)
+    } ?: return null
+    return row.minByOrNull { item ->
+        val dx = point.x - item.rect.centerX
+        val dy = point.y - item.rect.centerY
+        dx * dx + dy * dy * 0.35f
+    }?.index
+}
+
+private data class IndexedTextWord(
+    val index: Int,
+    val word: PdfTextIndexWord,
+    val rect: TextWordRect
+)
+
+private fun List<IndexedTextWord>.groupIntoVisualRows():
+    List<List<IndexedTextWord>> {
+    if (isEmpty()) return emptyList()
+    val rows = mutableListOf<MutableList<IndexedTextWord>>()
+    forEach { item ->
+        val target = rows.lastOrNull()
+        val targetCenter = target
+            ?.map { it.rect.centerY }
+            ?.average()
+            ?.toFloat()
+        val tolerance = maxOf(
+            item.rect.height,
+            target?.map { it.rect.height }
+                ?.average()
+                ?.toFloat()
+                ?: item.rect.height
+        ) * 0.65f
+        if (
+            target == null ||
+            targetCenter == null ||
+            kotlin.math.abs(item.rect.centerY - targetCenter) >
+            tolerance
+        ) {
+            rows += mutableListOf(item)
+        } else {
+            target += item
+        }
+    }
+    return rows.map { row ->
+        row.sortedBy { it.rect.centerX }
+    }
+}
+
+private fun selectedWordsFor(
+    page: PdfTextIndexPage,
+    selection: TextSelectionState
+): List<PdfTextIndexWord> {
+    if (page.words.isEmpty()) return emptyList()
+    val start = minOf(
+        selection.startWordIndex,
+        selection.endWordIndex
+    ).coerceIn(0, page.words.lastIndex)
+    val end = maxOf(
+        selection.startWordIndex,
+        selection.endWordIndex
+    ).coerceIn(0, page.words.lastIndex)
+    return page.words.subList(start, end + 1)
+}
+
+private fun selectedTextFor(
+    page: PdfTextIndexPage,
+    selection: TextSelectionState
+): String {
+    val words = selectedWordsFor(page, selection)
+    if (words.isEmpty()) return ""
+    val builder = StringBuilder()
+    var currentLineY: Float? = null
+    var currentLineHeight = 1f
+    words.forEachIndexed { index, word ->
+        val rect = word.visualRect(page)
+        val lineY = currentLineY
+        val isNewLine =
+            lineY != null &&
+                kotlin.math.abs(rect.centerY - lineY) >
+                maxOf(currentLineHeight, rect.height) * 0.68f
+        if (index > 0) {
+            builder.append(if (isNewLine) "\n" else " ")
+        }
+        builder.append(word.text)
+        if (lineY == null || isNewLine) {
+            currentLineY = rect.centerY
+            currentLineHeight = rect.height
+        } else {
+            currentLineY = (lineY + rect.centerY) / 2f
+            currentLineHeight =
+                maxOf(currentLineHeight, rect.height)
+        }
+    }
+    return builder.toString().trim()
+}
+
+private fun textQuizLabel(
+    selectedText: String,
+    pageIndex: Int
+): String {
+    val preview = selectedText
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .let {
+            if (it.length > 42) {
+                it.take(42).trimEnd() + "..."
+            } else {
+                it
+            }
+        }
+    return if (preview.isBlank()) {
+        "선택 텍스트 · 페이지 ${pageIndex + 1}"
+    } else {
+        "선택 텍스트: $preview · 페이지 ${pageIndex + 1}"
+    }
 }
 
 /**

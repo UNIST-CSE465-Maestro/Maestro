@@ -74,6 +74,16 @@ fun ProfileScreen(
             viewModel.uploadModel(ModelArtifactType.KT_ONNX, uri)
         }
     }
+    val staticsMappingPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadModel(
+                ModelArtifactType.MIKT_STATICS2011_MAPPING,
+                uri
+            )
+        }
+    }
     val conceptModelPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
@@ -154,6 +164,9 @@ fun ProfileScreen(
                         },
                         onUploadKt = {
                             ktModelPicker.launch("*/*")
+                        },
+                        onUploadStaticsMapping = {
+                            staticsMappingPicker.launch("application/json")
                         },
                         onUploadConcept = {
                             conceptModelPicker.launch("*/*")
@@ -379,6 +392,7 @@ private fun ModelUploadPanel(
     artifacts: List<ModelArtifactState>,
     onUploadMikt: () -> Unit,
     onUploadKt: () -> Unit,
+    onUploadStaticsMapping: () -> Unit,
     onUploadConcept: () -> Unit
 ) {
     Surface(
@@ -393,7 +407,7 @@ private fun ModelUploadPanel(
         ) {
             SectionTitle("KT Experiment Models")
             Text(
-                "공학역학 concept space 기준으로 ONNX 모델을 앱 내부에 저장합니다. MIKT ONNX가 있으면 MobileKT 백본 테스트에 우선 사용됩니다.",
+                "Statics2011 F2011 기준으로 학습한 MIKT ONNX와 id mapping JSON을 앱 내부에 저장합니다. mapping이 없으면 F2011 기본 contract(q=c, 1-based 85 concept space)로 동작합니다.",
                 fontSize = 12.sp,
                 color = Slate500,
                 lineHeight = 17.sp
@@ -403,8 +417,18 @@ private fun ModelUploadPanel(
                     it.type == ModelArtifactType.MIKT_ONNX
                 },
                 fallbackLabel = "MIKT ONNX",
-                note = "업로드된 경우 MobileKT 백본 후보로 우선 사용하고, KT runtime/device resource logging을 수집합니다.",
+                note = "업로드된 경우 Statics2011 MIKT adapter가 우선 사용되고, KT runtime/device resource logging을 수집합니다.",
+                uploadLabel = "ONNX 업로드",
                 onUpload = onUploadMikt
+            )
+            ModelArtifactRow(
+                state = artifacts.firstOrNull {
+                    it.type == ModelArtifactType.MIKT_STATICS2011_MAPPING
+                },
+                fallbackLabel = "Statics2011 Mapping",
+                note = "학습 때 사용한 concept/question/domain id vocabulary를 맞추기 위한 JSON입니다. concept profiler 결과가 들어오면 이 mapping을 통해 MIKT 입력 id로 변환합니다.",
+                uploadLabel = "JSON 업로드",
+                onUpload = onUploadStaticsMapping
             )
             ModelArtifactRow(
                 state = artifacts.firstOrNull {
@@ -412,6 +436,7 @@ private fun ModelUploadPanel(
                 },
                 fallbackLabel = "Generic/ReKT KT ONNX",
                 note = "MIKT 파일이 없을 때 사용하는 기존 KT ONNX 슬롯입니다.",
+                uploadLabel = "ONNX 업로드",
                 onUpload = onUploadKt
             )
             ModelArtifactRow(
@@ -420,6 +445,7 @@ private fun ModelUploadPanel(
                 },
                 fallbackLabel = "Concept ONNX",
                 note = "문서 -> 공학역학 concept 자동 지정 모델을 위한 슬롯입니다.",
+                uploadLabel = "ONNX 업로드",
                 onUpload = onUploadConcept
             )
         }
@@ -431,6 +457,7 @@ private fun ModelArtifactRow(
     state: ModelArtifactState?,
     fallbackLabel: String,
     note: String,
+    uploadLabel: String,
     onUpload: () -> Unit
 ) {
     Column(
@@ -465,7 +492,7 @@ private fun ModelArtifactRow(
                 )
             }
             Button(onClick = onUpload) {
-                Text("ONNX 업로드")
+                Text(uploadLabel)
             }
         }
         Text(

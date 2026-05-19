@@ -12,10 +12,8 @@ import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.domain.repository.DocumentRepository
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class HomeViewModel(
     private val repository: DocumentRepository,
@@ -205,29 +203,27 @@ class HomeViewModel(
         }
     }
 
-    private fun extractInBackground(
+    private suspend fun extractInBackground(
         doc: PdfDocument,
         uriString: String,
         mode: String,
         replaceExisting: Boolean = true
     ) {
-        viewModelScope.launch {
-            extractionProgressStore.update(doc.id, 1)
-            repository.updateDocument(
-                latestDocument(doc.id, doc).copy(
-                    extractionStatus =
-                    ExtractionStatus.EXTRACTING,
-                    extractionMode = mode
-                )
+        extractionProgressStore.update(doc.id, 1)
+        repository.updateDocument(
+            latestDocument(doc.id, doc).copy(
+                extractionStatus =
+                ExtractionStatus.EXTRACTING,
+                extractionMode = mode
             )
-            extractionWorkScheduler.enqueue(
-                documentId = doc.id,
-                uriString = uriString,
-                mode = mode,
-                replaceExisting = replaceExisting
-            )
-            refresh()
-        }
+        )
+        extractionWorkScheduler.enqueue(
+            documentId = doc.id,
+            uriString = uriString,
+            mode = mode,
+            replaceExisting = replaceExisting
+        )
+        refresh()
     }
 
     private suspend fun latestDocument(
@@ -239,17 +235,15 @@ class HomeViewModel(
             ?: fallback
     }
 
-    private suspend fun hasExtractedContent(documentId: String): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val file = File(
-                    appContext.filesDir,
-                    "documents/$documentId/content.md"
-                )
-                file.exists() && file.length() > 0L
-            } catch (_: Throwable) {
-                false
-            }
+    private fun hasExtractedContent(documentId: String): Boolean =
+        try {
+            val file = File(
+                appContext.filesDir,
+                "documents/$documentId/content.md"
+            )
+            file.exists() && file.length() > 0L
+        } catch (_: Throwable) {
+            false
         }
 
     fun importPdf(uri: Uri) {

@@ -82,10 +82,14 @@ fun ViewerScreen(
         .pendingLlmPrompt.collectAsState()
     val pendingQuizCrop by viewModel
         .pendingQuizCrop.collectAsState()
+    val pendingQuizText by viewModel
+        .pendingQuizText.collectAsState()
     val documentContent by viewModel
         .documentContent.collectAsState()
     val documentJsonContent by viewModel
         .documentJsonContent.collectAsState()
+    val documentTextIndex by viewModel
+        .documentTextIndex.collectAsState()
     val searchQuery by viewModel
         .searchQuery.collectAsState()
     val searchMatches by viewModel
@@ -348,6 +352,7 @@ fun ViewerScreen(
                         .getOrNull(activeSearchMatchIndex),
                     searchNavigationRequest =
                     searchNavigationRequest,
+                    textIndex = documentTextIndex,
                     onScrollPositionChanged =
                     onScrollPositionChanged,
                     onCropLlm = { payload ->
@@ -358,6 +363,9 @@ fun ViewerScreen(
                     },
                     onCropQuiz = { payload ->
                         viewModel.sendSelectionToQuiz(payload)
+                    },
+                    onTextQuiz = { payload ->
+                        viewModel.sendTextSelectionToQuiz(payload)
                     }
                 )
                 extractionProgress?.let { progress ->
@@ -390,6 +398,7 @@ fun ViewerScreen(
                 pendingImage = pendingImage,
                 pendingPrompt = pendingPrompt,
                 pendingQuizCrop = pendingQuizCrop,
+                pendingQuizText = pendingQuizText,
                 llmConnectionState = llmConnectionState,
                 llmConnectionError = llmConnectionError,
                 onRetryConnection = {
@@ -442,6 +451,9 @@ fun ViewerScreen(
                 },
                 onPendingQuizCropConsumed = {
                     viewModel.consumePendingQuizCrop()
+                },
+                onPendingQuizTextConsumed = {
+                    viewModel.consumePendingQuizText()
                 }
             )
         }
