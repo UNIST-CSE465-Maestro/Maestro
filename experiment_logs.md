@@ -188,39 +188,62 @@ Important: these logs are generated only when a KT ONNX file has been uploaded t
 
 KT ONNX files are stored under:
 
-- `filesDir/models/mikt_model.onnx` for `MIKT_ONNX`
-- `filesDir/models/mikt_statics2011_mapping.json` for `MIKT_STATICS2011_MAPPING`
+- `filesDir/models/mikt_mobile.onnx` for `MIKT_ONNX`
+- `filesDir/models/mikt_contract.json` for `MIKT_CONTRACT`
+- `filesDir/models/question_id_map.json` for `MIKT_QUESTION_ID_MAP`
+- `filesDir/models/concept_id_map.json` for `MIKT_CONCEPT_ID_MAP`
+- `filesDir/models/question_to_concept.json` for `MIKT_QUESTION_TO_CONCEPT`
+- `filesDir/models/question_difficulty.json` for `MIKT_QUESTION_DIFFICULTY`
+- `filesDir/models/export_validation.json` for `MIKT_EXPORT_VALIDATION`
+- `filesDir/models/mikt_statics2011_mapping.json` for legacy `MIKT_STATICS2011_MAPPING`
 - `filesDir/models/kt_model.onnx` for generic/ReKT-compatible `KT_ONNX`
 
 Current MIKT path:
 
-- If `mikt_model.onnx` exists, the app treats it as a Statics2011-trained MIKT candidate.
+- If `mikt_mobile.onnx` exists, the app treats it as a Statics2011-trained MobileMIKT candidate.
 - The CPU adapter uses only `QUIZ_ANSWERED` study events with non-null `correctness` as KT sequence inputs.
-- The default Statics2011 F2011 contract is `question_as_concept=true`, `concept_count=85`, `question_count=85`, `index_base=1`, `answer_offset=86`, and `max_sequence_length=200`.
-- If `mikt_statics2011_mapping.json` exists, it can override the default contract and provide `concept_id_map`, `question_id_map`, and `domain_id_map`.
-- If Statics2011 has no explicit question id for a timestep, the adapter uses `q_t = c_t`.
+- The strict MobileMIKT input contract is `last_problem`, `last_ans`, `next_problem`, and `next_ans`.
+- The default Statics2011 F2011 contract is `question_as_concept=true`, `concept_count=85`, `question_count=85`, `index_base=1`, `answer_offset=86`, `max_raw_sequence_length=200`, and `input_sequence_length=199`.
+- If `mikt_contract.json` exists, it overrides the default contract.
+- Separate `question_id_map.json`, `concept_id_map.json`, `question_to_concept.json`, and `question_difficulty.json` override or extend the contract.
+- `mikt_statics2011_mapping.json` remains supported only as legacy fallback.
+- The app expects MobileMIKT output `last_prediction`; if unavailable, it reads `prediction_sequence` at the last valid timestep.
+- `last_prediction` is treated as question-level correctness probability and is used as mastery evidence for linked concepts through `question_to_concept`.
 
-Expected optional mapping JSON:
+Expected `mikt_contract.json`:
 
 ```json
 {
-  "name": "statics2011_f2011_v1",
-  "dataset": "statics2011",
+  "model_name": "MobileMIKT",
+  "dataset": "Statics2011",
   "kc_model": "F2011",
+  "max_raw_sequence_length": 200,
+  "input_sequence_length": 199,
+  "pad_id": 0,
+  "index_base": 1,
+  "answer_encoding": {
+    "incorrect": 0,
+    "correct": 1
+  },
   "concept_count": 85,
   "question_count": 85,
-  "domain_count": 1,
-  "max_sequence_length": 200,
   "question_as_concept": true,
-  "index_base": 1,
-  "answer_offset": 86,
-  "concept_id_map": {
-    "em_statics_equilibrium": 1
-  },
-  "question_id_map": {},
-  "domain_id_map": {}
+  "pro2skill_included_in_onnx": true,
+  "onnx_opset": 17,
+  "onnx_runtime_android_compatible": true
 }
 ```
+
+Expected runtime sequence conversion:
+
+- Raw padded sequence length: `200`.
+- ONNX input sequence length: `199`.
+- `last_problem = use_problem[:, :-1]`
+- `last_ans = use_ans[:, :-1]`
+- `next_problem = use_problem[:, 1:]`
+- `next_ans = use_ans[:, 1:]`
+- Padding id: `0`.
+- Answer encoding: incorrect `0`, correct `1`.
 
 Generic KT ONNX input mapping:
 
@@ -243,7 +266,8 @@ Metadata:
 - `model_display_name`: `MIKT Statics2011 ONNX` or `KT ONNX`.
 - `dataset`: `statics2011` for the MIKT path.
 - `contract`: active KT input contract name.
-- `sequence_window`: active max sequence length.
+- `raw_sequence_window`: active raw padded sequence length.
+- `input_sequence_length`: ONNX input sequence length.
 - `question_as_concept`: whether `q_t = c_t` is being used.
 - `input_count`: number of trace inputs.
 - `sequence_event_count`: total number of study events across all sequences.

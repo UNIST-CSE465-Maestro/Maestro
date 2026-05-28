@@ -26,8 +26,13 @@ class SettingsRepositoryImpl(
         MutableStateFlow(prefs.getString(KEY_OPENAI_KEY, null))
     private val claudeKeyFlow =
         MutableStateFlow(prefs.getString(KEY_CLAUDE_KEY, null))
+    private val openRouterKeyFlow =
+        MutableStateFlow(prefs.getString(KEY_OPENROUTER_KEY, null))
     private val providerFlow =
-        MutableStateFlow(prefs.getString(KEY_LLM_PROVIDER, null))
+        MutableStateFlow(
+            prefs.getString(KEY_LLM_PROVIDER, null)
+                ?: DEFAULT_PROVIDER
+        )
     private val modelFlow =
         MutableStateFlow(prefs.getString(KEY_LLM_MODEL, null))
     private val serverUrlFlow =
@@ -79,6 +84,20 @@ class SettingsRepositoryImpl(
         prefs.edit().remove(KEY_CLAUDE_KEY).apply()
         claudeKeyFlow.value = null
     }
+
+    // OpenRouter
+    override fun getOpenRouterApiKey(): Flow<String?> =
+        openRouterKeyFlow
+    override suspend fun setOpenRouterApiKey(key: String) =
+        withContext(Dispatchers.IO) {
+            prefs.edit().putString(KEY_OPENROUTER_KEY, key).apply()
+            openRouterKeyFlow.value = key
+        }
+    override suspend fun clearOpenRouterApiKey() =
+        withContext(Dispatchers.IO) {
+            prefs.edit().remove(KEY_OPENROUTER_KEY).apply()
+            openRouterKeyFlow.value = null
+        }
 
     // Provider & model
     override fun getLlmProvider(): Flow<String?> = providerFlow
@@ -134,11 +153,13 @@ class SettingsRepositoryImpl(
         private const val KEY_GEMINI_KEY = "gemini_api_key"
         private const val KEY_OPENAI_KEY = "openai_api_key"
         private const val KEY_CLAUDE_KEY = "claude_api_key"
+        private const val KEY_OPENROUTER_KEY = "openrouter_api_key"
         private const val KEY_LLM_PROVIDER = "llm_provider"
         private const val KEY_LLM_MODEL = "llm_model"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_ACCESS = "access_token"
         private const val KEY_REFRESH = "refresh_token"
         private const val KEY_USERNAME = "username"
+        private const val DEFAULT_PROVIDER = "OPENROUTER"
     }
 }

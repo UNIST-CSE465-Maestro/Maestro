@@ -2,7 +2,7 @@ package com.maestro.app.domain.service
 
 import com.maestro.app.data.local.StudyEvent
 
-data class RektTraceInput(
+data class MiktTraceInput(
     val keyId: String,
     val events: List<StudyEvent>
 )
@@ -14,6 +14,6 @@ data class KnowledgeTraceResult(
     val modelName: String? = null
 )
 
-interface RektKnowledgeTracer {
-    fun trace(inputs: List<RektTraceInput>): Map<String, KnowledgeTraceResult>
+interface MiktKnowledgeTracer {
+    fun trace(inputs: List<MiktTraceInput>): Map<String, KnowledgeTraceResult>
 }

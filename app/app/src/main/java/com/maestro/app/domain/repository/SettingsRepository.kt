@@ -19,6 +19,9 @@ interface SettingsRepository {
     fun getClaudeApiKey(): Flow<String?>
     suspend fun setClaudeApiKey(key: String)
     suspend fun clearClaudeApiKey()
+    fun getOpenRouterApiKey(): Flow<String?>
+    suspend fun setOpenRouterApiKey(key: String)
+    suspend fun clearOpenRouterApiKey()
 
     // LLM provider & model
     fun getLlmProvider(): Flow<String?>

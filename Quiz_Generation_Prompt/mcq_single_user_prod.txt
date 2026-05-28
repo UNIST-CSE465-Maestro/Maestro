@@ -1,0 +1,88 @@
+[학습 자료]
+{retrieved_chunk}
+
+[퀴즈 설정]
+selection_mode: {selection_mode}
+book_title: {book_title}
+chapter_title: {chapter_title}
+section_title: {section_title}
+target_concept: {concept_name}
+bloom_level: {bloom_level}
+bloom_verb: {bloom_verb}
+bloom_requirement: {bloom_requirement}
+question_type: MCQ
+mcq_type: single_answer
+
+[생성 목표]
+[학습 자료] 안에서만 답을 찾을 수 있는 single-answer 객관식 문제 1개를 생성하세요.
+정답은 반드시 하나여야 합니다.
+문제는 target_concept와 직접 관련되어야 합니다.
+문제는 bloom_requirement에 맞는 사고 활동을 요구해야 합니다.
+
+[Bloom Level 요구 조건]
+{bloom_requirement}
+
+[생성 규칙]
+- choices는 반드시 A, B, C, D 네 개입니다.
+- answer는 반드시 "A", "B", "C", "D" 중 하나입니다.
+- 오답은 그럴듯하지만 [학습 자료] 기준으로 명확히 틀려야 합니다.
+- question_type은 반드시 "MCQ"입니다.
+- mcq_type은 반드시 "single_answer"입니다.
+- grading_method는 반드시 "exact_match"입니다.
+- SHORT 관련 필드(short_type, acceptable_answers)는 출력하지 마세요.
+- source_sentence는 [학습 자료]에서 그대로 복사한 연속 원문 문자열이어야 합니다.
+- source_sentence가 [학습 자료]에 그대로 존재하지 않으면 insufficient_context: true를 반환하세요.
+
+[정답 및 해설 출력 규칙]
+- answer에는 정답 보기 key를 출력하세요.
+- answer_text에는 실제 정답 보기 내용을 출력하세요.
+- explanation에는 정답 및 오답 판단 근거를 설명하세요.
+- final_explanation에는 학습자가 정답 확인 후 볼 수 있는 최종 해설을 자연어로 작성하세요.
+- answer, answer_text, explanation, final_explanation은 모두 source_sentence에 근거해야 합니다.
+
+[출력 JSON]
+{
+  "question_type": "MCQ",
+  "mcq_type": "single_answer",
+  "question": "",
+  "choices": {
+    "A": "",
+    "B": "",
+    "C": "",
+    "D": ""
+  },
+  "answer": "",
+  "answer_text": "",
+  "explanation": {
+    "correct": "",
+    "A": "",
+    "B": "",
+    "C": "",
+    "D": ""
+  },
+  "final_explanation": "",
+  "source_sentence": "",
+  "grading_method": "exact_match",
+  "bloom_level": {bloom_level},
+  "bloom_verb": "{bloom_verb}",
+  "target_concept": "{concept_name}",
+  "insufficient_context": false
+}
+
+[insufficient_context JSON]
+{
+  "question_type": "MCQ",
+  "mcq_type": null,
+  "question": null,
+  "choices": null,
+  "answer": null,
+  "answer_text": null,
+  "explanation": "주어진 학습 자료만으로는 single_answer 객관식 문제를 생성하기에 근거가 부족합니다.",
+  "final_explanation": null,
+  "source_sentence": null,
+  "grading_method": null,
+  "bloom_level": {bloom_level},
+  "bloom_verb": "{bloom_verb}",
+  "target_concept": "{concept_name}",
+  "insufficient_context": true
+}

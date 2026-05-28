@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.ConversationSummary
+import com.maestro.app.data.local.LocalMlKitContentExtractor
 import com.maestro.app.data.local.QuizResponseRecord
 import com.maestro.app.data.local.StructuredContentCropExtractor
 import com.maestro.app.data.model.LlmRequestBuilder
@@ -104,18 +105,235 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private fun buildSystemPrompt(documentContent: String?): String {
+private fun buildSystemPrompt(
+    documentContent: String?,
+    pageIndex: Int,
+    userPrompt: String,
+    extraContext: String
+): String {
     val base = "You are a helpful AI assistant " +
         "integrated into Maestro, a PDF " +
         "annotation app. Help the user " +
         "understand and work with their documents. " +
         "Always respond in Korean."
     if (documentContent.isNullOrBlank()) return base
+    val context = buildFocusedDocumentContext(
+        documentContent = documentContent,
+        pageIndex = pageIndex,
+        query = userPrompt,
+        maxChars = CHAT_CONTEXT_CHARS
+    )
+    val extra = extraContext.takeIf { it.isNotBlank() }
+        ?.let {
+            "\n\nAdditional OCR context from the selected image region:\n\n$it"
+        }
+        .orEmpty()
     return "$base\n\n" +
         "The user is currently viewing a document. " +
-        "Here is the extracted text content:\n\n" +
-        documentContent.take(5000)
+        "Use this focused context from the saved parsed document. " +
+        "If it is not enough, say what part is missing instead of guessing.\n\n" +
+        context + extra
 }
+
+private fun buildFocusedDocumentContext(
+    documentContent: String,
+    pageIndex: Int,
+    query: String?,
+    maxChars: Int
+): String {
+    val sections = mutableListOf<String>()
+    val outline = documentOutline(documentContent)
+    if (outline.isNotBlank()) {
+        sections += "## Document Outline\n$outline"
+    }
+    val currentPage = pageSection(documentContent, pageIndex)
+    if (currentPage.isNotBlank()) {
+        sections += "## Current Page ${pageIndex + 1}\n$currentPage"
+    }
+    val relevant = relevantSnippets(
+        documentContent = documentContent,
+        query = query.orEmpty(),
+        excluded = currentPage,
+        maxChars = maxChars / 2
+    )
+    if (relevant.isNotBlank()) {
+        sections += "## Related Snippets\n$relevant"
+    } else if (currentPage.isBlank()) {
+        sections += "## Opening Content\n" +
+            documentContent.take(maxChars / 2)
+    }
+    val joined = sections.joinToString("\n\n").ifBlank {
+        documentContent
+    }
+    return joined.take(maxChars)
+}
+
+private fun documentOutline(documentContent: String): String {
+    return documentContent.lineSequence()
+        .map { it.trim() }
+        .filter {
+            it.startsWith("#") &&
+                !it.startsWith("# Page ")
+        }
+        .take(40)
+        .joinToString("\n")
+        .take(1200)
+}
+
+private fun pageSection(documentContent: String, pageIndex: Int): String {
+    val target = pageIndex + 1
+    val pattern = Regex("(?m)^# Page (\\d+)\\s*$")
+    val matches = pattern.findAll(documentContent).toList()
+    if (matches.isEmpty()) return ""
+    val matchIndex = matches.indexOfFirst {
+        it.groupValues.getOrNull(1)?.toIntOrNull() == target
+    }
+    if (matchIndex < 0) return ""
+    val start = matches[matchIndex].range.last + 1
+    val end = matches.getOrNull(matchIndex + 1)?.range?.first
+        ?: documentContent.length
+    return documentContent.substring(start, end)
+        .trim()
+}
+
+private fun buildDocumentQuizContext(documentContent: String): String {
+    if (documentContent.isBlank()) return ""
+    val sections = mutableListOf<String>()
+    val outline = documentOutline(documentContent)
+    if (outline.isNotBlank()) {
+        sections += "## Document Outline\n$outline"
+    }
+    val pageSections = numberedPageSections(documentContent)
+    if (pageSections.isNotEmpty()) {
+        sections += balancedPageSamples(pageSections)
+    } else {
+        sections += balancedParagraphSamples(documentContent)
+    }
+    return sections.joinToString("\n\n")
+        .take(QUIZ_CONTEXT_CHARS)
+}
+
+private fun buildWeaknessQuizContext(
+    documentContent: String,
+    quizHistory: List<QuizResponseRecord>,
+    fallbackPageIndex: Int
+): String {
+    val weakRecords = quizHistory
+        .filterNot { it.isCorrect }
+        .sortedByDescending { it.answeredAt }
+        .take(5)
+    if (weakRecords.isEmpty()) {
+        return buildDocumentQuizContext(documentContent)
+    }
+    val query = weakRecords.joinToString(" ") {
+        it.question + " " + it.sourceSentence
+    }
+    val related = relevantSnippets(
+        documentContent = documentContent,
+        query = query,
+        excluded = "",
+        maxChars = QUIZ_CONTEXT_CHARS - 1200
+    )
+    if (related.isBlank()) {
+        return buildFocusedDocumentContext(
+            documentContent = documentContent,
+            pageIndex = fallbackPageIndex,
+            query = query,
+            maxChars = QUIZ_CONTEXT_CHARS
+        )
+    }
+    val outline = documentOutline(documentContent)
+    return listOf(
+        "## Weak Concepts",
+        weakRecords.joinToString("\n") {
+            "- L${it.bloomLevel}: ${it.question.take(120)}"
+        },
+        "## Document Outline\n$outline",
+        "## Related Weakness Snippets\n$related"
+    ).joinToString("\n\n").take(QUIZ_CONTEXT_CHARS)
+}
+
+private fun numberedPageSections(
+    documentContent: String
+): List<Pair<Int, String>> {
+    val pattern = Regex("(?m)^# Page (\\d+)\\s*$")
+    val matches = pattern.findAll(documentContent).toList()
+    return matches.mapIndexedNotNull { index, match ->
+        val page = match.groupValues.getOrNull(1)?.toIntOrNull()
+            ?: return@mapIndexedNotNull null
+        val start = match.range.last + 1
+        val end = matches.getOrNull(index + 1)?.range?.first
+            ?: documentContent.length
+        page to documentContent.substring(start, end).trim()
+    }.filter { it.second.isNotBlank() }
+}
+
+private fun balancedPageSamples(
+    pages: List<Pair<Int, String>>
+): String {
+    val selected = if (pages.size <= DOCUMENT_SAMPLE_COUNT) {
+        pages
+    } else {
+        (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
+            pages[(index * (pages.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1)))
+                .roundToInt()]
+        }.distinctBy { it.first }
+    }
+    return selected.joinToString("\n\n") { (page, body) ->
+        "## Page $page\n${body.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
+    }
+}
+
+private fun balancedParagraphSamples(documentContent: String): String {
+    val paragraphs = documentContent.split(Regex("\\n\\s*\\n"))
+        .map { it.trim() }
+        .filter { it.length >= 80 }
+    if (paragraphs.isEmpty()) return documentContent.take(QUIZ_CONTEXT_CHARS)
+    val selected = if (paragraphs.size <= DOCUMENT_SAMPLE_COUNT) {
+        paragraphs
+    } else {
+        (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
+            paragraphs[(index * (paragraphs.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1)))
+                .roundToInt()]
+        }
+    }
+    return selected.joinToString("\n\n---\n\n") {
+        it.take(DOCUMENT_PAGE_SAMPLE_CHARS)
+    }
+}
+
+private fun relevantSnippets(
+    documentContent: String,
+    query: String,
+    excluded: String,
+    maxChars: Int
+): String {
+    val tokens = query.lowercase(Locale.US)
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter { it.length >= 3 }
+        .toSet()
+    if (tokens.isEmpty()) return ""
+    return documentContent.split(Regex("\\n\\s*\\n"))
+        .asSequence()
+        .map { it.trim() }
+        .filter { it.length in 40..1200 && it !in excluded }
+        .map { snippet ->
+            val lower = snippet.lowercase(Locale.US)
+            val score = tokens.count { lower.contains(it) }
+            score to snippet
+        }
+        .filter { it.first > 0 }
+        .sortedByDescending { it.first }
+        .map { it.second }
+        .take(8)
+        .joinToString("\n\n---\n\n")
+        .take(maxChars)
+}
+
+private const val CHAT_CONTEXT_CHARS = 7000
+private const val QUIZ_CONTEXT_CHARS = 7000
+private const val DOCUMENT_SAMPLE_COUNT = 10
+private const val DOCUMENT_PAGE_SAMPLE_CHARS = 650
 
 private data class QueuedLlmRequest(
     val text: String,
@@ -137,12 +355,23 @@ private data class QuizSourceOverride(
     val label: String
 )
 
+private enum class QuizScopeMode(
+    val label: String,
+    val selectionMode: String
+) {
+    DOCUMENT("문서 전체", "document"),
+    CURRENT_PAGE("현재 페이지", "current_page"),
+    SELECTION("선택 영역", "selection"),
+    WEAKNESS("약점 보완", "weakness")
+}
+
 @Composable
 fun LlmSidebar(
     isVisible: Boolean,
     onCollapse: () -> Unit,
     llmService: LlmService,
     quizService: QuizService,
+    localMlKitContentExtractor: LocalMlKitContentExtractor,
     settingsRepository: SettingsRepository,
     conversationDataSource: ConversationLocalDataSource,
     documentContent: String? = null,
@@ -196,7 +425,7 @@ fun LlmSidebar(
         .getLlmProvider()
         .collectAsState(initial = null)
     val currentProvider = savedProviderName
-        ?: LlmProvider.GEMINI.name
+        ?: LlmProvider.OPENROUTER.name
     val geminiKey by settingsRepository
         .getGeminiApiKey()
         .collectAsState(initial = null)
@@ -206,11 +435,16 @@ fun LlmSidebar(
     val claudeKey by settingsRepository
         .getClaudeApiKey()
         .collectAsState(initial = null)
+    val openRouterKey by settingsRepository
+        .getOpenRouterApiKey()
+        .collectAsState(initial = null)
     val hasApiKey = when (currentProvider) {
         LlmProvider.OPENAI.name ->
             !openAiKey.isNullOrBlank()
         LlmProvider.CLAUDE.name ->
             !claudeKey.isNullOrBlank()
+        LlmProvider.OPENROUTER.name ->
+            !openRouterKey.isNullOrBlank()
         else -> !geminiKey.isNullOrBlank()
     }
     val savedModel by settingsRepository
@@ -229,6 +463,8 @@ fun LlmSidebar(
                 listOf(OpenAiClient.DEFAULT_MODEL)
             LlmProvider.CLAUDE.name ->
                 listOf(ClaudeClient.DEFAULT_MODEL)
+            LlmProvider.OPENROUTER.name ->
+                listOf(OpenAiClient.OPENROUTER_DEFAULT_MODEL)
             else -> listOf(
                 LlmRequestBuilder.DEFAULT_MODEL
             )
@@ -304,9 +540,37 @@ fun LlmSidebar(
     var quizSourceOverride by remember(documentId) {
         mutableStateOf<QuizSourceOverride?>(null)
     }
+    var quizScopeMode by remember(documentId) {
+        mutableStateOf(QuizScopeMode.DOCUMENT)
+    }
+    val baseQuizContent = remember(
+        documentContent,
+        pageIndex,
+        quizScopeMode,
+        quizSourceOverride,
+        quizHistory
+    ) {
+        val content = documentContent.orEmpty()
+        when (quizScopeMode) {
+            QuizScopeMode.CURRENT_PAGE -> buildFocusedDocumentContext(
+                documentContent = content,
+                pageIndex = pageIndex,
+                query = null,
+                maxChars = QUIZ_CONTEXT_CHARS
+            )
+            QuizScopeMode.WEAKNESS -> buildWeaknessQuizContext(
+                documentContent = content,
+                quizHistory = quizHistory,
+                fallbackPageIndex = pageIndex
+            )
+            QuizScopeMode.SELECTION -> quizSourceOverride?.content.orEmpty()
+            QuizScopeMode.DOCUMENT -> buildDocumentQuizContext(content)
+        }
+    }
     val quizContent = quizSourceOverride?.content
-        ?: documentContent.orEmpty()
+        ?: baseQuizContent
     val quizSourceLabel = quizSourceOverride?.label
+        ?: quizScopeMode.label
     val quizConceptName = remember(quizContent) {
         extractQuizConcept(quizContent)
     }
@@ -327,6 +591,9 @@ fun LlmSidebar(
     }
     var selectedQuizChoice by remember(documentId) {
         mutableStateOf<String?>(null)
+    }
+    var selectedQuizChoices by remember(documentId) {
+        mutableStateOf<Set<String>>(emptySet())
     }
     var quizAnswered by remember(documentId) {
         mutableStateOf(false)
@@ -353,18 +620,36 @@ fun LlmSidebar(
         )
         currentQuiz = null
         selectedQuizChoice = null
+        selectedQuizChoices = emptySet()
         quizAnswered = false
         quizStartedAt = null
         quizLoading = false
         if (selection.content.isBlank()) {
-            quizSourceOverride = null
-            quizError =
-                "선택한 영역에서 추출 가능한 텍스트를 찾지 못했습니다. 텍스트가 포함된 영역을 선택하거나 AI 설명 기능을 사용해 주세요."
+            val ocrText = runCatching {
+                localMlKitContentExtractor.extractImageText(
+                    payload.imageBytes
+                )
+            }.getOrDefault("")
+            if (ocrText.isBlank()) {
+                quizSourceOverride = null
+                quizError =
+                    "선택한 영역에서 추출 가능한 텍스트를 찾지 " +
+                        "못했습니다. 텍스트가 포함된 영역을 선택하거나 " +
+                        "AI 설명 기능을 사용해 주세요."
+            } else {
+                quizSourceOverride = QuizSourceOverride(
+                    content = ocrText,
+                    label = "선택 영역 OCR · 페이지 ${payload.pageIndex + 1}"
+                )
+                quizScopeMode = QuizScopeMode.SELECTION
+                quizError = null
+            }
         } else {
             quizSourceOverride = QuizSourceOverride(
                 content = selection.content,
                 label = selection.label
             )
+            quizScopeMode = QuizScopeMode.SELECTION
             quizError = null
         }
         onPendingQuizCropConsumed()
@@ -381,6 +666,7 @@ fun LlmSidebar(
         quizLoading = true
         quizError = null
         selectedQuizChoice = null
+        selectedQuizChoices = emptySet()
         quizAnswered = false
         currentQuiz = null
         onQuizRequested(quizConceptId, selectedBloomLevel)
@@ -392,6 +678,7 @@ fun LlmSidebar(
                         conceptName = quizConceptName,
                         mastery = quizMastery,
                         bloomLevel = selectedBloomLevel,
+                        selectionMode = quizScopeMode.selectionMode,
                         sourceLabel = quizSourceLabel
                     )
                 )
@@ -409,6 +696,7 @@ fun LlmSidebar(
             ?: return@LaunchedEffect
         currentQuiz = null
         selectedQuizChoice = null
+        selectedQuizChoices = emptySet()
         quizAnswered = false
         quizStartedAt = null
         quizLoading = false
@@ -422,6 +710,7 @@ fun LlmSidebar(
                 content = payload.text,
                 label = payload.label
             )
+            quizScopeMode = QuizScopeMode.SELECTION
             quizError = null
             pendingTextQuizGeneration = true
         }
@@ -497,6 +786,15 @@ fun LlmSidebar(
                     .also { conversationId = it }
             conversationDataSource
                 .appendMessage(convId, userMsg)
+            val extraOcrContext = if (imgs.isNotEmpty()) {
+                runCatching {
+                    localMlKitContentExtractor.extractImageText(
+                        imgs.first()
+                    )
+                }.getOrDefault("")
+            } else {
+                ""
+            }
             streamAssistantResponse(
                 messages,
                 llmService,
@@ -504,6 +802,9 @@ fun LlmSidebar(
                 convId,
                 imgs,
                 documentContent,
+                pageIndex,
+                text,
+                extraOcrContext,
                 { errorMessage = it },
                 { isLoading = it }
             )
@@ -622,6 +923,8 @@ fun LlmSidebar(
                         OpenAiClient.DEFAULT_MODEL
                     LlmProvider.CLAUDE.name ->
                         ClaudeClient.DEFAULT_MODEL
+                    LlmProvider.OPENROUTER.name ->
+                        OpenAiClient.OPENROUTER_DEFAULT_MODEL
                     else ->
                         LlmRequestBuilder.DEFAULT_MODEL
                 },
@@ -738,11 +1041,26 @@ fun LlmSidebar(
                     sourceLabel = quizSourceLabel,
                     onClearSource = {
                         quizSourceOverride = null
+                        quizScopeMode = QuizScopeMode.DOCUMENT
                         currentQuiz = null
                         selectedQuizChoice = null
+                        selectedQuizChoices = emptySet()
                         quizAnswered = false
                         quizError = null
                     },
+                    scopeMode = quizScopeMode,
+                    onScopeModeSelected = { mode ->
+                        quizScopeMode = mode
+                        if (mode != QuizScopeMode.SELECTION) {
+                            quizSourceOverride = null
+                        }
+                        currentQuiz = null
+                        selectedQuizChoice = null
+                        selectedQuizChoices = emptySet()
+                        quizAnswered = false
+                        quizError = null
+                    },
+                    hasSelectionSource = quizSourceOverride != null,
                     pageIndex = pageIndex,
                     conceptName = quizConceptName,
                     conceptId = quizConceptId,
@@ -753,6 +1071,7 @@ fun LlmSidebar(
                     },
                     quiz = currentQuiz,
                     selectedChoice = selectedQuizChoice,
+                    selectedChoices = selectedQuizChoices,
                     answered = quizAnswered,
                     loading = quizLoading,
                     error = quizError,
@@ -763,27 +1082,38 @@ fun LlmSidebar(
                     onGenerateQuestion = {
                         generateQuizQuestion()
                     },
-                    onAnswerSelected = { choice, current ->
+                    onAnswerChanged = { choices ->
+                        selectedQuizChoices = choices
+                        selectedQuizChoice = choices.sorted().joinToString(",")
+                    },
+                    onAnswerSubmitted = { submitted, current ->
                         if (!quizAnswered) {
-                            selectedQuizChoice = choice
-                            quizAnswered = true
-                            val correct = choice == current.answer
-                            val elapsed = quizStartedAt?.let {
-                                System.currentTimeMillis() - it
+                            if (submitted.isNotEmpty()) {
+                                selectedQuizChoices = submitted
+                                selectedQuizChoice =
+                                    submitted.sorted().joinToString(",")
+                                quizAnswered = true
+                                val correct =
+                                    submitted == current.answerKeys.toSet()
+                                val elapsed = quizStartedAt?.let {
+                                    System.currentTimeMillis() - it
+                                }
+                                val submittedText =
+                                    submitted.sorted().joinToString(",")
+                                onQuizAnswered(
+                                    quizConceptId,
+                                    current.bloomLevel,
+                                    correct,
+                                    elapsed,
+                                    current.question,
+                                    current.choices,
+                                    submittedText,
+                                    current.answer,
+                                    current.explanation,
+                                    current.choiceExplanations,
+                                    current.sourceSentence
+                                )
                             }
-                            onQuizAnswered(
-                                quizConceptId,
-                                current.bloomLevel,
-                                correct,
-                                elapsed,
-                                current.question,
-                                current.choices,
-                                choice,
-                                current.answer,
-                                current.explanation,
-                                current.choiceExplanations,
-                                current.sourceSentence
-                            )
                         }
                     },
                     modifier = Modifier.weight(1f)
@@ -813,9 +1143,11 @@ fun LlmSidebar(
                         val providerName =
                             when (currentProvider) {
                                 LlmProvider.OPENAI
-                                    .name -> "OpenAI"
+                                    .name -> "ChatGPT"
                                 LlmProvider.CLAUDE
                                     .name -> "Claude"
+                                LlmProvider.OPENROUTER
+                                    .name -> "OpenRouter"
                                 else -> "Gemini"
                             }
                         Text(
@@ -1047,6 +1379,9 @@ private fun QuizPanel(
     documentContent: String?,
     sourceLabel: String?,
     onClearSource: () -> Unit,
+    scopeMode: QuizScopeMode,
+    onScopeModeSelected: (QuizScopeMode) -> Unit,
+    hasSelectionSource: Boolean,
     pageIndex: Int,
     conceptName: String,
     conceptId: String,
@@ -1055,6 +1390,7 @@ private fun QuizPanel(
     onBloomLevelSelected: (Int) -> Unit,
     quiz: GeneratedQuizQuestion?,
     selectedChoice: String?,
+    selectedChoices: Set<String>,
     answered: Boolean,
     loading: Boolean,
     error: String?,
@@ -1063,7 +1399,8 @@ private fun QuizPanel(
     hasApiKey: Boolean,
     onRetryConnection: () -> Unit,
     onGenerateQuestion: () -> Unit,
-    onAnswerSelected: (String, GeneratedQuizQuestion) -> Unit,
+    onAnswerChanged: (Set<String>) -> Unit,
+    onAnswerSubmitted: (Set<String>, GeneratedQuizQuestion) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val content = documentContent.orEmpty()
@@ -1081,6 +1418,9 @@ private fun QuizPanel(
                 conceptId = conceptId,
                 mastery = mastery,
                 pageIndex = pageIndex,
+                scopeMode = scopeMode,
+                onScopeModeSelected = onScopeModeSelected,
+                hasSelectionSource = hasSelectionSource,
                 selectedBloomLevel = selectedBloomLevel,
                 onBloomLevelSelected = {
                     onBloomLevelSelected(it)
@@ -1144,9 +1484,11 @@ private fun QuizPanel(
                 QuizQuestionCard(
                     quiz = currentQuiz,
                     selectedChoice = selectedChoice,
+                    selectedChoices = selectedChoices,
                     answered = answered,
-                    onSelect = { choice ->
-                        onAnswerSelected(choice, currentQuiz)
+                    onAnswerChanged = onAnswerChanged,
+                    onSubmit = { submitted ->
+                        onAnswerSubmitted(submitted, currentQuiz)
                     }
                 )
             }
@@ -1224,6 +1566,9 @@ private fun QuizHeader(
     conceptId: String,
     mastery: Float,
     pageIndex: Int,
+    scopeMode: QuizScopeMode,
+    onScopeModeSelected: (QuizScopeMode) -> Unit,
+    hasSelectionSource: Boolean,
     selectedBloomLevel: Int,
     onBloomLevelSelected: (Int) -> Unit,
     quizService: QuizService
@@ -1248,6 +1593,23 @@ private fun QuizHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 16.sp
         )
+        Spacer(Modifier.height(10.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(QuizScopeMode.entries) { mode ->
+                val enabled = mode != QuizScopeMode.SELECTION ||
+                    hasSelectionSource
+                QuizScopeChip(
+                    label = mode.label,
+                    selected = mode == scopeMode,
+                    enabled = enabled,
+                    onClick = {
+                        onScopeModeSelected(mode)
+                    }
+                )
+            }
+        }
         Spacer(Modifier.height(10.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1295,12 +1657,45 @@ private fun BloomChip(
 }
 
 @Composable
+private fun QuizScopeChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Text(
+        label,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                when {
+                    selected -> MaterialTheme.colorScheme.primaryContainer
+                    enabled -> MaterialTheme.colorScheme.surface
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                }
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        color = when {
+            selected -> MaterialTheme.colorScheme.onPrimaryContainer
+            enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+            else -> MaterialTheme.colorScheme.outline
+        },
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
 private fun QuizQuestionCard(
     quiz: GeneratedQuizQuestion,
     selectedChoice: String?,
+    selectedChoices: Set<String>,
     answered: Boolean,
-    onSelect: (String) -> Unit
+    onAnswerChanged: (Set<String>) -> Unit,
+    onSubmit: (Set<String>) -> Unit
 ) {
+    val multiple = quiz.mcqType == "multiple_select"
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1324,24 +1719,51 @@ private fun QuizQuestionCard(
         )
         Spacer(Modifier.height(12.dp))
         quiz.choices.toSortedMap().forEach { (key, value) ->
+            val selected = if (multiple) {
+                key in selectedChoices
+            } else {
+                selectedChoice == key
+            }
             QuizChoiceRow(
                 keyLabel = key,
                 text = value,
-                selected = selectedChoice == key,
-                correct = answered && key == quiz.answer,
+                selected = selected,
+                correct = answered && key in quiz.answerKeys,
                 wrong = answered &&
-                    selectedChoice == key &&
-                    key != quiz.answer,
+                    selected &&
+                    key !in quiz.answerKeys,
                 enabled = !answered,
                 onClick = {
-                    onSelect(key)
+                    if (multiple) {
+                        onAnswerChanged(
+                            if (key in selectedChoices) {
+                                selectedChoices - key
+                            } else {
+                                selectedChoices + key
+                            }
+                        )
+                    } else {
+                        onAnswerChanged(setOf(key))
+                        onSubmit(setOf(key))
+                    }
                 }
             )
             Spacer(Modifier.height(8.dp))
         }
+        if (multiple && !answered) {
+            TextButton(
+                enabled = selectedChoices.isNotEmpty(),
+                onClick = {
+                    onSubmit(selectedChoices)
+                },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("정답 확인")
+            }
+        }
         if (answered) {
             QuizExplanation(
-                correct = selectedChoice == quiz.answer,
+                correct = selectedChoices == quiz.answerKeys.toSet(),
                 answer = quiz.answer,
                 explanation = quiz.explanation,
                 selectedChoice = selectedChoice,
@@ -1654,6 +2076,8 @@ private fun mapQuizError(error: Exception): String {
             "LLM 응답을 퀴즈 JSON으로 해석하지 못했습니다. 새 문제 생성을 다시 눌러주세요."
         msg.contains("API error 429", true) ->
             "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+        msg.contains("API error 400", true) ->
+            "LLM 요청 형식이나 선택한 모델이 맞지 않습니다. OpenRouter 모델을 다시 불러오거나 provider를 확인해주세요."
         else ->
             "퀴즈를 생성할 수 없습니다: $msg"
     }
@@ -1760,6 +2184,9 @@ private suspend fun streamAssistantResponse(
     convId: String,
     images: List<ByteArray>,
     documentContent: String?,
+    pageIndex: Int,
+    userPrompt: String,
+    extraContext: String,
     onError: (String?) -> Unit,
     onLoading: (Boolean) -> Unit
 ) {
@@ -1796,7 +2223,10 @@ private suspend fun streamAssistantResponse(
         llmService.stream(
             messages = messages.toList(),
             systemPrompt = buildSystemPrompt(
-                documentContent
+                documentContent,
+                pageIndex,
+                userPrompt,
+                extraContext
             ),
             images = images
         ).collect { token ->
@@ -1859,6 +2289,8 @@ private suspend fun streamAssistantResponse(
                     "API 키가 유효하지 않습니다"
                 msg.contains("API error 429") ->
                     "요청 한도 초과: $msg"
+                msg.contains("API error 400") ->
+                    "요청 형식 또는 선택한 모델 문제입니다: $msg"
                 msg.contains("Unable to resolve host", true) ||
                     msg.contains("No address associated", true) ->
                     "LLM 서버 주소를 찾을 수 없습니다. " +
@@ -1901,8 +2333,9 @@ private fun SidebarTopBar(
         mutableStateOf(false)
     }
     val providerLabel = when (currentProvider) {
-        LlmProvider.OPENAI.name -> "OpenAI"
+        LlmProvider.OPENAI.name -> "ChatGPT"
         LlmProvider.CLAUDE.name -> "Claude"
+        LlmProvider.OPENROUTER.name -> "OpenRouter"
         else -> "Gemini"
     }
     Row(
@@ -1941,6 +2374,15 @@ private fun SidebarTopBar(
                 }
             ) {
                 DropdownMenuItem(
+                    text = { Text("OpenRouter") },
+                    onClick = {
+                        onProviderSelected(
+                            LlmProvider.OPENROUTER.name
+                        )
+                        showProviderMenu = false
+                    }
+                )
+                DropdownMenuItem(
                     text = { Text("Gemini") },
                     onClick = {
                         onProviderSelected(
@@ -1950,7 +2392,7 @@ private fun SidebarTopBar(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("OpenAI") },
+                    text = { Text("ChatGPT") },
                     onClick = {
                         onProviderSelected(
                             LlmProvider.OPENAI.name

@@ -9,12 +9,18 @@ data class BloomLevel(
 )
 
 data class GeneratedQuizQuestion(
+    val questionType: String = "MCQ",
+    val mcqType: String = "single_answer",
     val question: String,
     val choices: Map<String, String>,
     val answer: String,
+    val answerKeys: List<String> = listOf(answer),
+    val answerText: String = "",
     val explanation: String,
+    val finalExplanation: String = explanation,
     val choiceExplanations: Map<String, String> = emptyMap(),
     val sourceSentence: String,
+    val sourceSentences: Map<String, String> = emptyMap(),
     val bloomLevel: Int,
     val targetConcept: String
 )
@@ -24,5 +30,6 @@ data class QuizGenerationRequest(
     val conceptName: String,
     val mastery: Float,
     val bloomLevel: Int,
+    val selectionMode: String = "document",
     val sourceLabel: String? = null
 )

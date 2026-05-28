@@ -14,6 +14,7 @@ data class DocumentDto(
     val ts: Long = 0L,
     val extractionStatus: String = "none",
     val extractionMode: String = "",
+    val extractionSource: String = "",
     val isPinned: Boolean = false,
     val bookmarkedPages: List<Int> = emptyList()
 ) {
@@ -32,6 +33,7 @@ data class DocumentDto(
             ExtractionStatus.NONE
         },
         extractionMode = extractionMode.ifBlank { null },
+        extractionSource = extractionSource.ifBlank { null },
         isPinned = isPinned,
         bookmarkedPages = bookmarkedPages.toSet()
     )
@@ -47,6 +49,7 @@ data class DocumentDto(
             extractionStatus =
             doc.extractionStatus.name.lowercase(),
             extractionMode = doc.extractionMode ?: "",
+            extractionSource = doc.extractionSource ?: "",
             isPinned = doc.isPinned,
             bookmarkedPages = doc.bookmarkedPages.sorted()
         )

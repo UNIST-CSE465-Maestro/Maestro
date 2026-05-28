@@ -8,7 +8,7 @@ data class ProfileSummary(
     val recentActivityCount: Int = 0,
     val lastStudiedAt: Long? = null,
     val averageMastery: Float = 0f,
-    val rektStatus: String = ""
+    val miktStatus: String = ""
 )
 
 data class DocumentKnowledge(

@@ -38,8 +38,6 @@ import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
-import com.maestro.app.ui.auth.AuthScreen
-import com.maestro.app.ui.auth.AuthViewModel
 import com.maestro.app.ui.home.HomeScreen
 import com.maestro.app.ui.home.HomeViewModel
 import com.maestro.app.ui.profile.ProfileScreen
@@ -89,7 +87,7 @@ fun MaestroNavGraph() {
         koinInject()
     val serverApi: MaestroServerApi = koinInject()
 
-    // Health check + auth state
+    // Health check + restored viewer tabs
     var healthChecked by remember {
         mutableStateOf(false)
     }
@@ -101,56 +99,46 @@ fun MaestroNavGraph() {
     }
 
     LaunchedEffect(Unit) {
-        // Determine start destination
-        val token =
-            settingsRepository.getAccessToken().first()
-        val authenticated = !token.isNullOrBlank()
-        if (authenticated) {
-            val savedState = viewerTabStore.load()
-            val docsById = documentRepository
-                .loadDocuments()
-                .associateBy { it.id }
-            pdfTabViewports.clear()
-            val restoredTabs = savedState.tabs
-                .mapNotNull { tab ->
-                    docsById[tab.documentId]?.let { doc ->
-                        pdfTabViewports[doc.id] =
-                            PdfTabViewportState(
-                                firstVisiblePageIndex =
-                                tab.firstVisiblePageIndex
-                                    .coerceIn(
-                                        0,
-                                        (doc.pageCount - 1)
-                                            .coerceAtLeast(0)
-                                    ),
-                                firstVisiblePageScrollOffset =
-                                tab.firstVisiblePageScrollOffset
-                                    .coerceAtLeast(0)
-                            )
-                        OpenPdfTab(
-                            documentId = doc.id,
-                            title = doc.displayName,
-                            pageCount = doc.pageCount,
-                            uriString = doc.uriString
+        val savedState = viewerTabStore.load()
+        val docsById = documentRepository
+            .loadDocuments()
+            .associateBy { it.id }
+        pdfTabViewports.clear()
+        val restoredTabs = savedState.tabs
+            .mapNotNull { tab ->
+                docsById[tab.documentId]?.let { doc ->
+                    pdfTabViewports[doc.id] =
+                        PdfTabViewportState(
+                            firstVisiblePageIndex =
+                            tab.firstVisiblePageIndex
+                                .coerceIn(
+                                    0,
+                                    (doc.pageCount - 1)
+                                        .coerceAtLeast(0)
+                                ),
+                            firstVisiblePageScrollOffset =
+                            tab.firstVisiblePageScrollOffset
+                                .coerceAtLeast(0)
                         )
-                    }
+                    OpenPdfTab(
+                        documentId = doc.id,
+                        title = doc.displayName,
+                        pageCount = doc.pageCount,
+                        uriString = doc.uriString
+                    )
                 }
-            openPdfTabs.clear()
-            openPdfTabs.addAll(restoredTabs)
-            activePdfTabId = savedState.activeDocumentId
-                ?.takeIf { id ->
-                    restoredTabs.any {
-                        it.documentId == id
-                    }
+            }
+        openPdfTabs.clear()
+        openPdfTabs.addAll(restoredTabs)
+        activePdfTabId = savedState.activeDocumentId
+            ?.takeIf { id ->
+                restoredTabs.any {
+                    it.documentId == id
                 }
-                ?: restoredTabs.firstOrNull()?.documentId
-        }
+            }
+            ?: restoredTabs.firstOrNull()?.documentId
         tabsRestored = true
-        startDest = if (authenticated) {
-            Screen.Home.route
-        } else {
-            Screen.Auth.route
-        }
+        startDest = Screen.Home.route
         healthChecked = true
 
         // Silent health check must not block local startup.
@@ -376,26 +364,6 @@ fun MaestroNavGraph() {
         navController = navController,
         startDestination = startDest!!
     ) {
-        composable(Screen.Auth.route) {
-            val viewModel: AuthViewModel =
-                koinViewModel()
-
-            BackHandler { showExitDialog = true }
-
-            AuthScreen(
-                viewModel = viewModel,
-                onLoginSuccess = {
-                    navController.navigate(
-                        Screen.Home.route
-                    ) {
-                        popUpTo(Screen.Auth.route) {
-                            inclusive = true
-                        }
-                    }
-                }
-            )
-        }
-
         composable(Screen.Home.route) {
             val viewModel: HomeViewModel =
                 koinViewModel()
@@ -569,15 +537,6 @@ fun MaestroNavGraph() {
                 viewModel = viewModel,
                 onBack = {
                     navController.popBackStack()
-                },
-                onLogout = {
-                    navController.navigate(
-                        Screen.Auth.route
-                    ) {
-                        popUpTo(Screen.Home.route) {
-                            inclusive = true
-                        }
-                    }
                 }
             )
         }

@@ -9,6 +9,7 @@ data class PdfDocument(
     val addedTimestamp: Long = System.currentTimeMillis(),
     val extractionStatus: ExtractionStatus = ExtractionStatus.NONE,
     val extractionMode: String? = null,
+    val extractionSource: String? = null,
     val isPinned: Boolean = false,
     val bookmarkedPages: Set<Int> = emptySet()
 )

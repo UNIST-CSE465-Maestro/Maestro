@@ -1,5 +1,6 @@
 package com.maestro.app.data.remote
 
+import com.maestro.app.BuildConfig
 import com.maestro.app.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
@@ -24,7 +25,9 @@ class TokenManager(
         val token = runBlocking {
             settingsRepository.getAccessToken()
                 .firstOrNull()
-        }
+        }.takeUnless { it.isNullOrBlank() }
+            ?: BuildConfig.MAESTRO_SERVER_BEARER_TOKEN
+                .takeUnless { it.isBlank() }
 
         val authed = if (!token.isNullOrBlank()) {
             original.newBuilder()
@@ -44,15 +47,16 @@ class TokenManager(
         val refreshToken = runBlocking {
             settingsRepository.getRefreshToken()
                 .firstOrNull()
-        } ?: run {
-            runBlocking { settingsRepository.clearTokens() }
+        }
+        val refreshTokenValue = refreshToken ?: return response
+        if (refreshTokenValue.isBlank()) {
             return response
         }
 
         val newTokens = runBlocking {
             try {
                 val resp = apiProvider().refresh(
-                    RefreshRequest(refreshToken)
+                    RefreshRequest(refreshTokenValue)
                 )
                 if (resp.isSuccessful) resp.body() else null
             } catch (_: Exception) {

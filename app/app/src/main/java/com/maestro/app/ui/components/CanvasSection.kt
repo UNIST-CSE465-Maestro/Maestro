@@ -605,6 +605,22 @@ fun CanvasSection(
                             if (
                                 pageText != null &&
                                 currentTextSelection != null &&
+                                !currentTextSelection.isDragging
+                            ) {
+                                TextSelectionDismissLayer(
+                                    page = pageText,
+                                    selection = currentTextSelection,
+                                    modifier = Modifier
+                                        .matchParentSize(),
+                                    onDismiss = {
+                                        textSelection = null
+                                    }
+                                )
+                            }
+
+                            if (
+                                pageText != null &&
+                                currentTextSelection != null &&
                                 !currentTextSelection.isDragging &&
                                 onTextQuiz != null
                             ) {
@@ -831,6 +847,36 @@ private fun TextSelectionOverlay(
 }
 
 @Composable
+private fun TextSelectionDismissLayer(
+    page: PdfTextIndexPage,
+    selection: TextSelectionState,
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = modifier.pointerInput(page, selection) {
+            awaitEachGesture {
+                val down = awaitFirstDown(
+                    requireUnconsumed = false
+                )
+                if (
+                    !isInsideSelectedText(
+                        page = page,
+                        selection = selection,
+                        position = down.position,
+                        pageWidthPx = size.width.toFloat(),
+                        pageHeightPx = size.height.toFloat()
+                    )
+                ) {
+                    onDismiss()
+                    down.consume()
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun TextSelectionActionMenu(
     selection: TextSelectionState,
     selectedText: String,
@@ -900,6 +946,26 @@ private fun TextSelectionActionMenu(
                 )
             }
         }
+    }
+}
+
+private fun isInsideSelectedText(
+    page: PdfTextIndexPage,
+    selection: TextSelectionState,
+    position: Offset,
+    pageWidthPx: Float,
+    pageHeightPx: Float
+): Boolean {
+    val scaleX = pageWidthPx / page.width.coerceAtLeast(1f)
+    val scaleY = pageHeightPx / page.height.coerceAtLeast(1f)
+    return selectedWordsFor(page, selection).any { word ->
+        val rect = word.visualRect(page)
+        val left = rect.left * scaleX
+        val top = rect.top * scaleY
+        val right = rect.right * scaleX
+        val bottom = rect.bottom * scaleY
+        position.x in left..right &&
+            position.y in top..bottom
     }
 }
 

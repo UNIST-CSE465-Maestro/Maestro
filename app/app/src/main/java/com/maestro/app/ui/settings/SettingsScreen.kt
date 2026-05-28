@@ -24,6 +24,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -45,22 +47,49 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: () -> Unit = {}) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     val geminiKeySet by viewModel.geminiKeySet
         .collectAsState()
     val openAiKeySet by viewModel.openAiKeySet
+        .collectAsState()
+    val openRouterKeySet by viewModel.openRouterKeySet
+        .collectAsState()
+    val claudeKeySet by viewModel.claudeKeySet
+        .collectAsState()
+    val currentProvider by viewModel.llmProvider
+        .collectAsState()
+    val serverTokenSet by viewModel.serverTokenSet
+        .collectAsState()
+    val serverUsername by viewModel.serverUsername
         .collectAsState()
     val validationResult by viewModel
         .validationResult.collectAsState()
     val isValidating by viewModel.isValidating
         .collectAsState()
-    val username by viewModel.username
-        .collectAsState()
-
+    val serverAuthInProgress by viewModel
+        .serverAuthInProgress.collectAsState()
     var geminiKeyInput by remember {
         mutableStateOf("")
     }
     var openAiKeyInput by remember {
+        mutableStateOf("")
+    }
+    var openRouterKeyInput by remember {
+        mutableStateOf("")
+    }
+    var claudeKeyInput by remember {
+        mutableStateOf("")
+    }
+    var serverTokenInput by remember {
+        mutableStateOf("")
+    }
+    var serverUsernameInput by remember {
+        mutableStateOf("")
+    }
+    var serverPasswordInput by remember {
         mutableStateOf("")
     }
 
@@ -101,112 +130,162 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: (
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // Gemini API Key
+            val providers = listOf(
+                ApiProviderTab("OPENROUTER", "OpenRouter", openRouterKeySet),
+                ApiProviderTab("GEMINI", "Gemini", geminiKeySet),
+                ApiProviderTab("OPENAI", "ChatGPT", openAiKeySet),
+                ApiProviderTab("CLAUDE", "Claude", claudeKeySet)
+            )
+            val activeProvider = providers.firstOrNull {
+                it.id == currentProvider
+            } ?: providers.first()
             Text(
-                text = "Gemini API Key",
+                text = "LLM API Key",
                 fontWeight = FontWeight.Medium,
                 fontSize = 16.sp
             )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (geminiKeySet) {
-                    "Gemini API 키가 설정되어 있습니다"
-                } else {
-                    "Gemini API 키가 설정되지 않았습니다"
-                },
-                fontSize = 13.sp,
-                color = if (geminiKeySet) {
-                    Color(0xFF10B981)
-                } else {
-                    MaterialTheme.colorScheme
-                        .onSurfaceVariant
-                }
-            )
-            Spacer(Modifier.height(12.dp))
-            SettingsTextField(
-                value = geminiKeyInput,
-                onValueChange = {
-                    geminiKeyInput = it
-                },
-                placeholder = "Gemini API 키 입력",
-                isPassword = true
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                Arrangement.spacedBy(8.dp)
+            Spacer(Modifier.height(8.dp))
+            ScrollableTabRow(
+                selectedTabIndex = providers.indexOf(activeProvider),
+                edgePadding = 0.dp,
+                divider = {}
             ) {
-                Button(
-                    onClick = {
-                        viewModel
-                            .saveAndValidateGeminiKey(
-                                geminiKeyInput
+                providers.forEach { provider ->
+                    Tab(
+                        selected = provider.id == activeProvider.id,
+                        onClick = {
+                            viewModel.activateProvider(provider.id)
+                        },
+                        text = {
+                            Text(
+                                provider.label,
+                                color = if (provider.keySet) {
+                                    Color(0xFF10B981)
+                                } else {
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant
+                                },
+                                fontWeight = if (
+                                    provider.id == activeProvider.id
+                                ) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Medium
+                                }
                             )
-                        geminiKeyInput = ""
-                    },
-                    enabled =
-                    geminiKeyInput.isNotBlank() &&
-                        !isValidating
-                ) {
-                    if (isValidating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .height(16.dp)
-                                .width(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("저장 및 검증")
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            ActiveApiKeyEditor(
+                provider = activeProvider,
+                value = when (activeProvider.id) {
+                    "GEMINI" -> geminiKeyInput
+                    "OPENAI" -> openAiKeyInput
+                    "CLAUDE" -> claudeKeyInput
+                    else -> openRouterKeyInput
+                },
+                onValueChange = {
+                    when (activeProvider.id) {
+                        "GEMINI" -> geminiKeyInput = it
+                        "OPENAI" -> openAiKeyInput = it
+                        "CLAUDE" -> claudeKeyInput = it
+                        else -> openRouterKeyInput = it
+                    }
+                },
+                isValidating = isValidating,
+                onSave = {
+                    when (activeProvider.id) {
+                        "GEMINI" -> {
+                            viewModel.saveAndValidateGeminiKey(geminiKeyInput)
+                            geminiKeyInput = ""
+                        }
+                        "OPENAI" -> {
+                            viewModel.saveAndValidateOpenAiKey(openAiKeyInput)
+                            openAiKeyInput = ""
+                        }
+                        "CLAUDE" -> {
+                            viewModel.saveAndValidateClaudeKey(claudeKeyInput)
+                            claudeKeyInput = ""
+                        }
+                        else -> {
+                            viewModel.saveAndValidateOpenRouterKey(openRouterKeyInput)
+                            openRouterKeyInput = ""
+                        }
+                    }
+                },
+                onClear = {
+                    when (activeProvider.id) {
+                        "GEMINI" -> {
+                            viewModel.clearGeminiKey()
+                            geminiKeyInput = ""
+                        }
+                        "OPENAI" -> {
+                            viewModel.clearOpenAiKey()
+                            openAiKeyInput = ""
+                        }
+                        "CLAUDE" -> {
+                            viewModel.clearClaudeKey()
+                            claudeKeyInput = ""
+                        }
+                        else -> {
+                            viewModel.clearOpenRouterKey()
+                            openRouterKeyInput = ""
+                        }
                     }
                 }
-                OutlinedButton(
-                    onClick = {
-                        viewModel.clearGeminiKey()
-                        geminiKeyInput = ""
-                    },
-                    enabled = geminiKeySet,
-                    colors = ButtonDefaults
-                        .outlinedButtonColors(
-                            contentColor =
-                            MaterialTheme.colorScheme
-                                .error
-                        )
-                ) { Text("삭제") }
-            }
+            )
 
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
 
-            // OpenAI API Key
             Text(
-                text = "OpenAI API Key",
+                text = "MinerU 서버 인증",
                 fontWeight = FontWeight.Medium,
                 fontSize = 16.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (openAiKeySet) {
-                    "OpenAI API 키가 설정되어 있습니다"
+                text = if (serverTokenSet) {
+                    "MinerU 서버 인증이 설정되어 있습니다"
                 } else {
-                    "OpenAI API 키가 설정되지 않았습니다"
+                    "MinerU 서버 인증이 설정되지 않았습니다"
                 },
                 fontSize = 13.sp,
-                color = if (openAiKeySet) {
+                color = if (serverTokenSet) {
                     Color(0xFF10B981)
                 } else {
                     MaterialTheme.colorScheme
                         .onSurfaceVariant
                 }
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = serverUsername?.let {
+                    "서버 계정: $it"
+                } ?: "서버 계정으로 인증하면 access/refresh token을 받아 MinerU 추출에 자동 사용합니다.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme
+                    .onSurfaceVariant
+            )
             Spacer(Modifier.height(12.dp))
             SettingsTextField(
-                value = openAiKeyInput,
+                value = serverUsernameInput,
                 onValueChange = {
-                    openAiKeyInput = it
+                    serverUsernameInput = it
                 },
-                placeholder = "OpenAI API 키 입력",
+                placeholder = "MinerU 서버 아이디",
+                isPassword = false
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingsTextField(
+                value = serverPasswordInput,
+                onValueChange = {
+                    serverPasswordInput = it
+                },
+                placeholder = "MinerU 서버 비밀번호",
                 isPassword = true
             )
             Spacer(Modifier.height(12.dp))
@@ -217,17 +296,18 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: (
             ) {
                 Button(
                     onClick = {
-                        viewModel
-                            .saveAndValidateOpenAiKey(
-                                openAiKeyInput
-                            )
-                        openAiKeyInput = ""
+                        viewModel.authenticateMineruServer(
+                            serverUsernameInput,
+                            serverPasswordInput
+                        )
+                        serverPasswordInput = ""
                     },
                     enabled =
-                    openAiKeyInput.isNotBlank() &&
-                        !isValidating
+                    serverUsernameInput.isNotBlank() &&
+                        serverPasswordInput.isNotBlank() &&
+                        !serverAuthInProgress
                 ) {
-                    if (isValidating) {
+                    if (serverAuthInProgress) {
                         CircularProgressIndicator(
                             modifier = Modifier
                                 .height(16.dp)
@@ -235,64 +315,41 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: (
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("저장 및 검증")
+                        Text("서버 인증")
                     }
                 }
                 OutlinedButton(
                     onClick = {
-                        viewModel.clearOpenAiKey()
-                        openAiKeyInput = ""
+                        viewModel.clearServerBearerToken()
+                        serverTokenInput = ""
+                        serverPasswordInput = ""
                     },
-                    enabled = openAiKeySet,
+                    enabled = serverTokenSet,
                     colors = ButtonDefaults
                         .outlinedButtonColors(
                             contentColor =
                             MaterialTheme.colorScheme
                                 .error
                         )
-                ) { Text("삭제") }
+                ) { Text("인증 삭제") }
             }
-
-            Spacer(Modifier.height(20.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(20.dp))
-
-            // Claude API Key
-            val claudeKeySet by viewModel.claudeKeySet
-                .collectAsState()
-            var claudeKeyInput by remember {
-                mutableStateOf("")
-            }
-            Text(
-                text = "Claude API Key",
-                fontWeight = FontWeight.Medium,
-                fontSize = 16.sp
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (claudeKeySet) {
-                    "Claude API 키가 설정되어 있습니다"
-                } else {
-                    "Claude API 키가 설정되지 않았습니다"
-                },
-                fontSize = 13.sp,
-                color = if (claudeKeySet) {
-                    Color(0xFF10B981)
-                } else {
-                    MaterialTheme.colorScheme
-                        .onSurfaceVariant
-                }
-            )
             Spacer(Modifier.height(12.dp))
+            Text(
+                text = "고급: Bearer 토큰을 직접 저장할 수도 있습니다.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme
+                    .onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
             SettingsTextField(
-                value = claudeKeyInput,
+                value = serverTokenInput,
                 onValueChange = {
-                    claudeKeyInput = it
+                    serverTokenInput = it
                 },
-                placeholder = "Claude API 키 입력",
+                placeholder = "Bearer 토큰 입력",
                 isPassword = true
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
@@ -300,40 +357,15 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: (
             ) {
                 Button(
                     onClick = {
-                        viewModel
-                            .saveAndValidateClaudeKey(
-                                claudeKeyInput
-                            )
-                        claudeKeyInput = ""
+                        viewModel.saveServerBearerToken(
+                            serverTokenInput
+                        )
+                        serverTokenInput = ""
                     },
-                    enabled =
-                    claudeKeyInput.isNotBlank() &&
-                        !isValidating
+                    enabled = serverTokenInput.isNotBlank()
                 ) {
-                    if (isValidating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .height(16.dp)
-                                .width(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("저장 및 검증")
-                    }
+                    Text("토큰 저장")
                 }
-                OutlinedButton(
-                    onClick = {
-                        viewModel.clearClaudeKey()
-                        claudeKeyInput = ""
-                    },
-                    enabled = claudeKeySet,
-                    colors = ButtonDefaults
-                        .outlinedButtonColors(
-                            contentColor =
-                            MaterialTheme.colorScheme
-                                .error
-                        )
-                ) { Text("삭제") }
             }
 
             // Validation result
@@ -355,35 +387,82 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit, onLogout: (
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))
 
-            // Account section
-            Text(
-                text = "계정",
-                fontWeight = FontWeight.Medium,
-                fontSize = 16.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "로그인됨: ${username ?: ""}",
-                fontSize = 14.sp,
-                color = Color(0xFF10B981)
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = {
-                    viewModel.logout()
-                    onLogout()
-                },
-                colors = ButtonDefaults
-                    .outlinedButtonColors(
-                        contentColor =
-                        MaterialTheme.colorScheme
-                            .error
-                    )
-            ) {
-                Text("로그아웃")
-            }
-
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+private data class ApiProviderTab(
+    val id: String,
+    val label: String,
+    val keySet: Boolean
+)
+
+@Composable
+private fun ActiveApiKeyEditor(
+    provider: ApiProviderTab,
+    value: String,
+    onValueChange: (String) -> Unit,
+    isValidating: Boolean,
+    onSave: () -> Unit,
+    onClear: () -> Unit
+) {
+    Text(
+        text = if (provider.keySet) {
+            "${provider.label} API 키가 설정되어 있습니다"
+        } else {
+            "${provider.label} API 키가 설정되지 않았습니다"
+        },
+        fontSize = 13.sp,
+        color = if (provider.keySet) {
+            Color(0xFF10B981)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    )
+    if (provider.id == "OPENROUTER") {
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "OpenRouter가 채팅/퀴즈 기본 provider입니다.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+    SettingsTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = "${provider.label} API 키 입력",
+        isPassword = true
+    )
+    Spacer(Modifier.height(12.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = onSave,
+            enabled = value.isNotBlank() && !isValidating
+        ) {
+            if (isValidating) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .height(16.dp)
+                        .width(16.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text("저장 및 검증")
+            }
+        }
+        OutlinedButton(
+            onClick = onClear,
+            enabled = provider.keySet,
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+            )
+        ) {
+            Text("삭제")
         }
     }
 }

@@ -2,7 +2,7 @@ package com.maestro.app.data.service
 
 import com.maestro.app.data.local.StudyEvent
 import com.maestro.app.data.local.StudyEventType
-import com.maestro.app.domain.service.RektTraceInput
+import com.maestro.app.domain.service.MiktTraceInput
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -12,7 +12,7 @@ class HeuristicKnowledgeTracerTest {
         val tracer = HeuristicKnowledgeTracer()
         val correct = tracer.trace(
             listOf(
-                RektTraceInput(
+                MiktTraceInput(
                     keyId = "correct",
                     events = listOf(
                         event(StudyEventType.QUIZ_REQUESTED, 1L),
@@ -23,7 +23,7 @@ class HeuristicKnowledgeTracerTest {
                         )
                     )
                 ),
-                RektTraceInput(
+                MiktTraceInput(
                     keyId = "incorrect",
                     events = listOf(
                         event(StudyEventType.QUIZ_REQUESTED, 1L),
@@ -50,7 +50,7 @@ class HeuristicKnowledgeTracerTest {
 
         val result = tracer.trace(
             listOf(
-                RektTraceInput(
+                MiktTraceInput(
                     keyId = "concept",
                     events = listOf(
                         event(StudyEventType.DOCUMENT_OPENED, 1L),

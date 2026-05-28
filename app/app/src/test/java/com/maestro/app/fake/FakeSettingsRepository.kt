@@ -8,6 +8,7 @@ class FakeSettingsRepository : SettingsRepository {
 
     private val geminiKeyFlow = MutableStateFlow<String?>(null)
     private val openAiKeyFlow = MutableStateFlow<String?>(null)
+    private val openRouterKeyFlow = MutableStateFlow<String?>(null)
     private val providerFlow = MutableStateFlow<String?>(null)
     private val modelFlow = MutableStateFlow<String?>(null)
     private val serverUrlFlow = MutableStateFlow<String?>(null)
@@ -48,6 +49,15 @@ class FakeSettingsRepository : SettingsRepository {
     }
     override suspend fun clearClaudeApiKey() {
         claudeKeyFlow.value = null
+    }
+
+    override fun getOpenRouterApiKey(): Flow<String?> =
+        openRouterKeyFlow
+    override suspend fun setOpenRouterApiKey(key: String) {
+        openRouterKeyFlow.value = key
+    }
+    override suspend fun clearOpenRouterApiKey() {
+        openRouterKeyFlow.value = null
     }
 
     override fun getLlmProvider(): Flow<String?> = providerFlow

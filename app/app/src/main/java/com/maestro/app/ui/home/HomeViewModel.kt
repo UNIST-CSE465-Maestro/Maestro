@@ -5,8 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.ExtractionSourceProgress
 import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.work.ExtractionWorkScheduler
+import com.maestro.app.data.work.PdfExtractionWorker
 import com.maestro.app.domain.model.ExtractionStatus
 import com.maestro.app.domain.model.Folder
 import com.maestro.app.domain.model.PdfDocument
@@ -14,6 +16,13 @@ import com.maestro.app.domain.repository.DocumentRepository
 import java.io.File
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
+data class ExtractedContentSources(
+    val mineru: Boolean = false,
+    val textLayer: Boolean = false
+) {
+    val any: Boolean get() = mineru || textLayer
+}
 
 class HomeViewModel(
     private val repository: DocumentRepository,
@@ -57,16 +66,23 @@ class HomeViewModel(
     val extractionProgress: StateFlow<Map<String, Int>> =
         extractionProgressStore.progress
 
+    val extractionSourceProgress:
+        StateFlow<
+            Map<String, Map<String, ExtractionSourceProgress>>
+            > = extractionProgressStore.sourceProgress
+
     private val _docsWithExtractedContent =
         MutableStateFlow<Set<String>>(emptySet())
     val docsWithExtractedContent: StateFlow<Set<String>> =
         _docsWithExtractedContent.asStateFlow()
 
-    // Pending URI waiting for mode selection
-    private val _pendingImportUri =
-        MutableStateFlow<Uri?>(null)
-    val pendingImportUri: StateFlow<Uri?> =
-        _pendingImportUri.asStateFlow()
+    private val _documentContentSources =
+        MutableStateFlow<Map<String, ExtractedContentSources>>(
+            emptyMap()
+        )
+    val documentContentSources:
+        StateFlow<Map<String, ExtractedContentSources>> =
+        _documentContentSources.asStateFlow()
 
     // Extraction error message
     private val _extractionError =
@@ -91,9 +107,13 @@ class HomeViewModel(
                     }.thenByDescending { it.addedTimestamp }
                 )
             _documents.value = docs
+            val sourceMap = docs.associate { doc ->
+                doc.id to extractedContentSources(doc)
+            }
+            _documentContentSources.value = sourceMap
             _docsWithExtractedContent.value =
-                docs.filter { hasExtractedContent(it.id) }
-                    .map { it.id }
+                sourceMap.filter { it.value.any }
+                    .map { it.key }
                     .toSet()
         }
     }
@@ -123,11 +143,8 @@ class HomeViewModel(
         _currentFolderId.value = folderId
     }
 
-    /**
-     * Stage a URI for import — shows mode selection dialog.
-     */
     fun stagePdfImport(uri: Uri) {
-        _pendingImportUri.value = uri
+        importAndExtract(uri, PdfExtractionWorker.MODE_AUTO)
     }
 
     /**
@@ -137,15 +154,10 @@ class HomeViewModel(
         _extractionError.value = null
     }
 
-    fun cancelPdfImport() {
-        _pendingImportUri.value = null
-    }
-
     /**
      * Import PDF and start background extraction.
      */
     fun importAndExtract(uri: Uri, mode: String) {
-        _pendingImportUri.value = null
         viewModelScope.launch {
             val doc = repository.importPdf(
                 uri,
@@ -191,7 +203,7 @@ class HomeViewModel(
             val docs = repository.loadDocuments()
             docs.filter {
                 it.extractionStatus == ExtractionStatus.FAILED &&
-                    !hasExtractedContent(it.id)
+                    shouldRecoverExtraction(it)
             }.forEach { doc ->
                 extractInBackground(
                     doc,
@@ -236,6 +248,32 @@ class HomeViewModel(
     }
 
     private fun hasExtractedContent(documentId: String): Boolean =
+        _documents.value
+            .firstOrNull { it.id == documentId }
+            ?.let { extractedContentSources(it).any }
+            ?: hasContent(documentId)
+
+    private fun extractedContentSources(
+        doc: PdfDocument
+    ): ExtractedContentSources =
+        try {
+            val source = doc.extractionSource
+                ?: contentSourceFromJson(doc.id)
+            ExtractedContentSources(
+                mineru = source ==
+                    PdfExtractionWorker.EXTRACTION_SOURCE_MINERU ||
+                    (
+                        source == null &&
+                            hasContent(doc.id)
+                        ),
+                textLayer = source ==
+                    PdfExtractionWorker.EXTRACTION_SOURCE_TEXT_LAYER
+            )
+        } catch (_: Throwable) {
+            ExtractedContentSources()
+        }
+
+    private fun hasContent(documentId: String): Boolean =
         try {
             val file = File(
                 appContext.filesDir,
@@ -245,6 +283,38 @@ class HomeViewModel(
         } catch (_: Throwable) {
             false
         }
+
+    private fun contentSourceFromJson(documentId: String): String? =
+        try {
+            val file = File(
+                appContext.filesDir,
+                "documents/$documentId/content.json"
+            )
+            if (!file.exists() || file.length() == 0L) {
+                null
+            } else {
+                val sourceMatch = Regex(
+                    "\"source\"\\s*:\\s*\"([^\"]+)\""
+                ).find(file.readText())
+                sourceMatch?.groupValues?.getOrNull(1)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+
+    private fun shouldRecoverExtraction(doc: PdfDocument): Boolean {
+        val mode = doc.extractionMode
+            ?: DEFAULT_RECOVERY_MODE
+        return if (mode == "compare_mlkit_mineru" ||
+            mode == "ai" ||
+            mode == "standard" ||
+            mode == PdfExtractionWorker.MODE_AUTO
+        ) {
+            !hasContent(doc.id)
+        } else {
+            !hasExtractedContent(doc.id)
+        }
+    }
 
     fun importPdf(uri: Uri) {
         viewModelScope.launch {
@@ -391,6 +461,6 @@ class HomeViewModel(
     }
 
     private companion object {
-        const val DEFAULT_RECOVERY_MODE = "ai"
+        const val DEFAULT_RECOVERY_MODE = PdfExtractionWorker.MODE_AUTO
     }
 }

@@ -14,8 +14,8 @@ import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.StudyEvent
 import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.domain.service.KnowledgeTraceResult
-import com.maestro.app.domain.service.RektKnowledgeTracer
-import com.maestro.app.domain.service.RektTraceInput
+import com.maestro.app.domain.service.MiktKnowledgeTracer
+import com.maestro.app.domain.service.MiktTraceInput
 import java.io.File
 import java.nio.DoubleBuffer
 import java.nio.FloatBuffer
@@ -24,20 +24,27 @@ import java.nio.LongBuffer
 import kotlin.math.abs
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
-class OnnxRektKnowledgeTracer(
+class OnnxMiktKnowledgeTracer(
     private val context: Context,
     private val modelArtifacts: ModelArtifactLocalDataSource,
     private val monitoringLogs: MonitoringLogLocalDataSource,
     private val resourceSampler: DeviceResourceSampler,
-    private val fallback: RektKnowledgeTracer = HeuristicKnowledgeTracer()
-) : RektKnowledgeTracer {
+    private val fallback: MiktKnowledgeTracer = HeuristicKnowledgeTracer()
+) : MiktKnowledgeTracer {
     private val json = Json {
         ignoreUnknownKeys = true
     }
 
-    override fun trace(inputs: List<RektTraceInput>): Map<String, KnowledgeTraceResult> {
+    override fun trace(inputs: List<MiktTraceInput>): Map<String, KnowledgeTraceResult> {
         val model = selectModel()
             ?: return fallback.trace(inputs)
         val before = resourceSampler.sample()
@@ -50,7 +57,10 @@ class OnnxRektKnowledgeTracer(
                 "model_display_name" to model.kind.displayName,
                 "dataset" to model.contract.dataset,
                 "contract" to model.contract.name,
-                "sequence_window" to model.contract.maxSequenceLength.toString(),
+                "raw_sequence_window" to model.contract
+                    .rawSequenceLength.toString(),
+                "input_sequence_length" to model.contract
+                    .inputSequenceLength.toString(),
                 "question_as_concept" to model.contract.questionAsConcept.toString(),
                 "input_count" to inputs.size.toString(),
                 "sequence_event_count" to inputs.sumOf {
@@ -127,35 +137,142 @@ class OnnxRektKnowledgeTracer(
                 contract = loadStatics2011Contract()
             )
         }
-        val generic = modelArtifacts.getModelFile(
-            ModelArtifactType.KT_ONNX
-        )
-        if (generic != null) {
-            return OnnxKtModel(
-                file = generic,
-                kind = KtModelKind.GENERIC_KT,
-                contract = KtInputContract.generic()
-            )
-        }
         return null
     }
 
     private fun loadStatics2011Contract(): KtInputContract {
-        val mapping = modelArtifacts.getModelFile(
+        val base = modelArtifacts.getModelFile(
+            ModelArtifactType.MIKT_CONTRACT
+        )?.let { file ->
+            try {
+                json.decodeFromString<KtInputContract>(
+                    file.readText()
+                )
+            } catch (_: Throwable) {
+                null
+            }
+        } ?: modelArtifacts.getModelFile(
             ModelArtifactType.MIKT_STATICS2011_MAPPING
-        ) ?: return KtInputContract.statics2011()
+        )?.let { file ->
+            try {
+                json.decodeFromString<KtInputContract>(
+                    file.readText()
+                )
+            } catch (_: Throwable) {
+                null
+            }
+        } ?: KtInputContract.statics2011()
         return try {
-            json.decodeFromString<KtInputContract>(
-                mapping.readText()
+            base.copy(
+                questionIdMap =
+                loadIdMap(ModelArtifactType.MIKT_QUESTION_ID_MAP)
+                    .ifEmpty { base.questionIdMap },
+                conceptIdMap =
+                loadIdMap(ModelArtifactType.MIKT_CONCEPT_ID_MAP)
+                    .ifEmpty { base.conceptIdMap },
+                questionToConcept =
+                loadQuestionToConcept()
+                    .ifEmpty { base.questionToConcept },
+                questionDifficulty =
+                loadFloatMap(ModelArtifactType.MIKT_QUESTION_DIFFICULTY)
+                    .ifEmpty { base.questionDifficulty }
             ).normalizedForStatics2011()
         } catch (_: Throwable) {
             KtInputContract.statics2011()
         }
     }
 
+    private fun loadIdMap(
+        type: ModelArtifactType
+    ): Map<String, Int> {
+        val file = modelArtifacts.getModelFile(type)
+            ?: return emptyMap()
+        return try {
+            val root = json.parseToJsonElement(
+                file.readText()
+            ).jsonObject
+            root.mapNotNull { (key, value) ->
+                val mapped = when (value) {
+                    is JsonPrimitive -> value.intOrNull
+                    is JsonObject -> value["id"]
+                        ?.jsonPrimitive
+                        ?.intOrNull
+                    else -> null
+                }
+                mapped?.let { key to it }
+            }.toMap()
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
+
+    private fun loadFloatMap(
+        type: ModelArtifactType
+    ): Map<String, Float> {
+        val file = modelArtifacts.getModelFile(type)
+            ?: return emptyMap()
+        return try {
+            val root = json.parseToJsonElement(
+                file.readText()
+            ).jsonObject
+            root.mapNotNull { (key, value) ->
+                val mapped = when (value) {
+                    is JsonPrimitive -> value.floatOrNull
+                    is JsonObject -> value["difficulty"]
+                        ?.jsonPrimitive
+                        ?.floatOrNull
+                        ?: value["diff"]
+                            ?.jsonPrimitive
+                            ?.floatOrNull
+                    else -> null
+                }
+                mapped?.let { key to it }
+            }.toMap()
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
+
+    private fun loadQuestionToConcept(): Map<String, List<Int>> {
+        val file = modelArtifacts.getModelFile(
+            ModelArtifactType.MIKT_QUESTION_TO_CONCEPT
+        ) ?: return emptyMap()
+        return try {
+            val root = json.parseToJsonElement(
+                file.readText()
+            ).jsonObject
+            root.mapValues { (_, value) ->
+                when (value) {
+                    is JsonPrimitive -> listOfNotNull(value.intOrNull)
+                    is kotlinx.serialization.json.JsonArray ->
+                        value.mapNotNull {
+                            it.jsonPrimitive.intOrNull
+                        }
+                    is JsonObject -> {
+                        val ids = value["concept_ids"]
+                            ?: value["concepts"]
+                            ?: value["skills"]
+                        when (ids) {
+                            is kotlinx.serialization.json.JsonArray ->
+                                ids.mapNotNull {
+                                    it.jsonPrimitive.intOrNull
+                                }
+                            is JsonPrimitive ->
+                                listOfNotNull(ids.intOrNull)
+                            else -> emptyList()
+                        }
+                    }
+                    else -> emptyList()
+                }
+            }.filterValues { it.isNotEmpty() }
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
+
     private fun runOnnx(
         model: OnnxKtModel,
-        inputs: List<RektTraceInput>
+        inputs: List<MiktTraceInput>
     ): Map<String, KnowledgeTraceResult> {
         val env = OrtEnvironment.getEnvironment()
         env.createSession(
@@ -176,7 +293,7 @@ class OnnxRektKnowledgeTracer(
     private fun runTrace(
         env: OrtEnvironment,
         session: OrtSession,
-        input: RektTraceInput,
+        input: MiktTraceInput,
         model: OnnxKtModel
     ): KnowledgeTraceResult {
         val events = input.events.ifEmpty {
@@ -224,8 +341,12 @@ class OnnxRektKnowledgeTracer(
                 inputMap[name] = tensor
             }
             session.run(inputMap).use { result ->
-                val value = result.get(0).value
-                val mastery = extractMastery(value)
+                val mastery = extractPrediction(
+                    result = result,
+                    session = session,
+                    sequences = sequences,
+                    contract = model.contract
+                )
                 return KnowledgeTraceResult(
                     mastery = mastery.coerceIn(0f, 1f),
                     confidence = sequences.confidence,
@@ -237,7 +358,7 @@ class OnnxRektKnowledgeTracer(
     }
 
     private fun buildSequences(
-        input: RektTraceInput,
+        input: MiktTraceInput,
         events: List<StudyEvent>,
         contract: KtInputContract
     ): KtSequences {
@@ -247,7 +368,7 @@ class OnnxRektKnowledgeTracer(
                     event.correctness != null
             }
             .sortedBy { it.timestamp }
-            .takeLast(contract.maxSequenceLength)
+            .takeLast(contract.rawSequenceLength)
         if (ktEvents.isEmpty()) {
             return KtSequences.empty()
         }
@@ -276,6 +397,11 @@ class OnnxRektKnowledgeTracer(
         val masks = LongArray(ktEvents.size) { 1L }
         val confidence = (ktEvents.size / 8f)
             .coerceIn(0.2f, 1f)
+        val shifted = buildMobileMiktShiftedInputs(
+            problemIds = problemIds,
+            answers = answers,
+            contract = contract
+        )
         return KtSequences(
             problemIds = problemIds,
             skillIds = skillIds,
@@ -283,13 +409,77 @@ class OnnxRektKnowledgeTracer(
             interactions = interactions,
             domainIds = domainIds,
             masks = masks,
+            lastProblems = shifted.lastProblems,
+            lastAnswers = shifted.lastAnswers,
+            nextProblems = shifted.nextProblems,
+            nextAnswers = shifted.nextAnswers,
+            lastValidIndex = shifted.lastValidIndex,
             confidence = confidence
         )
     }
 
+    private fun buildMobileMiktShiftedInputs(
+        problemIds: LongArray,
+        answers: LongArray,
+        contract: KtInputContract
+    ): ShiftedMiktInputs {
+        val inputLength = contract.inputSequenceLength
+            .coerceAtLeast(1)
+        val rawLength = maxOf(
+            contract.rawSequenceLength,
+            inputLength + 1
+        )
+        val useProblem = LongArray(rawLength)
+        val useAnswer = LongArray(rawLength)
+        val count = minOf(problemIds.size, rawLength)
+        val start = rawLength - count
+        for (i in 0 until count) {
+            useProblem[start + i] =
+                problemIds[problemIds.size - count + i]
+            useAnswer[start + i] =
+                answers[answers.size - count + i]
+        }
+        val lastStart = (rawLength - 1 - inputLength)
+            .coerceAtLeast(0)
+        val nextStart = (rawLength - inputLength)
+            .coerceAtLeast(0)
+        val lastProblems = useProblem
+            .copyOfRange(lastStart, rawLength - 1)
+            .fitLength(inputLength)
+        val lastAnswers = useAnswer
+            .copyOfRange(lastStart, rawLength - 1)
+            .fitLength(inputLength)
+        val nextProblems = useProblem
+            .copyOfRange(nextStart, rawLength)
+            .fitLength(inputLength)
+        val nextAnswers = useAnswer
+            .copyOfRange(nextStart, rawLength)
+            .fitLength(inputLength)
+        return ShiftedMiktInputs(
+            lastProblems = lastProblems,
+            lastAnswers = lastAnswers,
+            nextProblems = nextProblems,
+            nextAnswers = nextAnswers,
+            lastValidIndex = inputLength - 1
+        )
+    }
+
+    private fun LongArray.fitLength(length: Int): LongArray {
+        if (size == length) return this
+        val result = LongArray(length)
+        val copyCount = minOf(size, length)
+        copyInto(
+            destination = result,
+            destinationOffset = length - copyCount,
+            startIndex = size - copyCount,
+            endIndex = size
+        )
+        return result
+    }
+
     private fun conceptIdFor(
         event: StudyEvent,
-        input: RektTraceInput,
+        input: MiktTraceInput,
         contract: KtInputContract
     ): Long {
         val raw = event.conceptIds.firstOrNull()
@@ -310,7 +500,7 @@ class OnnxRektKnowledgeTracer(
 
     private fun problemIdFor(
         event: StudyEvent,
-        input: RektTraceInput,
+        input: MiktTraceInput,
         contract: KtInputContract,
         fallbackSkillId: Long
     ): Long {
@@ -333,7 +523,7 @@ class OnnxRektKnowledgeTracer(
 
     private fun domainIdFor(
         event: StudyEvent,
-        input: RektTraceInput,
+        input: MiktTraceInput,
         contract: KtInputContract
     ): Long {
         val raw = event.metadata.firstValue(
@@ -403,6 +593,22 @@ class OnnxRektKnowledgeTracer(
         val normalized = name.lowercase()
             .replace(Regex("[^a-z0-9]"), "")
         return when {
+            normalized == "lastproblem" ||
+                normalized == "lastq" ||
+                normalized == "lastquestion" ->
+                sequences.lastProblems
+            normalized == "lastans" ||
+                normalized == "lastanswer" ||
+                normalized == "lasta" ->
+                sequences.lastAnswers
+            normalized == "nextproblem" ||
+                normalized == "nextq" ||
+                normalized == "nextquestion" ->
+                sequences.nextProblems
+            normalized == "nextans" ||
+                normalized == "nextanswer" ||
+                normalized == "nexta" ->
+                sequences.nextAnswers
             normalized.contains("mask") ->
                 sequences.masks
             normalized.contains("domain") ||
@@ -561,6 +767,64 @@ class OnnxRektKnowledgeTracer(
         }
     }
 
+    private fun extractPrediction(
+        result: OrtSession.Result,
+        session: OrtSession,
+        sequences: KtSequences,
+        contract: KtInputContract
+    ): Float {
+        val outputNames = session.outputNames.toList()
+        val lastIndex = outputNames.indexOf(
+            contract.lastPredictionOutput
+        )
+        if (lastIndex >= 0) {
+            return extractMastery(result.get(lastIndex).value)
+        }
+        val sequenceIndex = outputNames.indexOf(
+            contract.predictionSequenceOutput
+        )
+        if (sequenceIndex >= 0) {
+            return extractAtSequenceIndex(
+                result.get(sequenceIndex).value,
+                sequences.lastValidIndex
+            )
+        }
+        return extractAtSequenceIndex(
+            result.get(0).value,
+            sequences.lastValidIndex
+        )
+    }
+
+    private fun extractAtSequenceIndex(
+        value: Any?,
+        index: Int
+    ): Float {
+        return when (value) {
+            is Array<*> -> {
+                val first = value.firstOrNull()
+                when (first) {
+                    is FloatArray -> first
+                        .getOrNull(index) ?: first.lastOrNull() ?: 0f
+                    is DoubleArray -> first
+                        .getOrNull(index)
+                        ?.toFloat()
+                        ?: first.lastOrNull()?.toFloat()
+                        ?: 0f
+                    is Array<*> -> extractAtSequenceIndex(first, index)
+                    else -> extractMastery(value)
+                }
+            }
+            is FloatArray -> value
+                .getOrNull(index) ?: value.lastOrNull() ?: 0f
+            is DoubleArray -> value
+                .getOrNull(index)
+                ?.toFloat()
+                ?: value.lastOrNull()?.toFloat()
+                ?: 0f
+            else -> extractMastery(value)
+        }
+    }
+
     private inline fun <T : AutoCloseable, R> List<T>.useAll(block: () -> R): R {
         try {
             return block()
@@ -585,8 +849,7 @@ private enum class KtModelKind(
     val logName: String,
     val displayName: String
 ) {
-    MIKT_STATICS2011("mikt_statics2011_onnx", "MIKT Statics2011 ONNX"),
-    GENERIC_KT("kt_onnx", "KT ONNX")
+    MIKT_STATICS2011("mikt_statics2011_onnx", "MIKT Statics2011 ONNX")
 }
 
 private data class KtSequences(
@@ -596,6 +859,11 @@ private data class KtSequences(
     val interactions: LongArray,
     val domainIds: LongArray,
     val masks: LongArray,
+    val lastProblems: LongArray,
+    val lastAnswers: LongArray,
+    val nextProblems: LongArray,
+    val nextAnswers: LongArray,
+    val lastValidIndex: Int,
     val confidence: Float
 ) {
     companion object {
@@ -606,44 +874,88 @@ private data class KtSequences(
             interactions = longArrayOf(0L),
             domainIds = longArrayOf(0L),
             masks = longArrayOf(0L),
+            lastProblems = LongArray(199),
+            lastAnswers = LongArray(199),
+            nextProblems = LongArray(199),
+            nextAnswers = LongArray(199),
+            lastValidIndex = 198,
             confidence = 0f
         )
     }
 }
 
+private data class ShiftedMiktInputs(
+    val lastProblems: LongArray,
+    val lastAnswers: LongArray,
+    val nextProblems: LongArray,
+    val nextAnswers: LongArray,
+    val lastValidIndex: Int
+)
+
 @Serializable
 private data class KtInputContract(
+    @SerialName("model_name")
+    val modelName: String = "MobileMIKT",
     val name: String = "statics2011",
     val dataset: String = "statics2011",
+    @SerialName("kc_model")
+    val kcModel: String = "F2011",
     @SerialName("concept_count")
     val conceptCount: Int = 85,
     @SerialName("question_count")
     val questionCount: Int = 85,
     @SerialName("domain_count")
     val domainCount: Int = 1,
+    @SerialName("max_raw_sequence_length")
+    val maxRawSequenceLength: Int? = null,
     @SerialName("max_sequence_length")
     val maxSequenceLength: Int = 200,
+    @SerialName("input_sequence_length")
+    val inputSequenceLength: Int = 199,
     @SerialName("question_as_concept")
     val questionAsConcept: Boolean = true,
     @SerialName("index_base")
     val indexBase: Int = 1,
     @SerialName("answer_offset")
     val answerOffset: Int? = null,
+    @SerialName("prediction_sequence_output")
+    val predictionSequenceOutput: String = "prediction_sequence",
+    @SerialName("last_prediction_output")
+    val lastPredictionOutput: String = "last_prediction",
     @SerialName("concept_id_map")
     val conceptIdMap: Map<String, Int> = emptyMap(),
     @SerialName("question_id_map")
     val questionIdMap: Map<String, Int> = emptyMap(),
     @SerialName("domain_id_map")
-    val domainIdMap: Map<String, Int> = emptyMap()
+    val domainIdMap: Map<String, Int> = emptyMap(),
+    @SerialName("question_to_concept")
+    val questionToConcept: Map<String, List<Int>> = emptyMap(),
+    @SerialName("question_difficulty")
+    val questionDifficulty: Map<String, Float> = emptyMap()
 ) {
+    val rawSequenceLength: Int
+        get() = (maxRawSequenceLength ?: maxSequenceLength)
+            .coerceAtLeast(inputSequenceLength + 1)
+
     fun normalizedForStatics2011(): KtInputContract =
         copy(
             name = name.ifBlank { "statics2011" },
             dataset = dataset.ifBlank { "statics2011" },
+            kcModel = kcModel.ifBlank { "F2011" },
             conceptCount = conceptCount.coerceAtLeast(1),
             questionCount = questionCount.coerceAtLeast(1),
             domainCount = domainCount.coerceAtLeast(1),
             maxSequenceLength = maxSequenceLength.coerceAtLeast(1),
+            maxRawSequenceLength = rawSequenceLength,
+            inputSequenceLength = inputSequenceLength.coerceAtLeast(1),
+            predictionSequenceOutput =
+            predictionSequenceOutput.ifBlank {
+                "prediction_sequence"
+            },
+            lastPredictionOutput =
+            lastPredictionOutput.ifBlank {
+                "last_prediction"
+            },
             indexBase = if (indexBase == 0) 0 else 1
         )
 
@@ -655,23 +967,14 @@ private data class KtInputContract(
                 conceptCount = 85,
                 questionCount = 85,
                 domainCount = 1,
+                maxRawSequenceLength = 200,
                 maxSequenceLength = 200,
+                inputSequenceLength = 199,
                 questionAsConcept = true,
                 indexBase = 1,
-                answerOffset = 86
-            )
-
-        fun generic(): KtInputContract =
-            KtInputContract(
-                name = "generic",
-                dataset = "generic",
-                conceptCount = 199,
-                questionCount = 199,
-                domainCount = 32,
-                maxSequenceLength = 200,
-                questionAsConcept = false,
-                indexBase = 0,
-                answerOffset = 199
+                answerOffset = 86,
+                predictionSequenceOutput = "prediction_sequence",
+                lastPredictionOutput = "last_prediction"
             )
     }
 }

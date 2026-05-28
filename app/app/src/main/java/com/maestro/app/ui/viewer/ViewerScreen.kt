@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.ConversationLocalDataSource
+import com.maestro.app.data.local.LocalMlKitContentExtractor
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
@@ -47,6 +48,7 @@ import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
 import com.maestro.app.ui.theme.Slate100
 import com.maestro.app.ui.theme.Slate200
 import com.maestro.app.ui.theme.Slate500
+import org.koin.compose.koinInject
 
 enum class LlmConnectionState {
     CONNECTING,
@@ -61,6 +63,7 @@ fun ViewerScreen(
     quizService: QuizService,
     settingsRepository: SettingsRepository,
     conversationDataSource: ConversationLocalDataSource,
+    localMlKitContentExtractor: LocalMlKitContentExtractor = koinInject(),
     openTabs: List<OpenPdfTab> = emptyList(),
     activeTabId: String = viewModel.pdfId,
     initialFirstVisiblePageIndex: Int = 0,
@@ -382,6 +385,7 @@ fun ViewerScreen(
                 onCollapse = { viewModel.collapseSidebar() },
                 llmService = llmService,
                 quizService = quizService,
+                localMlKitContentExtractor = localMlKitContentExtractor,
                 settingsRepository = settingsRepository,
                 conversationDataSource = conversationDataSource,
                 documentContent = documentContent,

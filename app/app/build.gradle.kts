@@ -1,9 +1,32 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun secretProperty(vararg names: String): String {
+    return names.firstNotNullOfOrNull { name ->
+        providers.environmentVariable(name).orNull
+            ?: localProperties.getProperty(name)
+    }.orEmpty()
+}
+
+fun buildConfigString(value: String): String {
+    val escaped = value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    return "\"$escaped\""
 }
 
 android {
@@ -16,6 +39,18 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "2.0"
+        buildConfigField(
+            "String",
+            "MAESTRO_SERVER_BEARER_TOKEN",
+            buildConfigString(
+                secretProperty(
+                    "MAESTRO_SERVER_BEARER_TOKEN",
+                    "MINERU_SERVER_BEARER_TOKEN",
+                    "MINERU_BEARER_TOKEN",
+                    "MAESTRO_BEARER_TOKEN"
+                )
+            )
+        )
     }
 
     buildTypes {
@@ -35,6 +70,7 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     packaging {
@@ -87,6 +123,9 @@ dependencies {
 
     // PDF text layer indexing
     implementation(libs.pdfbox.android)
+
+    // Local OCR experiment
+    implementation(libs.mlkit.text.recognition)
 
     // Test
     testImplementation(libs.junit)

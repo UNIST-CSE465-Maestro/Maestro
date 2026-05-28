@@ -401,7 +401,9 @@ class ViewerViewModel(
             conceptIds = listOf(conceptId),
             promptLength = _documentContent.value?.length,
             metadata = mapOf(
-                "bloomLevel" to bloomLevel.toString()
+                "bloomLevel" to bloomLevel.toString(),
+                "question_id" to conceptId,
+                "concept_id" to conceptId
             )
         )
         monitoringLogs.append(
@@ -459,6 +461,8 @@ class ViewerViewModel(
             correctness = isCorrect,
             metadata = mapOf(
                 "bloomLevel" to bloomLevel.toString(),
+                "question_id" to conceptId,
+                "concept_id" to conceptId,
                 "responseTimeMs" to (
                     responseTimeMs?.toString() ?: ""
                     ),
@@ -629,7 +633,15 @@ class ViewerViewModel(
             appContext.filesDir,
             "documents/$documentId/content.md"
         )
-        if (file.exists()) file.readText() else null
+        val localFile = File(
+            appContext.filesDir,
+            "documents/$documentId/local_mlkit_content.md"
+        )
+        when {
+            file.exists() -> file.readText()
+            localFile.exists() -> localFile.readText()
+            else -> null
+        }
     }
 
     private suspend fun loadContentJson(documentId: String): String? =
@@ -638,7 +650,15 @@ class ViewerViewModel(
                 appContext.filesDir,
                 "documents/$documentId/content.json"
             )
-            if (file.exists()) file.readText() else null
+            val localFile = File(
+                appContext.filesDir,
+                "documents/$documentId/local_mlkit_content.json"
+            )
+            when {
+                file.exists() -> file.readText()
+                localFile.exists() -> localFile.readText()
+                else -> null
+            }
         }
 
     private suspend fun loadOrBuildTextIndex(): PdfTextIndex? =

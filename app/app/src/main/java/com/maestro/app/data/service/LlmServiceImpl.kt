@@ -16,6 +16,7 @@ class LlmServiceImpl(
     private val geminiClient: LlmClient,
     private val openAiClient: OpenAiClient,
     private val claudeClient: ClaudeClient,
+    private val openRouterClient: OpenAiClient,
     private val settingsRepository: SettingsRepository
 ) : LlmService {
 
@@ -71,6 +72,19 @@ class LlmServiceImpl(
                     model
                 ).collect { emit(it) }
             }
+            LlmProvider.OPENROUTER -> {
+                val apiKey = requireOpenRouterKey()
+                val model = getModel(
+                    OpenAiClient.OPENROUTER_DEFAULT_MODEL
+                )
+                openRouterClient.stream(
+                    apiKey,
+                    messages,
+                    systemPrompt,
+                    images,
+                    model
+                ).collect { emit(it) }
+            }
         }
     }
 
@@ -98,13 +112,34 @@ class LlmServiceImpl(
                 )
             }
             LlmProvider.OPENAI -> {
-                throw UnsupportedOperationException(
-                    "OpenAI complete not implemented"
+                val apiKey = requireOpenAiKey()
+                val model = getModel(
+                    OpenAiClient.DEFAULT_MODEL
+                )
+                openAiClient.complete(
+                    apiKey,
+                    messages,
+                    systemPrompt,
+                    images,
+                    model
                 )
             }
             LlmProvider.CLAUDE -> {
                 throw UnsupportedOperationException(
                     "Claude complete not implemented"
+                )
+            }
+            LlmProvider.OPENROUTER -> {
+                val apiKey = requireOpenRouterKey()
+                val model = getModel(
+                    OpenAiClient.OPENROUTER_DEFAULT_MODEL
+                )
+                openRouterClient.complete(
+                    apiKey,
+                    messages,
+                    systemPrompt,
+                    images,
+                    model
                 )
             }
         }
@@ -119,6 +154,8 @@ class LlmServiceImpl(
                 openAiClient.validateKey(apiKey)
             LlmProvider.CLAUDE ->
                 claudeClient.validateKey(apiKey)
+            LlmProvider.OPENROUTER ->
+                openRouterClient.validateKey(apiKey)
         }
     }
 
@@ -136,6 +173,10 @@ class LlmServiceImpl(
             }
             LlmProvider.CLAUDE ->
                 claudeClient.fetchModels()
+            LlmProvider.OPENROUTER -> {
+                val key = requireOpenRouterKey()
+                openRouterClient.fetchModels(key)
+            }
         }
         if (models.isNotEmpty()) {
             modelCache[provider] = models
@@ -152,6 +193,8 @@ class LlmServiceImpl(
                     openAiClient.warmUp(requireOpenAiKey())
                 LlmProvider.CLAUDE ->
                     claudeClient.warmUp(requireClaudeKey())
+                LlmProvider.OPENROUTER ->
+                    openRouterClient.warmUp(requireOpenRouterKey())
             }
             Result.success(Unit)
         } catch (e: Throwable) {
@@ -164,10 +207,10 @@ class LlmServiceImpl(
             .getLlmProvider().first()
         return try {
             LlmProvider.valueOf(
-                name?.uppercase() ?: "GEMINI"
+                name?.uppercase() ?: "OPENROUTER"
             )
         } catch (_: Throwable) {
-            LlmProvider.GEMINI
+            LlmProvider.OPENROUTER
         }
     }
 
@@ -197,6 +240,14 @@ class LlmServiceImpl(
             .first()
             ?: throw IllegalStateException(
                 "Claude API 키가 설정되지 않았습니다"
+            )
+    }
+
+    private suspend fun requireOpenRouterKey(): String {
+        return settingsRepository.getOpenRouterApiKey()
+            .first()
+            ?: throw IllegalStateException(
+                "OpenRouter API 키가 설정되지 않았습니다"
             )
     }
 }

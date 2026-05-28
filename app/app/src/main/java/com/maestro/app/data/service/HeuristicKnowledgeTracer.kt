@@ -3,12 +3,12 @@ package com.maestro.app.data.service
 import com.maestro.app.data.local.StudyEvent
 import com.maestro.app.data.local.StudyEventType
 import com.maestro.app.domain.service.KnowledgeTraceResult
-import com.maestro.app.domain.service.RektKnowledgeTracer
-import com.maestro.app.domain.service.RektTraceInput
+import com.maestro.app.domain.service.MiktKnowledgeTracer
+import com.maestro.app.domain.service.MiktTraceInput
 import kotlin.math.min
 
-class HeuristicKnowledgeTracer : RektKnowledgeTracer {
-    override fun trace(inputs: List<RektTraceInput>): Map<String, KnowledgeTraceResult> {
+class HeuristicKnowledgeTracer : MiktKnowledgeTracer {
+    override fun trace(inputs: List<MiktTraceInput>): Map<String, KnowledgeTraceResult> {
         return inputs.associate { input ->
             input.keyId to traceOne(input.events)
         }

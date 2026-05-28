@@ -17,6 +17,7 @@ motionPrediction = "1.0.0-beta01"
 webkit = "1.12.1"
 onnxruntime = "1.24.3"
 pdfboxAndroid = "2.0.27.0"
+mlkitTextRecognition = "16.0.1"
 junit = "4.13.2"
 mockk = "1.13.13"
 turbine = "1.2.0"
@@ -43,6 +44,7 @@ androidx-input-motionprediction = { group = "androidx.input", name = "input-moti
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }

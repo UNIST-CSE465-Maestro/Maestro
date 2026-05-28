@@ -1,6 +1,8 @@
 package com.maestro.app.data.repository
 
 import android.content.Context
+import com.maestro.app.data.local.ModelArtifactLocalDataSource
+import com.maestro.app.data.local.ModelArtifactType
 import com.maestro.app.data.local.StudyEvent
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.StudyEventType
@@ -13,19 +15,31 @@ import com.maestro.app.domain.model.PdfDocument
 import com.maestro.app.domain.model.ProfileSummary
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.KnowledgeRepository
-import com.maestro.app.domain.service.RektKnowledgeTracer
-import com.maestro.app.domain.service.RektTraceInput
+import com.maestro.app.domain.service.MiktKnowledgeTracer
+import com.maestro.app.domain.service.MiktTraceInput
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class KnowledgeRepositoryImpl(
     private val context: Context,
     private val documentRepository: DocumentRepository,
     private val studyEvents: StudyEventLocalDataSource,
-    private val tracer: RektKnowledgeTracer
+    private val modelArtifacts: ModelArtifactLocalDataSource,
+    private val tracer: MiktKnowledgeTracer
 ) : KnowledgeRepository {
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
     override suspend fun loadDashboard(): KnowledgeDashboard =
         withContext(Dispatchers.IO) {
             val docs = documentRepository.loadDocuments()
@@ -33,7 +47,7 @@ class KnowledgeRepositoryImpl(
             val concepts = engineeringMechanicsConcepts(docs, events)
             val conceptTrace = tracer.trace(
                 concepts.map { concept ->
-                    RektTraceInput(
+                    MiktTraceInput(
                         keyId = concept.id,
                         events = events.filter {
                             concept.documentIds.contains(
@@ -47,7 +61,7 @@ class KnowledgeRepositoryImpl(
                 concepts
                     .filter { it.documentIds.contains(doc.id) }
                     .map { concept ->
-                        RektTraceInput(
+                        MiktTraceInput(
                             keyId = docConceptKey(doc.id, concept.id),
                             events = events.filter { event ->
                                 event.documentId == doc.id &&
@@ -153,7 +167,7 @@ class KnowledgeRepositoryImpl(
                         it.timestamp
                     },
                     averageMastery = avg,
-                    rektStatus = if (usingModel) {
+                    miktStatus = if (usingModel) {
                         "${activeModelName ?: "KT ONNX"} local inference active"
                     } else {
                         "KT ONNX 모델 업로드 전, 활동 기반 추정으로 표시 중"
@@ -178,7 +192,12 @@ class KnowledgeRepositoryImpl(
     ): List<ConceptRecord> {
         val linksFromEvents = events
             .flatMap { event ->
-                event.conceptIds.map { conceptId ->
+                val ids = if (event.conceptIds.isNotEmpty()) {
+                    event.conceptIds
+                } else {
+                    conceptIdsForQuestion(event)
+                }
+                ids.map { conceptId ->
                     conceptId to event.documentId
                 }
             }
@@ -188,18 +207,128 @@ class KnowledgeRepositoryImpl(
                 conceptId to doc.id
             }
         }.groupBy({ it.first }, { it.second })
-        return EngineeringMechanicsConceptCatalog.concepts.map { concept ->
+        val externalNames = externalConceptNames()
+        val catalog = EngineeringMechanicsConceptCatalog.concepts
+            .associateBy { it.id }
+        val allConceptIds = (
+            catalog.keys +
+                externalNames.keys +
+                linksFromEvents.keys
+            ).distinct()
+        return allConceptIds.map { conceptId ->
+            val catalogConcept = catalog[conceptId]
             ConceptRecord(
-                id = concept.id,
-                name = concept.name,
+                id = conceptId,
+                name = catalogConcept?.name
+                    ?: externalNames[conceptId]
+                    ?: "Concept $conceptId",
                 documentIds = (
-                    docsByConcept[concept.id].orEmpty() +
-                        linksFromEvents[concept.id]
+                    docsByConcept[conceptId].orEmpty() +
+                        linksFromEvents[conceptId]
                             .orEmpty()
                             .filterNotNull()
                     ).distinct()
             )
         }
+    }
+
+    private fun externalConceptNames(): Map<String, String> {
+        val file = modelArtifacts.getModelFile(
+            ModelArtifactType.MIKT_CONCEPT_ID_MAP
+        ) ?: return emptyMap()
+        return try {
+            json.parseToJsonElement(file.readText())
+                .jsonObject
+                .mapValues { (key, value) ->
+                    when (value) {
+                        is JsonPrimitive -> value.content
+                        is JsonObject ->
+                            value["name"]?.jsonPrimitive?.content
+                                ?: value["source_kc"]
+                                    ?.jsonPrimitive
+                                    ?.content
+                                ?: "Concept $key"
+                        else -> "Concept $key"
+                    }
+                }
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
+
+    private fun conceptIdsForQuestion(
+        event: StudyEvent
+    ): List<String> {
+        val questionId = event.metadata.firstNotBlank(
+            "question_id",
+            "problem_id",
+            "item_id",
+            "exercise_id"
+        ) ?: return emptyList()
+        val file = modelArtifacts.getModelFile(
+            ModelArtifactType.MIKT_QUESTION_TO_CONCEPT
+        ) ?: return emptyList()
+        return try {
+            val value = json.parseToJsonElement(
+                file.readText()
+            ).jsonObject[questionId] ?: return emptyList()
+            when (value) {
+                is JsonPrimitive -> listOfNotNull(
+                    value.intOrNull?.toString()
+                        ?: value.content.takeIf {
+                            it.isNotBlank()
+                        }
+                )
+                is JsonArray -> value.mapNotNull {
+                    it.jsonPrimitive.intOrNull?.toString()
+                        ?: it.jsonPrimitive.content.takeIf { raw ->
+                            raw.isNotBlank()
+                        }
+                }
+                is JsonObject -> {
+                    val ids = value["concept_ids"]
+                        ?: value["concepts"]
+                        ?: value["skills"]
+                    when (ids) {
+                        is JsonArray -> ids.mapNotNull {
+                            it.jsonPrimitive.intOrNull?.toString()
+                                ?: it.jsonPrimitive.content.takeIf { raw ->
+                                    raw.isNotBlank()
+                                }
+                        }
+                        is JsonPrimitive -> listOfNotNull(
+                            ids.intOrNull?.toString()
+                                ?: ids.content.takeIf {
+                                    it.isNotBlank()
+                                }
+                        )
+                        else -> emptyList()
+                    }
+                }
+                else -> emptyList()
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    private fun Map<String, String>.firstNotBlank(
+        vararg keys: String
+    ): String? {
+        keys.forEach { key ->
+            this[key]?.takeIf { it.isNotBlank() }?.let {
+                return it
+            }
+        }
+        val normalized = entries.associate {
+            it.key.lowercase(Locale.US) to it.value
+        }
+        keys.forEach { key ->
+            normalized[key.lowercase(Locale.US)]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+        return null
     }
 
     private fun documentText(doc: PdfDocument): String {

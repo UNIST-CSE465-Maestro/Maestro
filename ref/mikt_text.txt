@@ -1,0 +1,337 @@
+
+
+--- PAGE 1 ---
+y =t σ(5⋅(Ability−Difficulty))
+H ∈t Rd HS∈Rm×d
+X=(q ,Neibor ,a ),(q ,Neibor ,a ),…,(q ,Neibor ,a )1 q 
+11 2 q 
+22 t q 
+t t
+q 
+t t
+Neibor 
+q 
+t q 
+t
+a ∈t {0,1}
+p(a =t+11∣X,q )t+1
+
+
+--- PAGE 2 ---
+ψ ω
+σβ σξ Σ
+Σ
+σφ σ
+n
+m
+d
+T
+K Rn×d
+C Rm×d
+diff 
+q 
+t q 
+t R
+Q 
+q 
+t Rd
+H 
+t Rd
+HS 
+j j Rd
+ H 
+t H 
+t−1 Rd
+FHS 
+t q 
+t Rd
+f 
+q 
+t  H 
+tFHS 
+t R2d
+L 
+q t θ R(0,1)
+y 
+t R(0,1)
+It 
+tHIt 
+jHS Rd
+t
+a 
+t
+
+
+--- PAGE 3 ---
+ =x~q x +c μ ⋅qdc
+q c
+K 
+q 
+t C 
+j
+qa =j , j∈
+ exp  ∑i∈Neibor 
+q 
+t
+(
+ d
+K C 
+q 
+t
+⊤i)
+exp  (
+ d
+K C 
+q 
+t
+⊤j)
+Neibor 
+q 
+t
+MC =q 
+t  qa ⋅
+j∈Neibor 
+q 
+t
+∑ jC ∈j Rd
+qa 
+j j
+OF =q 
+t diff ⋅q 
+t  W ⋅   C +b  ∈1∣Neibor ∣q 
+t
+1
+j∈Neibor 
+q 
+t
+∑j 1 Rd
+diff 
+q 
+t
+
+
+--- PAGE 4 ---
+D 
+α
+Q =q 
+t MC +q 
+t OF ∈q 
+t Rd
+Q 
+q 
+t
+Σ
+∈
+n×m q c
+Neibor 
+q 
+t
+H 
+t−1 It 
+tH
+
+
+--- PAGE 5 ---
+ =H 
+t H ⊙t−1σ(β(H ⊕t−1It ))tH
+β
+σ
+⊙
+⊕
+σ(⋅)∈(0,1)  H 
+tH 
+t−1
+j∈Neibor 
+q 
+t
+HS ←j HS ⊙j σ(ξ(HS ⊕j It ⊕jHS  ))H 
+t
+ H 
+t
+Q 
+q 
+t
+Sa =j  
+ exp  ∑i∈Neibor 
+q 
+t (
+ d
+Q HS 
+q 
+t
+⊤i)
+exp  (
+ d
+Q HS 
+q 
+t
+⊤j)
+FHS =t  Sa⋅
+j∈Neibor 
+q 
+t
+∑ jHS 
+j
+qa 
+j qa 
+j K C Sa 
+j
+Q HS 
+j
+
+
+--- PAGE 6 ---
+attn=σ(π(Q ⊕q 
+t ⊕Ht FHS ))∈t R
+ ∈f =attn⋅ ⊕(1−attn)⋅FHS 
+q 
+t H 
+t t R2d
+2d
+attn attn⋅ H 
+td (1−attn)⋅FHS 
+td
+2d
+
+
+--- PAGE 7 ---
+∈
+attn⋅ H 
+t
+
+
+--- PAGE 8 ---
+f 
+q 
+t Q 
+q 
+t
+L =q 
+t σ(φ(f ⊕q 
+t Q ))∈q 
+t (0,1)
+φ (0,1)
+ y =σ(5⋅(L −diff ))t q 
+t q 
+t
+P(X =ij 1)=σ(θ −i β )j
+θ 
+iL 
+q 
+t
+β 
+jdiff 
+q 
+t
+∈
+∈
+f ⊕q 
+t Q 
+q 
+t (2d+d)=
+3d
+L 
+q 
+t
+diff 
+q 
+t L 
+q 
+t
+
+
+--- PAGE 9 ---
+X =t Q +q 
+t A 
+a 
+t
+A∈R2×d X 
+t
+H =t  +H 
+t Tanh(ψ(X ))t
+Tanh (−1,1)
+G =t Tanh(ω(X ))t
+G 
+t
+ua =j  
+ exp  ∑i∈Neibor 
+q 
+t (
+ d
+G HS 
+t⊤i)
+exp  (
+ d
+G HS 
+t⊤j)
+HS ←j HS +j ua ⋅jG , j∈t Neibor 
+q 
+t
+qa 
+j Sa 
+j
+ua 
+j
+
+
+--- PAGE 10 ---
+ua =j 0
+L =KT− [a logy +
+t=1
+∑
+T
+t t (1−a )log(1−t y )]t
+d
+
+
+--- PAGE 11 ---
+
+
+
+--- PAGE 12 ---
+
+
+
+--- PAGE 13 ---
+diff 
+q 
+t
+σ
+HS
+
+
+--- PAGE 14 ---
+Rd CS ,DS ∈j i [0,1]
+CS =jDecayCS ⋅jσ(W ⋅fencode(I )+j b )f
+H =t  +H 
+t
+Tanh(ψ(X ))t
+CS ←j σ(logit(CS )+j α ⋅j
+ΔCS )j
+y =t σ(5⋅(L −q 
+t diff ))q 
+t y =t σ(C⋅(FA−Diff))
+d
+
+
+--- PAGE 15 ---
+P(X =ij 1)=σ(θ −i β )j
+θ 
+i i
+β 
+j j
+σ
+L 
+q 
+t
+
+
+--- PAGE 16 ---
+
+
+
+--- PAGE 17 ---
+
+
+
+--- PAGE 18 ---

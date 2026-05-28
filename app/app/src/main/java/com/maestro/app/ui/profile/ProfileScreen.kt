@@ -67,31 +67,11 @@ fun ProfileScreen(
             viewModel.uploadModel(ModelArtifactType.MIKT_ONNX, uri)
         }
     }
-    val ktModelPicker = rememberLauncherForActivityResult(
+    val miktContractPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            viewModel.uploadModel(ModelArtifactType.KT_ONNX, uri)
-        }
-    }
-    val staticsMappingPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.uploadModel(
-                ModelArtifactType.MIKT_STATICS2011_MAPPING,
-                uri
-            )
-        }
-    }
-    val conceptModelPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.uploadModel(
-                ModelArtifactType.CONCEPT_ONNX,
-                uri
-            )
+            viewModel.uploadModel(ModelArtifactType.MIKT_CONTRACT, uri)
         }
     }
     var editingName by remember {
@@ -162,14 +142,8 @@ fun ProfileScreen(
                         onUploadMikt = {
                             miktModelPicker.launch("*/*")
                         },
-                        onUploadKt = {
-                            ktModelPicker.launch("*/*")
-                        },
-                        onUploadStaticsMapping = {
-                            staticsMappingPicker.launch("application/json")
-                        },
-                        onUploadConcept = {
-                            conceptModelPicker.launch("*/*")
+                        onUploadMiktContract = {
+                            miktContractPicker.launch("application/json")
                         }
                     )
                 }
@@ -391,9 +365,7 @@ private fun AvatarImage(avatarPath: String?, size: Int) {
 private fun ModelUploadPanel(
     artifacts: List<ModelArtifactState>,
     onUploadMikt: () -> Unit,
-    onUploadKt: () -> Unit,
-    onUploadStaticsMapping: () -> Unit,
-    onUploadConcept: () -> Unit
+    onUploadMiktContract: () -> Unit
 ) {
     Surface(
         color = MaestroSurfaceContainerLowest,
@@ -405,9 +377,11 @@ private fun ModelUploadPanel(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionTitle("KT Experiment Models")
+            SectionTitle("MobileMIKT Runtime")
             Text(
-                "Statics2011 F2011 기준으로 학습한 MIKT ONNX와 id mapping JSON을 앱 내부에 저장합니다. mapping이 없으면 F2011 기본 contract(q=c, 1-based 85 concept space)로 동작합니다.",
+                "자주 바뀌는 런타임 파일만 업로드합니다. " +
+                    "concept map, QE 계약, validation/report는 " +
+                    "앱 내장 파일로 관리합니다.",
                 fontSize = 12.sp,
                 color = Slate500,
                 lineHeight = 17.sp
@@ -416,37 +390,21 @@ private fun ModelUploadPanel(
                 state = artifacts.firstOrNull {
                     it.type == ModelArtifactType.MIKT_ONNX
                 },
-                fallbackLabel = "MIKT ONNX",
-                note = "업로드된 경우 Statics2011 MIKT adapter가 우선 사용되고, KT runtime/device resource logging을 수집합니다.",
+                fallbackLabel = "mobile_mikt_predict.onnx",
+                note = "QE embedding과 풀이 history를 받아 pred_correct / " +
+                    "last_prediction을 내는 Android ONNX Runtime용 MIKT 모델입니다.",
                 uploadLabel = "ONNX 업로드",
                 onUpload = onUploadMikt
             )
             ModelArtifactRow(
                 state = artifacts.firstOrNull {
-                    it.type == ModelArtifactType.MIKT_STATICS2011_MAPPING
+                    it.type == ModelArtifactType.MIKT_CONTRACT
                 },
-                fallbackLabel = "Statics2011 Mapping",
-                note = "학습 때 사용한 concept/question/domain id vocabulary를 맞추기 위한 JSON입니다. concept profiler 결과가 들어오면 이 mapping을 통해 MIKT 입력 id로 변환합니다.",
+                fallbackLabel = "mikt_predict_contract.json",
+                note = "ONNX input/output 이름, dtype, shape, sequence length, " +
+                    "mask, last_prediction 위치를 정의합니다.",
                 uploadLabel = "JSON 업로드",
-                onUpload = onUploadStaticsMapping
-            )
-            ModelArtifactRow(
-                state = artifacts.firstOrNull {
-                    it.type == ModelArtifactType.KT_ONNX
-                },
-                fallbackLabel = "Generic/ReKT KT ONNX",
-                note = "MIKT 파일이 없을 때 사용하는 기존 KT ONNX 슬롯입니다.",
-                uploadLabel = "ONNX 업로드",
-                onUpload = onUploadKt
-            )
-            ModelArtifactRow(
-                state = artifacts.firstOrNull {
-                    it.type == ModelArtifactType.CONCEPT_ONNX
-                },
-                fallbackLabel = "Concept ONNX",
-                note = "문서 -> 공학역학 concept 자동 지정 모델을 위한 슬롯입니다.",
-                uploadLabel = "ONNX 업로드",
-                onUpload = onUploadConcept
+                onUpload = onUploadMiktContract
             )
         }
     }
@@ -576,7 +534,7 @@ private fun KnowledgeOverview(
                         color = MaestroOnSurface
                     )
                     Text(
-                        summary.rektStatus,
+                        summary.miktStatus,
                         fontSize = 12.sp,
                         color = Slate500
                     )

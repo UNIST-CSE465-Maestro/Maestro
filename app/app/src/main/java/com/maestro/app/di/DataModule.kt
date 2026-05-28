@@ -4,6 +4,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.DeviceResourceSampler
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.LocalMlKitContentExtractor
 import com.maestro.app.data.local.ModelArtifactLocalDataSource
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.PdfMerger
@@ -11,6 +12,7 @@ import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
+import com.maestro.app.data.local.TextLayerContentBuilder
 import com.maestro.app.data.local.ViewerTabStateLocalDataSource
 import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
@@ -23,7 +25,7 @@ import com.maestro.app.data.repository.KnowledgeRepositoryImpl
 import com.maestro.app.data.repository.SettingsRepositoryImpl
 import com.maestro.app.data.service.HeuristicKnowledgeTracer
 import com.maestro.app.data.service.LlmServiceImpl
-import com.maestro.app.data.service.OnnxRektKnowledgeTracer
+import com.maestro.app.data.service.OnnxMiktKnowledgeTracer
 import com.maestro.app.data.service.QuizServiceImpl
 import com.maestro.app.data.work.ExtractionWorkScheduler
 import com.maestro.app.data.work.WorkManagerExtractionWorkScheduler
@@ -32,7 +34,7 @@ import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
-import com.maestro.app.domain.service.RektKnowledgeTracer
+import com.maestro.app.domain.service.MiktKnowledgeTracer
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -54,17 +56,25 @@ val dataModule = module {
     single { AnnotationRepositoryImpl(get()) }
     single { LlmClient(get()) }
     single { OpenAiClient(get()) }
+    single(named("openRouterClient")) {
+        OpenAiClient(
+            httpClient = get(),
+            baseUrl = OpenAiClient.OPENROUTER_BASE_URL
+        )
+    }
     single { ClaudeClient(get()) }
     single<LlmService> {
         LlmServiceImpl(
             get<LlmClient>(),
             get<OpenAiClient>(),
             get<ClaudeClient>(),
+            get(named("openRouterClient")),
             get()
         )
     }
     single { ConversationLocalDataSource(get()) }
     single { ExtractionProgressStore() }
+    single { LocalMlKitContentExtractor(get()) }
     single {
         ModelArtifactLocalDataSource(
             get<android.content.Context>()
@@ -100,14 +110,15 @@ val dataModule = module {
             get<android.content.Context>()
         )
     }
+    single { TextLayerContentBuilder() }
     single {
         ViewerTabStateLocalDataSource(
             get<android.content.Context>()
         )
     }
     single<QuizService> { QuizServiceImpl(get()) }
-    single<RektKnowledgeTracer> {
-        OnnxRektKnowledgeTracer(
+    single<MiktKnowledgeTracer> {
+        OnnxMiktKnowledgeTracer(
             context = get<android.content.Context>(),
             modelArtifacts = get(),
             monitoringLogs = get(),
@@ -120,6 +131,7 @@ val dataModule = module {
             context = get<android.content.Context>(),
             documentRepository = get(),
             studyEvents = get(),
+            modelArtifacts = get(),
             tracer = get()
         )
     }

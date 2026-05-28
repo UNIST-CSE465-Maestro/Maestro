@@ -2,6 +2,7 @@ package com.maestro.app.data.remote
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import java.io.InputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
@@ -97,9 +98,15 @@ class MaterialAnalyzerClient(
                 modeBody
             )
             if (!resp.isSuccessful) {
+                val errorBody = resp.errorBody()?.string()
+                    ?: ""
+                Log.e(
+                    TAG,
+                    "upload failed HTTP ${resp.code()} mode=$mode body=${errorBody.take(500)}"
+                )
                 throw ServerException(
                     resp.code(),
-                    resp.errorBody()?.string() ?: ""
+                    errorBody
                 )
             }
             resp.body() ?: throw ServerException(
@@ -125,9 +132,15 @@ class MaterialAnalyzerClient(
     suspend fun pollOnce(taskId: String): AnalysisTaskResponse {
         val resp = api.getTaskStatus(taskId)
         if (!resp.isSuccessful) {
+            val errorBody = resp.errorBody()?.string()
+                ?: ""
+            Log.e(
+                TAG,
+                "poll failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
+            )
             throw ServerException(
                 resp.code(),
-                resp.errorBody()?.string() ?: ""
+                errorBody
             )
         }
         return resp.body()
@@ -140,9 +153,15 @@ class MaterialAnalyzerClient(
     suspend fun getResultMd(taskId: String): String = withContext(Dispatchers.IO) {
         val resp = api.getResultMd(taskId)
         if (!resp.isSuccessful) {
+            val errorBody = resp.errorBody()?.string()
+                ?: ""
+            Log.e(
+                TAG,
+                "result md failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
+            )
             throw ServerException(
                 resp.code(),
-                resp.errorBody()?.string() ?: ""
+                errorBody
             )
         }
         resp.body()?.string() ?: ""
@@ -151,9 +170,15 @@ class MaterialAnalyzerClient(
     suspend fun getResultJson(taskId: String): String = withContext(Dispatchers.IO) {
         val resp = api.getResultJson(taskId)
         if (!resp.isSuccessful) {
+            val errorBody = resp.errorBody()?.string()
+                ?: ""
+            Log.e(
+                TAG,
+                "result json failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
+            )
             throw ServerException(
                 resp.code(),
-                resp.errorBody()?.string() ?: ""
+                errorBody
             )
         }
         resp.body()?.string() ?: ""
@@ -172,6 +197,10 @@ class MaterialAnalyzerClient(
         return cursor?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: "document.pdf"
+    }
+
+    companion object {
+        private const val TAG = "MaterialAnalyzer"
     }
 }
 

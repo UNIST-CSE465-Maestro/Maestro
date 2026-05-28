@@ -58,6 +58,7 @@ class OpenAiClient(
                 "Content-Type",
                 "application/json"
             )
+            .applyOpenRouterHeaders()
             .build()
         var activeCall = httpClient.newCall(request)
 
@@ -163,6 +164,59 @@ class OpenAiClient(
         }
     }
 
+    suspend fun complete(
+        apiKey: String,
+        messages: List<ChatMessage>,
+        systemPrompt: String?,
+        images: List<ByteArray>,
+        model: String = DEFAULT_MODEL
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildRequestBody(
+            messages = messages,
+            systemPrompt = systemPrompt,
+            images = images,
+            model = model,
+            stream = false
+        )
+        val request = Request.Builder()
+            .url("$baseUrl/v1/chat/completions")
+            .post(
+                body.toString().toRequestBody(
+                    JSON_MEDIA_TYPE
+                )
+            )
+            .addHeader(
+                "Authorization",
+                "Bearer $apiKey"
+            )
+            .addHeader(
+                "Content-Type",
+                "application/json"
+            )
+            .applyOpenRouterHeaders()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception(readError(response))
+            }
+            val text = response.body?.string().orEmpty()
+            val root = json.parseToJsonElement(text)
+                .jsonObject
+            root["choices"]?.jsonArray
+                ?.firstOrNull()
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonObject
+                ?.get("content")
+                ?.jsonPrimitive
+                ?.content
+                ?.takeIf { it.isNotBlank() }
+                ?: throw Exception(
+                    "HTTP ${response.code}: 응답 텍스트 없음"
+                )
+        }
+    }
+
     suspend fun fetchModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$baseUrl/v1/models")
@@ -184,16 +238,25 @@ class OpenAiClient(
                 .jsonObject
             val data = root["data"]?.jsonArray
                 ?: return@withContext emptyList()
-            data.mapNotNull { model ->
+            val ids = data.mapNotNull { model ->
                 model.jsonObject["id"]
                     ?.jsonPrimitive?.content
-            }.filter { id ->
-                id.startsWith("gpt-") ||
-                    id.startsWith("chatgpt-") ||
-                    id.matches(
-                        Regex("^o[0-9].*")
-                    )
-            }.sorted()
+            }
+            if (isOpenRouter()) {
+                return@withContext (
+                    listOf(OPENROUTER_DEFAULT_MODEL) +
+                        ids.filter {
+                            it.endsWith(":free")
+                        }
+                    ).distinct().sorted()
+            }
+            ids.filter { id ->
+                    id.startsWith("gpt-") ||
+                        id.startsWith("chatgpt-") ||
+                        id.matches(
+                            Regex("^o[0-9].*")
+                        )
+                }.sorted()
         } catch (_: Throwable) {
             emptyList()
         }
@@ -207,6 +270,7 @@ class OpenAiClient(
                 "Authorization",
                 "Bearer $apiKey"
             )
+            .applyOpenRouterHeaders()
             .build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -225,6 +289,7 @@ class OpenAiClient(
                 "Authorization",
                 "Bearer $apiKey"
             )
+            .applyOpenRouterHeaders()
             .build()
         httpClient.newCall(request)
             .execute().isSuccessful
@@ -234,10 +299,11 @@ class OpenAiClient(
         messages: List<ChatMessage>,
         systemPrompt: String?,
         images: List<ByteArray>,
-        model: String
+        model: String,
+        stream: Boolean = true
     ): JsonObject = buildJsonObject {
         put("model", model)
-        put("stream", true)
+        put("stream", stream)
         put(
             "messages",
             buildJsonArray {
@@ -367,10 +433,29 @@ class OpenAiClient(
             "${detail ?: body.take(200)}"
     }
 
+    private fun Request.Builder.applyOpenRouterHeaders():
+        Request.Builder {
+        if (!isOpenRouter()) return this
+        return addHeader(
+            "HTTP-Referer",
+            "https://github.com/UNIST-CSE465-Maestro/Maestro"
+        ).addHeader(
+            "X-OpenRouter-Title",
+            "Maestro"
+        )
+    }
+
+    private fun isOpenRouter(): Boolean =
+        baseUrl.contains("openrouter.ai")
+
     companion object {
         const val BASE_URL =
             "https://api.openai.com"
         const val DEFAULT_MODEL = "gpt-4o-mini"
+        const val OPENROUTER_BASE_URL =
+            "https://openrouter.ai/api"
+        const val OPENROUTER_DEFAULT_MODEL =
+            "openrouter/free"
         private val JSON_MEDIA_TYPE =
             "application/json; charset=utf-8"
                 .toMediaType()
