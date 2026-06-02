@@ -41,3 +41,12 @@ Demo Videos/
 /공학역학 자료.zip
 datasets/*
 !datasets/mikt_statics2011_mapping.json
+
+# Local meta / working notes (not part of the published repo)
+/AGENTS.md
+/CLAUDE.md
+/MinerU_vs_MLKit.md
+/app_ks_update_policy.json
+/commit.sh
+/experiment_logs.md
+/mlkit_vs_mineru_extraction.md
