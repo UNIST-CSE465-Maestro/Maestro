@@ -57,36 +57,36 @@ class ExtractionProgressStore {
     ) {
         _activeDocumentIds.value =
             _activeDocumentIds.value + documentId
-        val current = _sourceProgress.value[documentId]
-            .orEmpty()
-        val next = current + (
-            sourceId to ExtractionSourceProgress(
-                label = label,
-                progress = progress.coerceIn(0, 100),
-                status = status,
-                error = error
-            )
-            )
+        val current =
+            _sourceProgress.value[documentId]
+                .orEmpty()
+        val next =
+            current + (
+                sourceId to
+                    ExtractionSourceProgress(
+                        label = label,
+                        progress = progress.coerceIn(0, 100),
+                        status = status,
+                        error = error
+                    )
+                )
         _sourceProgress.value =
             _sourceProgress.value + (documentId to next)
-        val aggregate = next.values
-            .map { it.progress }
-            .average()
-            .takeIf { !it.isNaN() }
-            ?.toInt()
-            ?: progress
+        val aggregate =
+            next.values
+                .map { it.progress }
+                .average()
+                .takeIf { !it.isNaN() }
+                ?.toInt()
+                ?: progress
         _progress.value =
             _progress.value + (documentId to aggregate)
     }
 
-    fun markSourceFailed(
-        documentId: String,
-        sourceId: String,
-        label: String,
-        error: String?
-    ) {
-        val current = _sourceProgress.value[documentId]
-            ?.get(sourceId)
+    fun markSourceFailed(documentId: String, sourceId: String, label: String, error: String?) {
+        val current =
+            _sourceProgress.value[documentId]
+                ?.get(sourceId)
         updateSource(
             documentId = documentId,
             sourceId = sourceId,

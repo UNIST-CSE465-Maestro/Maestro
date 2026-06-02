@@ -34,7 +34,6 @@ import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.components.CanvasSection
 import com.maestro.app.ui.components.LlmSidebar
-import com.maestro.app.ui.components.StudySidebarMode
 import com.maestro.app.ui.components.TopAppBarSection
 import com.maestro.app.ui.drawing.DrawingState
 import com.maestro.app.ui.theme.MaestroBackground
@@ -99,8 +98,14 @@ fun ViewerScreen(
         .searchMatches.collectAsState()
     val quizMastery by viewModel
         .quizMastery.collectAsState()
+    val quizConceptMastery by viewModel
+        .quizConceptMastery.collectAsState()
+    val quizConceptCurrentMastery by viewModel
+        .quizConceptCurrentMastery.collectAsState()
     val quizHistory by viewModel
         .quizHistory.collectAsState()
+    val weakConcepts by viewModel
+        .weakConcepts.collectAsState()
     val isPinned by viewModel
         .isPinned.collectAsState()
     val isBookmarked by viewModel
@@ -182,69 +187,76 @@ fun ViewerScreen(
         }
     }
 
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        try {
-            val stream = context.contentResolver
-                .openInputStream(uri)
-            val bitmap = BitmapFactory
-                .decodeStream(stream)
-            stream?.close()
-            if (bitmap != null) {
-                val page = drawingState
-                    .activePageIndex
-                    .coerceAtLeast(0)
-                val imgW = bitmap.width.toFloat()
-                val imgH = bitmap.height.toFloat()
-                val overlay =
-                    DrawingState.ImageOverlay(
-                        bitmap,
-                        100f,
-                        100f,
-                        imgW,
-                        imgH
+    val imagePicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            try {
+                val stream =
+                    context.contentResolver
+                        .openInputStream(uri)
+                val bitmap =
+                    BitmapFactory
+                        .decodeStream(stream)
+                stream?.close()
+                if (bitmap != null) {
+                    val page =
+                        drawingState
+                            .activePageIndex
+                            .coerceAtLeast(0)
+                    val imgW = bitmap.width.toFloat()
+                    val imgH = bitmap.height.toFloat()
+                    val overlay =
+                        DrawingState.ImageOverlay(
+                            bitmap,
+                            100f,
+                            100f,
+                            imgW,
+                            imgH
+                        )
+                    drawingState.addImage(
+                        page,
+                        overlay
                     )
-                drawingState.addImage(
-                    page,
-                    overlay
-                )
-                drawingState.selectedImage =
-                    overlay
-                drawingState.selectedImagePage =
-                    page
-            }
-        } catch (_: Throwable) {
-            // ignore decode failures
-        }
-    }
-
-    val safeUri = remember(viewModel.pdfUri) {
-        try {
-            val uri = viewModel.pdfUri ?: return@remember null
-            when (uri.scheme) {
-                "file" -> {
-                    val path = uri.path
-                        ?: return@remember null
-                    if (java.io.File(path).exists()) {
-                        uri
-                    } else {
-                        null
-                    }
+                    drawingState.selectedImage =
+                        overlay
+                    drawingState.selectedImagePage =
+                        page
                 }
-                else -> uri
+            } catch (_: Throwable) {
+                // ignore decode failures
             }
-        } catch (_: Throwable) {
-            null
         }
-    }
 
-    val safePageCount = if (safeUri != null) {
-        viewModel.pageCount.coerceAtLeast(1)
-    } else {
-        0
-    }
+    val safeUri =
+        remember(viewModel.pdfUri) {
+            try {
+                val uri = viewModel.pdfUri ?: return@remember null
+                when (uri.scheme) {
+                    "file" -> {
+                        val path =
+                            uri.path
+                                ?: return@remember null
+                        if (java.io.File(path).exists()) {
+                            uri
+                        } else {
+                            null
+                        }
+                    }
+                    else -> uri
+                }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+    val safePageCount =
+        if (safeUri != null) {
+            viewModel.pageCount.coerceAtLeast(1)
+        } else {
+            0
+        }
 
     // Track current page for bookmark state
     LaunchedEffect(drawingState.activePageIndex) {
@@ -300,8 +312,9 @@ fun ViewerScreen(
                 viewModel.togglePin()
             },
             onToggleBookmark = {
-                val page = drawingState.activePageIndex
-                    .coerceAtLeast(0)
+                val page =
+                    drawingState.activePageIndex
+                        .coerceAtLeast(0)
                 viewModel.toggleBookmark(page)
             },
             onInsertImage = {
@@ -351,7 +364,8 @@ fun ViewerScreen(
                     initialFirstVisiblePageScrollOffset =
                     initialFirstVisiblePageScrollOffset,
                     searchMatches = searchMatches,
-                    activeSearchMatch = searchMatches
+                    activeSearchMatch =
+                    searchMatches
                         .getOrNull(activeSearchMatchIndex),
                     searchNavigationRequest =
                     searchNavigationRequest,
@@ -374,7 +388,8 @@ fun ViewerScreen(
                 extractionProgress?.let { progress ->
                     ExtractionProgressOverlay(
                         progress = progress,
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .align(Alignment.TopStart)
                             .padding(12.dp)
                     )
@@ -391,10 +406,15 @@ fun ViewerScreen(
                 documentContent = documentContent,
                 documentJsonContent = documentJsonContent,
                 documentId = viewModel.pdfId,
-                pageIndex = drawingState.activePageIndex
+                pageIndex =
+                drawingState.activePageIndex
                     .coerceAtLeast(0),
+                pageCount = viewModel.pageCount,
                 quizMastery = quizMastery,
+                quizConceptMastery = quizConceptMastery,
+                quizConceptCurrentMastery = quizConceptCurrentMastery,
                 quizHistory = quizHistory,
+                weakConcepts = weakConcepts,
                 sidebarMode = sidebarMode,
                 onSidebarModeChanged = {
                     viewModel.setSidebarMode(it)
@@ -419,6 +439,9 @@ fun ViewerScreen(
                         conceptId,
                         bloomLevel
                     )
+                },
+                onQuizGenerated = { quiz ->
+                    viewModel.encodeAndStoreQuiz(quiz)
                 },
                 onQuizAnswered = {
                         conceptId,
@@ -473,7 +496,8 @@ private fun PdfViewerTabStrip(
     onOpenNewTab: () -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .height(42.dp)
             .background(Slate100)
@@ -525,18 +549,21 @@ private fun PdfViewerTab(
     onSelect: () -> Unit,
     onClose: () -> Unit
 ) {
-    val background = if (selected) {
-        MaestroSurfaceContainerLowest
-    } else {
-        MaestroSurfaceContainer
-    }
-    val border = if (selected) {
-        MaestroPrimary
-    } else {
-        Slate200
-    }
+    val background =
+        if (selected) {
+            MaestroSurfaceContainerLowest
+        } else {
+            MaestroSurfaceContainer
+        }
+    val border =
+        if (selected) {
+            MaestroPrimary
+        } else {
+            Slate200
+        }
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .widthIn(min = 148.dp, max = 238.dp)
             .height(32.dp)
             .background(
@@ -555,7 +582,8 @@ private fun PdfViewerTab(
         Icon(
             Icons.Default.Description,
             contentDescription = null,
-            tint = if (selected) {
+            tint =
+            if (selected) {
                 MaestroPrimary
             } else {
                 MaestroOutline
@@ -569,12 +597,14 @@ private fun PdfViewerTab(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 12.sp,
-            fontWeight = if (selected) {
+            fontWeight =
+            if (selected) {
                 FontWeight.SemiBold
             } else {
                 FontWeight.Medium
             },
-            color = if (selected) {
+            color =
+            if (selected) {
                 MaestroOnSurface
             } else {
                 MaestroOnSurfaceVariant
@@ -595,12 +625,10 @@ private fun PdfViewerTab(
 }
 
 @Composable
-private fun ExtractionProgressOverlay(
-    progress: Int,
-    modifier: Modifier = Modifier
-) {
+private fun ExtractionProgressOverlay(progress: Int, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
+        modifier =
+        modifier
             .background(
                 MaestroSurfaceContainerLowest,
                 RoundedCornerShape(8.dp)

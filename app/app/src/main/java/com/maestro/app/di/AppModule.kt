@@ -8,27 +8,32 @@ import com.maestro.app.ui.viewer.ViewerViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-val appModule = module {
-    viewModel {
-        HomeViewModel(get(), get(), get(), get(), get())
+val appModule =
+    module {
+        viewModel {
+            HomeViewModel(get(), get(), get(), get(), get())
+        }
+        viewModel { params ->
+            ViewerViewModel(
+                annotationRepo = get(),
+                analyzerClient = get(),
+                settingsRepository = get(),
+                documentRepository = get(),
+                knowledgeRepository = get(),
+                studyEvents = get(),
+                quizResponses = get(),
+                questionEncoderClient = get(),
+                questionRepresentations = get(),
+                knowledgeEngine = get(),
+                monitoringLogs = get(),
+                pdfTextIndex = get(),
+                extractionProgressStore = get(),
+                appContext = get(),
+                pdfId = params.get<String>(),
+                pageCount = params.get<Int>(),
+                pdfUri = params.get<Uri>()
+            )
+        }
+        viewModel { SettingsViewModel(get(), get(), get()) }
+        viewModel { ProfileViewModel(get(), get(), get(), get(), get(), get()) }
     }
-    viewModel { params ->
-        ViewerViewModel(
-            annotationRepo = get(),
-            analyzerClient = get(),
-            settingsRepository = get(),
-            documentRepository = get(),
-            studyEvents = get(),
-            quizResponses = get(),
-            monitoringLogs = get(),
-            pdfTextIndex = get(),
-            extractionProgressStore = get(),
-            appContext = get(),
-            pdfId = params.get<String>(),
-            pageCount = params.get<Int>(),
-            pdfUri = params.get<Uri>()
-        )
-    }
-    viewModel { SettingsViewModel(get(), get(), get()) }
-    viewModel { ProfileViewModel(get(), get(), get(), get(), get()) }
-}

@@ -31,9 +31,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -41,8 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,8 +70,8 @@ import androidx.compose.ui.unit.sp
 import com.maestro.app.data.local.PdfTextIndex
 import com.maestro.app.data.local.PdfTextIndexPage
 import com.maestro.app.data.local.PdfTextIndexWord
-import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.CropCapturePayload
+import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
@@ -86,10 +86,10 @@ import com.maestro.app.ui.theme.MaestroSurfaceContainer
 import com.maestro.app.ui.theme.MaestroSurfaceContainerHigh
 import com.maestro.app.ui.theme.MaestroSurfaceContainerLow
 import com.maestro.app.ui.theme.MaestroSurfaceContainerLowest
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlin.math.roundToInt
 
 /**
  * Serializable data classes for clipboard stroke JSON
@@ -109,23 +109,30 @@ private data class ClipboardStroke(
     val width: Double
 )
 
-private val clipboardJson = Json {
-    ignoreUnknownKeys = true
-}
+private val clipboardJson =
+    Json {
+        ignoreUnknownKeys = true
+    }
 
-private val SearchHighlightFill = Color(0xFFFFD54F)
-    .copy(alpha = 0.42f)
-private val SearchHighlightStroke = Color(0xFFFFA000)
-    .copy(alpha = 0.72f)
-private val ActiveSearchHighlightFill = Color(0xFFFFF176)
-    .copy(alpha = 0.68f)
-private val ActiveSearchHighlightStroke = MaestroPrimary
-    .copy(alpha = 0.88f)
-private val TextSelectionFill = Color(0xFFFFE082)
-    .copy(alpha = 0.58f)
-private val TextSelectionStroke = MaestroPrimary
-    .copy(alpha = 0.85f)
-private const val TextSelectionVisualYOffsetRatio = 0.28f
+private val SearchHighlightFill =
+    Color(0xFFFFD54F)
+        .copy(alpha = 0.42f)
+private val SearchHighlightStroke =
+    Color(0xFFFFA000)
+        .copy(alpha = 0.72f)
+private val ActiveSearchHighlightFill =
+    Color(0xFFFFF176)
+        .copy(alpha = 0.68f)
+private val ActiveSearchHighlightStroke =
+    MaestroPrimary
+        .copy(alpha = 0.88f)
+private val TextSelectionFill =
+    Color(0xFFFFE082)
+        .copy(alpha = 0.58f)
+private val TextSelectionStroke =
+    MaestroPrimary
+        .copy(alpha = 0.85f)
+private const val TEXT_SELECTION_VISUAL_Y_OFFSET_RATIO = 0.28f
 
 private data class TextSelectionState(
     val pageIndex: Int,
@@ -156,26 +163,40 @@ fun CanvasSection(
     val context = LocalContext.current
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
-    val listState = remember(viewportKey) {
-        LazyListState(
-            initialFirstVisiblePageIndex
-                .coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
-            initialFirstVisiblePageScrollOffset.coerceAtLeast(0)
-        )
-    }
+    val listState =
+        remember(viewportKey) {
+            LazyListState(
+                initialFirstVisiblePageIndex
+                    .coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
+                initialFirstVisiblePageScrollOffset.coerceAtLeast(0)
+            )
+        }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(listState, pageCount) {
         snapshotFlow {
-            listState.firstVisibleItemIndex to
+            val info = listState.layoutInfo
+            // The "active"/current page is the one occupying the most of the
+            // viewport — not merely the first item peeking at the top, which
+            // lags by one while the dominant page is already in view.
+            val mostVisible =
+                info.visibleItemsInfo.maxByOrNull { item ->
+                    val start = maxOf(item.offset, info.viewportStartOffset)
+                    val end = minOf(item.offset + item.size, info.viewportEndOffset)
+                    (end - start).coerceAtLeast(0)
+                }?.index ?: listState.firstVisibleItemIndex
+            Triple(
+                mostVisible,
+                listState.firstVisibleItemIndex,
                 listState.firstVisibleItemScrollOffset
+            )
         }.distinctUntilChanged()
-            .collect { (pageIndex, scrollOffset) ->
-                val safePageIndex = pageIndex
-                    .coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-                drawingState.activePageIndex = safePageIndex
+            .collect { (activeIndex, firstIndex, scrollOffset) ->
+                val maxIndex = (pageCount - 1).coerceAtLeast(0)
+                drawingState.activePageIndex = activeIndex.coerceIn(0, maxIndex)
+                // Scroll restoration still keys off the first visible item.
                 onScrollPositionChanged(
-                    safePageIndex,
+                    firstIndex.coerceIn(0, maxIndex),
                     scrollOffset.coerceAtLeast(0)
                 )
             }
@@ -195,7 +216,8 @@ fun CanvasSection(
     }
 
     Box(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxHeight()
             .background(MaestroSurfaceContainerLow)
             .clipToBounds()
@@ -264,14 +286,15 @@ fun CanvasSection(
                                                 .zoomScale -
                                                 1f
                                             ) / 2f
-                                panOffset = Offset(
-                                    (panOffset.x + drag.x)
-                                        .coerceIn(
-                                            -maxPanX,
-                                            maxPanX
-                                        ),
-                                    panOffset.y
-                                )
+                                panOffset =
+                                    Offset(
+                                        (panOffset.x + drag.x)
+                                            .coerceIn(
+                                                -maxPanX,
+                                                maxPanX
+                                            ),
+                                        panOffset.y
+                                    )
                                 change.consume()
                             }
                         }
@@ -290,10 +313,11 @@ fun CanvasSection(
             val screenPos =
                 drawingState.penPasteScreenPos
                     ?: pasteTapPosition
-            pasteMenuOffset = DpOffset(
-                (screenPos.x / density.density).dp,
-                (screenPos.y / density.density).dp
-            )
+            pasteMenuOffset =
+                DpOffset(
+                    (screenPos.x / density.density).dp,
+                    (screenPos.y / density.density).dp
+                )
             showPasteMenu = true
             drawingState.penPasteRequest = null
             drawingState.penPasteScreenPos = null
@@ -313,54 +337,68 @@ fun CanvasSection(
                     viewWidth,
                     viewHeight
                 ) {
-                    val match = activeSearchMatch
-                        ?: return@LaunchedEffect
+                    val match =
+                        activeSearchMatch
+                            ?: return@LaunchedEffect
                     if (pageCount <= 0) {
                         return@LaunchedEffect
                     }
-                    val pageIndex = match.pageIndex
-                        .coerceIn(0, pageCount - 1)
-                    val aspectRatio = readPageAspectRatio(
-                        context,
-                        pdfUri,
-                        pageIndex
-                    )
-                    val viewWidthPx = with(density) {
-                        viewWidth.toPx()
-                    }
-                    val viewHeightPx = with(density) {
-                        viewHeight.toPx()
-                    }
-                    val defaultPadPx = with(density) {
-                        UxConfig.Canvas.PAGE_DEFAULT_HORIZONTAL_PADDING
-                            .toPx()
-                    }
-                    val minPadPx = with(density) {
-                        UxConfig.Canvas.PAGE_MIN_HORIZONTAL_PADDING
-                            .toPx()
-                    }
+                    val pageIndex =
+                        match.pageIndex
+                            .coerceIn(0, pageCount - 1)
+                    val aspectRatio =
+                        readPageAspectRatio(
+                            context,
+                            pdfUri,
+                            pageIndex
+                        )
+                    val viewWidthPx =
+                        with(density) {
+                            viewWidth.toPx()
+                        }
+                    val viewHeightPx =
+                        with(density) {
+                            viewHeight.toPx()
+                        }
+                    val defaultPadPx =
+                        with(density) {
+                            UxConfig.Canvas.PAGE_DEFAULT_HORIZONTAL_PADDING
+                                .toPx()
+                        }
+                    val minPadPx =
+                        with(density) {
+                            UxConfig.Canvas.PAGE_MIN_HORIZONTAL_PADDING
+                                .toPx()
+                        }
                     val pageHeightAtFullWidth =
                         viewWidthPx / aspectRatio
-                    val horizontalPadPx = if (
-                        pageHeightAtFullWidth >= viewHeightPx
-                    ) {
-                        ((viewWidthPx - viewHeightPx * aspectRatio) / 2f)
-                            .coerceAtLeast(minPadPx)
-                    } else {
-                        defaultPadPx
-                    }
-                    val pageWidthPx = (viewWidthPx -
-                        horizontalPadPx * 2f)
-                        .coerceAtLeast(1f)
+                    val horizontalPadPx =
+                        if (
+                            pageHeightAtFullWidth >= viewHeightPx
+                        ) {
+                            ((viewWidthPx - viewHeightPx * aspectRatio) / 2f)
+                                .coerceAtLeast(minPadPx)
+                        } else {
+                            defaultPadPx
+                        }
+                    val pageWidthPx =
+                        (
+                            viewWidthPx -
+                                horizontalPadPx * 2f
+                            )
+                            .coerceAtLeast(1f)
                     val pageHeightPx = pageWidthPx / aspectRatio
                     val matchCenterY =
                         ((match.top + match.bottom) / 2f) /
                             match.pageHeight.coerceAtLeast(1f) *
                             pageHeightPx
-                    val scrollOffset = (matchCenterY -
-                        viewHeightPx * 0.32f)
-                        .coerceAtLeast(0f)
-                        .toInt()
+                    val scrollOffset =
+                        (
+                            matchCenterY -
+                                viewHeightPx * 0.32f
+                            )
+                            .coerceAtLeast(0f)
+                            .toInt()
                     drawingState.activePageIndex = pageIndex
                     listState.animateScrollToItem(
                         index = pageIndex,
@@ -370,7 +408,8 @@ fun CanvasSection(
 
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .fillMaxSize()
                         .graphicsLayer(
                             scaleX =
@@ -417,7 +456,8 @@ fun CanvasSection(
                             }
 
                         Box(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .padding(
                                     horizontal =
@@ -563,11 +603,13 @@ fun CanvasSection(
                             if (pageSearchMatches.isNotEmpty()) {
                                 SearchHighlightOverlay(
                                     matches = pageSearchMatches,
-                                    activeMatch = activeSearchMatch
+                                    activeMatch =
+                                    activeSearchMatch
                                         ?.takeIf {
                                             it.pageIndex == pageIndex
                                         },
-                                    modifier = Modifier
+                                    modifier =
+                                    Modifier
                                         .matchParentSize()
                                 )
                             }
@@ -586,7 +628,8 @@ fun CanvasSection(
                                 TextSelectionOverlay(
                                     page = pageText,
                                     selection = currentTextSelection,
-                                    modifier = Modifier
+                                    modifier =
+                                    Modifier
                                         .matchParentSize()
                                 )
                             }
@@ -610,7 +653,8 @@ fun CanvasSection(
                                 TextSelectionDismissLayer(
                                     page = pageText,
                                     selection = currentTextSelection,
-                                    modifier = Modifier
+                                    modifier =
+                                    Modifier
                                         .matchParentSize(),
                                     onDismiss = {
                                         textSelection = null
@@ -686,7 +730,8 @@ fun CanvasSection(
             }
         } else {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .padding(UxConfig.Canvas.PLACEHOLDER_PADDING),
                 contentAlignment =
@@ -704,7 +749,8 @@ fun CanvasSection(
         ) {
             Text(
                 "캡처하실 영역을 선택하십시오",
-                modifier = Modifier
+                modifier =
+                Modifier
                     .align(Alignment.BottomCenter)
                     .padding(16.dp)
                     .background(
@@ -728,7 +774,8 @@ fun CanvasSection(
                 (drawingState.zoomScale * 100).toInt()
             Text(
                 "$pct%",
-                modifier = Modifier
+                modifier =
+                Modifier
                     .align(Alignment.BottomStart)
                     .padding(12.dp)
                     .background(
@@ -782,30 +829,32 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSearchHighlight
     stroke: Color,
     strokeWidth: Float
 ) {
-            val scaleX = size.width /
-                match.pageWidth.coerceAtLeast(1f)
-            val scaleY = size.height /
-                match.pageHeight.coerceAtLeast(1f)
-            val left = match.left * scaleX
-            val top = match.top * scaleY
-            val right = match.right * scaleX
-            val bottom = match.bottom * scaleY
-            val width = (right - left).coerceAtLeast(4f)
-            val height = (bottom - top).coerceAtLeast(8f)
-            val corner = 3.dp.toPx()
-            drawRoundRect(
-                color = fill,
-                topLeft = Offset(left, top),
-                size = Size(width, height),
-                cornerRadius = CornerRadius(corner, corner)
-            )
-            drawRoundRect(
-                color = stroke,
-                topLeft = Offset(left, top),
-                size = Size(width, height),
-                cornerRadius = CornerRadius(corner, corner),
-                style = Stroke(width = strokeWidth)
-            )
+    val scaleX =
+        size.width /
+            match.pageWidth.coerceAtLeast(1f)
+    val scaleY =
+        size.height /
+            match.pageHeight.coerceAtLeast(1f)
+    val left = match.left * scaleX
+    val top = match.top * scaleY
+    val right = match.right * scaleX
+    val bottom = match.bottom * scaleY
+    val width = (right - left).coerceAtLeast(4f)
+    val height = (bottom - top).coerceAtLeast(8f)
+    val corner = 3.dp.toPx()
+    drawRoundRect(
+        color = fill,
+        topLeft = Offset(left, top),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(corner, corner)
+    )
+    drawRoundRect(
+        color = stroke,
+        topLeft = Offset(left, top),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(corner, corner),
+        style = Stroke(width = strokeWidth)
+    )
 }
 
 @Composable
@@ -817,10 +866,12 @@ private fun TextSelectionOverlay(
     val words = selectedWordsFor(page, selection)
     Canvas(modifier = modifier) {
         words.forEach { word ->
-            val scaleX = size.width /
-                page.width.coerceAtLeast(1f)
-            val scaleY = size.height /
-                page.height.coerceAtLeast(1f)
+            val scaleX =
+                size.width /
+                    page.width.coerceAtLeast(1f)
+            val scaleY =
+                size.height /
+                    page.height.coerceAtLeast(1f)
             val rect = word.visualRect(page)
             val left = rect.left * scaleX
             val top = rect.top * scaleY
@@ -854,11 +905,13 @@ private fun TextSelectionDismissLayer(
     onDismiss: () -> Unit
 ) {
     Box(
-        modifier = modifier.pointerInput(page, selection) {
+        modifier =
+        modifier.pointerInput(page, selection) {
             awaitEachGesture {
-                val down = awaitFirstDown(
-                    requireUnconsumed = false
-                )
+                val down =
+                    awaitFirstDown(
+                        requireUnconsumed = false
+                    )
                 if (
                     !isInsideSelectedText(
                         page = page,
@@ -884,28 +937,33 @@ private fun TextSelectionActionMenu(
     onDismiss: () -> Unit,
     onQuiz: () -> Unit
 ) {
-    val x = selection.menuOffset.x
-        .coerceAtLeast(8f)
-        .roundToInt()
-    val y = (selection.menuOffset.y - 76f)
-        .coerceAtLeast(8f)
-        .roundToInt()
+    val x =
+        selection.menuOffset.x
+            .coerceAtLeast(8f)
+            .roundToInt()
+    val y =
+        (selection.menuOffset.y - 76f)
+            .coerceAtLeast(8f)
+            .roundToInt()
     Surface(
-        modifier = Modifier
+        modifier =
+        Modifier
             .offset { IntOffset(x, y) },
         shape = RoundedCornerShape(8.dp),
         color = Color(0xFF202124),
         shadowElevation = 8.dp
     ) {
         Row(
-            modifier = Modifier.padding(
+            modifier =
+            Modifier.padding(
                 horizontal = 8.dp,
                 vertical = 6.dp
             ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .clipToBounds()
                     .clickable(enabled = selectedText.isNotBlank()) {
                         onQuiz()
@@ -930,7 +988,8 @@ private fun TextSelectionActionMenu(
             Text(
                 "p.${pageIndex + 1}",
                 fontSize = 11.sp,
-                color = MaestroSurfaceContainerLowest
+                color =
+                MaestroSurfaceContainerLowest
                     .copy(alpha = 0.78f),
                 modifier = Modifier.padding(horizontal = 6.dp)
             )
@@ -988,15 +1047,14 @@ private data class PdfPoint(
     val y: Float
 )
 
-private fun PdfTextIndexWord.visualRect(
-    page: PdfTextIndexPage
-): TextWordRect {
+private fun PdfTextIndexWord.visualRect(page: PdfTextIndexPage): TextWordRect {
     val height = (bottom - top).coerceAtLeast(1f)
-    val yOffset = height * TextSelectionVisualYOffsetRatio
+    val yOffset = height * TEXT_SELECTION_VISUAL_Y_OFFSET_RATIO
     val visualTop = (top - yOffset).coerceIn(0f, page.height)
-    val visualBottom = (bottom - yOffset)
-        .coerceAtLeast(visualTop + 1f)
-        .coerceAtMost(page.height)
+    val visualBottom =
+        (bottom - yOffset)
+            .coerceAtLeast(visualTop + 1f)
+            .coerceAtMost(page.height)
     return TextWordRect(
         left = left.coerceIn(0f, page.width),
         top = visualTop,
@@ -1018,9 +1076,11 @@ private fun toPdfPoint(
         return null
     }
     return PdfPoint(
-        x = position.x / pageWidthPx *
+        x =
+        position.x / pageWidthPx *
             page.width.coerceAtLeast(1f),
-        y = position.y / pageHeightPx *
+        y =
+        position.y / pageHeightPx *
             page.height.coerceAtLeast(1f)
     )
 }
@@ -1038,20 +1098,22 @@ private fun hitWordIndexAtPosition(
     ) {
         return null
     }
-    val point = toPdfPoint(
-        page,
-        position,
-        pageWidthPx,
-        pageHeightPx
-    ) ?: return null
-    val averageHeight = page.words
-        .map {
-            it.visualRect(page).height
-        }
-        .average()
-        .takeIf { !it.isNaN() }
-        ?.toFloat()
-        ?: 12f
+    val point =
+        toPdfPoint(
+            page,
+            position,
+            pageWidthPx,
+            pageHeightPx
+        ) ?: return null
+    val averageHeight =
+        page.words
+            .map {
+                it.visualRect(page).height
+            }
+            .average()
+            .takeIf { !it.isNaN() }
+            ?.toFloat()
+            ?: 12f
     val xPad = averageHeight * 0.35f
     val yPad = averageHeight * 0.45f
     return page.words
@@ -1079,29 +1141,33 @@ private fun nearestWordIndexAtPosition(
     pageHeightPx: Float
 ): Int? {
     if (page.words.isEmpty()) return null
-    val point = toPdfPoint(
-        page,
-        position,
-        pageWidthPx,
-        pageHeightPx
-    ) ?: return null
-    val rows = page.words
-        .withIndex()
-        .map { (index, word) ->
-            IndexedTextWord(
-                index = index,
-                word = word,
-                rect = word.visualRect(page)
-            )
-        }
-        .groupIntoVisualRows()
-    val row = rows.minByOrNull { rowWords ->
-        val centerY = rowWords
-            .map { it.rect.centerY }
-            .average()
-            .toFloat()
-        kotlin.math.abs(point.y - centerY)
-    } ?: return null
+    val point =
+        toPdfPoint(
+            page,
+            position,
+            pageWidthPx,
+            pageHeightPx
+        ) ?: return null
+    val rows =
+        page.words
+            .withIndex()
+            .map { (index, word) ->
+                IndexedTextWord(
+                    index = index,
+                    word = word,
+                    rect = word.visualRect(page)
+                )
+            }
+            .groupIntoVisualRows()
+    val row =
+        rows.minByOrNull { rowWords ->
+            val centerY =
+                rowWords
+                    .map { it.rect.centerY }
+                    .average()
+                    .toFloat()
+            kotlin.math.abs(point.y - centerY)
+        } ?: return null
     return row.minByOrNull { item ->
         val dx = point.x - item.rect.centerX
         val dy = point.y - item.rect.centerY
@@ -1115,23 +1181,24 @@ private data class IndexedTextWord(
     val rect: TextWordRect
 )
 
-private fun List<IndexedTextWord>.groupIntoVisualRows():
-    List<List<IndexedTextWord>> {
+private fun List<IndexedTextWord>.groupIntoVisualRows(): List<List<IndexedTextWord>> {
     if (isEmpty()) return emptyList()
     val rows = mutableListOf<MutableList<IndexedTextWord>>()
     forEach { item ->
         val target = rows.lastOrNull()
-        val targetCenter = target
-            ?.map { it.rect.centerY }
-            ?.average()
-            ?.toFloat()
-        val tolerance = maxOf(
-            item.rect.height,
-            target?.map { it.rect.height }
+        val targetCenter =
+            target
+                ?.map { it.rect.centerY }
                 ?.average()
                 ?.toFloat()
-                ?: item.rect.height
-        ) * 0.65f
+        val tolerance =
+            maxOf(
+                item.rect.height,
+                target?.map { it.rect.height }
+                    ?.average()
+                    ?.toFloat()
+                    ?: item.rect.height
+            ) * 0.65f
         if (
             target == null ||
             targetCenter == null ||
@@ -1153,21 +1220,20 @@ private fun selectedWordsFor(
     selection: TextSelectionState
 ): List<PdfTextIndexWord> {
     if (page.words.isEmpty()) return emptyList()
-    val start = minOf(
-        selection.startWordIndex,
-        selection.endWordIndex
-    ).coerceIn(0, page.words.lastIndex)
-    val end = maxOf(
-        selection.startWordIndex,
-        selection.endWordIndex
-    ).coerceIn(0, page.words.lastIndex)
+    val start =
+        minOf(
+            selection.startWordIndex,
+            selection.endWordIndex
+        ).coerceIn(0, page.words.lastIndex)
+    val end =
+        maxOf(
+            selection.startWordIndex,
+            selection.endWordIndex
+        ).coerceIn(0, page.words.lastIndex)
     return page.words.subList(start, end + 1)
 }
 
-private fun selectedTextFor(
-    page: PdfTextIndexPage,
-    selection: TextSelectionState
-): String {
+private fun selectedTextFor(page: PdfTextIndexPage, selection: TextSelectionState): String {
     val words = selectedWordsFor(page, selection)
     if (words.isEmpty()) return ""
     val builder = StringBuilder()
@@ -1196,20 +1262,18 @@ private fun selectedTextFor(
     return builder.toString().trim()
 }
 
-private fun textQuizLabel(
-    selectedText: String,
-    pageIndex: Int
-): String {
-    val preview = selectedText
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .let {
-            if (it.length > 42) {
-                it.take(42).trimEnd() + "..."
-            } else {
-                it
+private fun textQuizLabel(selectedText: String, pageIndex: Int): String {
+    val preview =
+        selectedText
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .let {
+                if (it.length > 42) {
+                    it.take(42).trimEnd() + "..."
+                } else {
+                    it
+                }
             }
-        }
     return if (preview.isBlank()) {
         "선택 텍스트 · 페이지 ${pageIndex + 1}"
     } else {
@@ -1242,12 +1306,13 @@ private fun onPageLongPress(
     val refY = offset.y / rs
 
     // Check if long-press is on an image
-    val hitImg = drawingState
-        .imagesForPage(pageIndex)
-        .lastOrNull { img ->
-            refX in img.x..(img.x + img.width) &&
-                refY in img.y..(img.y + img.height)
-        }
+    val hitImg =
+        drawingState
+            .imagesForPage(pageIndex)
+            .lastOrNull { img ->
+                refX in img.x..(img.x + img.width) &&
+                    refY in img.y..(img.y + img.height)
+            }
     if (hitImg != null) {
         drawingState.selectedImage = hitImg
         drawingState.selectedImagePage = pageIndex
@@ -1260,14 +1325,16 @@ private fun onPageLongPress(
             }
         val iz =
             coordScale / drawingState.zoomScale
-        val tapPos = Offset(
-            offset.x * iz,
-            offset.y * iz
-        )
-        val menuOff = DpOffset(
-            (offset.x / densityValue).dp,
-            (offset.y / densityValue).dp
-        )
+        val tapPos =
+            Offset(
+                offset.x * iz,
+                offset.y * iz
+            )
+        val menuOff =
+            DpOffset(
+                (offset.x / densityValue).dp,
+                (offset.y / densityValue).dp
+            )
         showMenu(pageIndex, tapPos, menuOff)
     }
 }
@@ -1296,19 +1363,22 @@ private fun PageActionMenu(
                 drawingState.cropPageIndex = pageIndex
                 val cx = pasteTapPosition.x
                 val cy = pasteTapPosition.y
-                val rw = drawingState
-                    .getPageRefWidth(pageIndex)
+                val rw =
+                    drawingState
+                        .getPageRefWidth(pageIndex)
                 val maxX =
                     if (rw > 0f) rw else 1000f
                 val maxY = maxX / aspectRatio
-                drawingState.cropTopLeft = Offset(
-                    (cx - UxConfig.Crop.INITIAL_WIDTH).coerceAtLeast(0f),
-                    (cy - UxConfig.Crop.INITIAL_HEIGHT).coerceAtLeast(0f)
-                )
-                drawingState.cropBottomRight = Offset(
-                    (cx + UxConfig.Crop.INITIAL_WIDTH).coerceAtMost(maxX),
-                    (cy + UxConfig.Crop.INITIAL_HEIGHT).coerceAtMost(maxY)
-                )
+                drawingState.cropTopLeft =
+                    Offset(
+                        (cx - UxConfig.Crop.INITIAL_WIDTH).coerceAtLeast(0f),
+                        (cy - UxConfig.Crop.INITIAL_HEIGHT).coerceAtLeast(0f)
+                    )
+                drawingState.cropBottomRight =
+                    Offset(
+                        (cx + UxConfig.Crop.INITIAL_WIDTH).coerceAtMost(maxX),
+                        (cy + UxConfig.Crop.INITIAL_HEIGHT).coerceAtMost(maxY)
+                    )
             },
             leadingIcon = {
                 Icon(
@@ -1351,29 +1421,27 @@ private fun getPageAspectRatioSync(context: Context, uri: Uri, pageIndex: Int): 
     }
 }
 
-private fun readPageAspectRatio(
-    context: Context,
-    uri: Uri,
-    pageIndex: Int
-): Float {
+private fun readPageAspectRatio(context: Context, uri: Uri, pageIndex: Int): Float {
     return try {
-        val fd = if (uri.scheme == "file") {
-            val file = java.io.File(
-                uri.path ?: return 1f / 1.414f
-            )
-            if (!file.exists()) {
-                return 1f / 1.414f
+        val fd =
+            if (uri.scheme == "file") {
+                val file =
+                    java.io.File(
+                        uri.path ?: return 1f / 1.414f
+                    )
+                if (!file.exists()) {
+                    return 1f / 1.414f
+                }
+                android.os.ParcelFileDescriptor.open(
+                    file,
+                    android.os.ParcelFileDescriptor
+                        .MODE_READ_ONLY
+                )
+            } else {
+                context.contentResolver
+                    .openFileDescriptor(uri, "r")
+                    ?: return 1f / 1.414f
             }
-            android.os.ParcelFileDescriptor.open(
-                file,
-                android.os.ParcelFileDescriptor
-                    .MODE_READ_ONLY
-            )
-        } else {
-            context.contentResolver
-                .openFileDescriptor(uri, "r")
-                ?: return 1f / 1.414f
-        }
         val renderer =
             android.graphics.pdf.PdfRenderer(fd)
         if (pageIndex >= renderer.pageCount) {
@@ -1405,9 +1473,10 @@ private fun pasteFromClipboard(
     tapPosition: Offset
 ) {
     try {
-        val clipboard = context.getSystemService(
-            Context.CLIPBOARD_SERVICE
-        ) as ClipboardManager
+        val clipboard =
+            context.getSystemService(
+                Context.CLIPBOARD_SERVICE
+            ) as ClipboardManager
         val clip =
             clipboard.primaryClip ?: return
         if (clip.itemCount == 0) return
@@ -1417,12 +1486,14 @@ private fun pasteFromClipboard(
         val imageUri = item.uri
         if (imageUri != null) {
             try {
-                val inputStream = context
-                    .contentResolver
-                    .openInputStream(imageUri)
-                val bitmap = android.graphics
-                    .BitmapFactory
-                    .decodeStream(inputStream)
+                val inputStream =
+                    context
+                        .contentResolver
+                        .openInputStream(imageUri)
+                val bitmap =
+                    android.graphics
+                        .BitmapFactory
+                        .decodeStream(inputStream)
                 inputStream?.close()
                 if (bitmap != null) {
                     val imgW =
@@ -1456,23 +1527,26 @@ private fun pasteFromClipboard(
                 ?.toString() ?: return
         if (!text.trimStart().startsWith("[")) return
 
-        val parsed = clipboardJson
-            .decodeFromString<List<ClipboardStroke>>(
-                text
-            )
-        val rawStrokes = parsed.map { s ->
-            InkStroke(
-                points = s.pts.map { p ->
-                    StrokePoint(
-                        p.x.toFloat(),
-                        p.y.toFloat(),
-                        p.p.toFloat()
-                    )
-                },
-                color = Color(s.color),
-                baseWidth = s.width.toFloat()
-            )
-        }
+        val parsed =
+            clipboardJson
+                .decodeFromString<List<ClipboardStroke>>(
+                    text
+                )
+        val rawStrokes =
+            parsed.map { s ->
+                InkStroke(
+                    points =
+                    s.pts.map { p ->
+                        StrokePoint(
+                            p.x.toFloat(),
+                            p.y.toFloat(),
+                            p.p.toFloat()
+                        )
+                    },
+                    color = Color(s.color),
+                    baseWidth = s.width.toFloat()
+                )
+            }
         if (rawStrokes.isEmpty()) return
 
         // Compute bounding box center
@@ -1494,16 +1568,18 @@ private fun pasteFromClipboard(
         // Offset so center aligns with tap
         val dx = tapPosition.x - centerX
         val dy = tapPosition.y - centerY
-        val shifted = rawStrokes.map { stroke ->
-            stroke.copy(
-                points = stroke.points.map { pt ->
-                    pt.copy(
-                        x = pt.x + dx,
-                        y = pt.y + dy
-                    )
-                }
-            )
-        }
+        val shifted =
+            rawStrokes.map { stroke ->
+                stroke.copy(
+                    points =
+                    stroke.points.map { pt ->
+                        pt.copy(
+                            x = pt.x + dx,
+                            y = pt.y + dy
+                        )
+                    }
+                )
+            }
 
         // Add strokes and enter lasso-selected state
         state.strokesForPage(pageIndex)
@@ -1522,7 +1598,8 @@ private fun pasteFromClipboard(
 @Composable
 private fun PlaceholderCanvas() {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .aspectRatio(1f / 1.414f)
             .background(
@@ -1577,11 +1654,12 @@ private fun PlaceholderCanvas() {
                         .spacedBy(12.dp)
                 ) {
                     repeat(4) { i ->
-                        val frac = when (i) {
-                            2 -> 0.83f
-                            3 -> 0.67f
-                            else -> 1f
-                        }
+                        val frac =
+                            when (i) {
+                                2 -> 0.83f
+                                3 -> 0.67f
+                                else -> 1f
+                            }
                         Box(
                             Modifier
                                 .fillMaxWidth(frac)

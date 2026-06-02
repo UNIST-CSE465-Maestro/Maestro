@@ -25,7 +25,6 @@ class ClaudeClient(
     private val httpClient: OkHttpClient,
     private val baseUrl: String = BASE_URL
 ) {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     fun stream(
@@ -35,29 +34,31 @@ class ClaudeClient(
         images: List<ByteArray>,
         model: String = DEFAULT_MODEL
     ): Flow<String> = callbackFlow {
-        val body = buildRequestBody(
-            messages,
-            systemPrompt,
-            images,
-            model
-        )
-        val request = Request.Builder()
-            .url("$baseUrl/v1/messages")
-            .post(
-                body.toString().toRequestBody(
-                    JSON_MEDIA_TYPE
+        val body =
+            buildRequestBody(
+                messages,
+                systemPrompt,
+                images,
+                model
+            )
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/messages")
+                .post(
+                    body.toString().toRequestBody(
+                        JSON_MEDIA_TYPE
+                    )
                 )
-            )
-            .addHeader("x-api-key", apiKey)
-            .addHeader(
-                "anthropic-version",
-                API_VERSION
-            )
-            .addHeader(
-                "Content-Type",
-                "application/json"
-            )
-            .build()
+                .addHeader("x-api-key", apiKey)
+                .addHeader(
+                    "anthropic-version",
+                    API_VERSION
+                )
+                .addHeader(
+                    "Content-Type",
+                    "application/json"
+                )
+                .build()
         var activeCall = httpClient.newCall(request)
 
         var receivedFirstToken = false
@@ -70,7 +71,8 @@ class ClaudeClient(
                     if (!receivedFirstToken) {
                         try {
                             activeResponse?.close()
-                        } catch (_: Throwable) {}
+                        } catch (_: Throwable) {
+                        }
                         activeCall.cancel()
                     }
                 }
@@ -144,9 +146,10 @@ class ClaudeClient(
                             receivedFirstToken = true
                             watchdog.cancel()
                         }
-                        val data = line
-                            .removePrefix("data: ")
-                            .trim()
+                        val data =
+                            line
+                                .removePrefix("data: ")
+                                .trim()
                         if (data.isEmpty()) continue
                         val text =
                             extractDelta(data)
@@ -186,38 +189,40 @@ class ClaudeClient(
     fun fetchModels(): List<String> = MODELS
 
     suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
-        val body = buildJsonObject {
-            put("model", DEFAULT_MODEL)
-            put("max_tokens", 1)
-            put(
-                "messages",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("role", "user")
-                            put("content", "hi")
-                        }
-                    )
-                }
-            )
-        }
-        val request = Request.Builder()
-            .url("$baseUrl/v1/messages")
-            .post(
-                body.toString().toRequestBody(
-                    JSON_MEDIA_TYPE
+        val body =
+            buildJsonObject {
+                put("model", DEFAULT_MODEL)
+                put("max_tokens", 1)
+                put(
+                    "messages",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("role", "user")
+                                put("content", "hi")
+                            }
+                        )
+                    }
                 )
-            )
-            .addHeader("x-api-key", apiKey)
-            .addHeader(
-                "anthropic-version",
-                API_VERSION
-            )
-            .addHeader(
-                "Content-Type",
-                "application/json"
-            )
-            .build()
+            }
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/messages")
+                .post(
+                    body.toString().toRequestBody(
+                        JSON_MEDIA_TYPE
+                    )
+                )
+                .addHeader("x-api-key", apiKey)
+                .addHeader(
+                    "anthropic-version",
+                    API_VERSION
+                )
+                .addHeader(
+                    "Content-Type",
+                    "application/json"
+                )
+                .build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw Exception(
@@ -228,38 +233,40 @@ class ClaudeClient(
     }
 
     suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
-        val body = buildJsonObject {
-            put("model", DEFAULT_MODEL)
-            put("max_tokens", 1)
-            put(
-                "messages",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("role", "user")
-                            put("content", "hi")
-                        }
-                    )
-                }
-            )
-        }
-        val request = Request.Builder()
-            .url("$baseUrl/v1/messages")
-            .post(
-                body.toString().toRequestBody(
-                    JSON_MEDIA_TYPE
+        val body =
+            buildJsonObject {
+                put("model", DEFAULT_MODEL)
+                put("max_tokens", 1)
+                put(
+                    "messages",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("role", "user")
+                                put("content", "hi")
+                            }
+                        )
+                    }
                 )
-            )
-            .addHeader("x-api-key", apiKey)
-            .addHeader(
-                "anthropic-version",
-                API_VERSION
-            )
-            .addHeader(
-                "Content-Type",
-                "application/json"
-            )
-            .build()
+            }
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/messages")
+                .post(
+                    body.toString().toRequestBody(
+                        JSON_MEDIA_TYPE
+                    )
+                )
+                .addHeader("x-api-key", apiKey)
+                .addHeader(
+                    "anthropic-version",
+                    API_VERSION
+                )
+                .addHeader(
+                    "Content-Type",
+                    "application/json"
+                )
+                .build()
         val response =
             httpClient.newCall(request).execute()
         response.isSuccessful
@@ -272,7 +279,14 @@ class ClaudeClient(
         model: String
     ) = buildJsonObject {
         put("model", model)
-        put("max_tokens", MAX_TOKENS)
+        put(
+            "max_tokens",
+            if (systemPrompt.isQuizPrompt()) {
+                QUIZ_MAX_TOKENS
+            } else {
+                MAX_TOKENS
+            }
+        )
         put("stream", true)
         if (!systemPrompt.isNullOrBlank()) {
             put("system", systemPrompt)
@@ -292,7 +306,8 @@ class ClaudeClient(
                     val isLastUser =
                         msg.role ==
                             ChatMessage.Role.USER &&
-                            idx == messages
+                            idx ==
+                            messages
                                 .indexOfLast {
                                     it.role ==
                                         ChatMessage
@@ -375,8 +390,9 @@ class ClaudeClient(
 
     private fun extractDelta(data: String): String? {
         return try {
-            val obj = json.parseToJsonElement(data)
-                .jsonObject
+            val obj =
+                json.parseToJsonElement(data)
+                    .jsonObject
             if (obj["type"]?.jsonPrimitive
                     ?.content !=
                 "content_block_delta"
@@ -393,8 +409,9 @@ class ClaudeClient(
 
     private fun isStop(data: String): Boolean {
         return try {
-            val obj = json.parseToJsonElement(data)
-                .jsonObject
+            val obj =
+                json.parseToJsonElement(data)
+                    .jsonObject
             obj["type"]?.jsonPrimitive
                 ?.content == "message_stop"
         } catch (_: Throwable) {
@@ -403,22 +420,27 @@ class ClaudeClient(
     }
 
     private fun readError(response: okhttp3.Response): String {
-        val body = try {
-            response.body?.string() ?: ""
-        } catch (_: Throwable) {
-            ""
-        }
-        val detail = try {
-            json.parseToJsonElement(body)
-                .jsonObject["error"]
-                ?.jsonObject?.get("message")
-                ?.jsonPrimitive?.content
-        } catch (_: Throwable) {
-            null
-        }
+        val body =
+            try {
+                response.body?.string() ?: ""
+            } catch (_: Throwable) {
+                ""
+            }
+        val detail =
+            try {
+                json.parseToJsonElement(body)
+                    .jsonObject["error"]
+                    ?.jsonObject?.get("message")
+                    ?.jsonPrimitive?.content
+            } catch (_: Throwable) {
+                null
+            }
         return "API error ${response.code}: " +
             "${detail ?: body.take(200)}"
     }
+
+    private fun String?.isQuizPrompt(): Boolean =
+        this?.contains("production quiz generation engine") == true
 
     companion object {
         const val BASE_URL =
@@ -436,10 +458,12 @@ class ClaudeClient(
             "\u0000GENERATING"
         private const val FIRST_TOKEN_TIMEOUT_MS =
             120_000L
-        private val MODELS = listOf(
-            "claude-haiku-4-5-20251001",
-            "claude-sonnet-4-6",
-            "claude-opus-4-6"
-        )
+        private const val QUIZ_MAX_TOKENS = 2048
+        private val MODELS =
+            listOf(
+                "claude-haiku-4-5-20251001",
+                "claude-sonnet-4-6",
+                "claude-opus-4-6"
+            )
     }
 }

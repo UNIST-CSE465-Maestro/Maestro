@@ -25,7 +25,8 @@ data class DocumentDto(
         pageCount = pages,
         folderId = folderId.ifBlank { null },
         addedTimestamp = ts,
-        extractionStatus = try {
+        extractionStatus =
+        try {
             ExtractionStatus.valueOf(
                 extractionStatus.uppercase()
             )

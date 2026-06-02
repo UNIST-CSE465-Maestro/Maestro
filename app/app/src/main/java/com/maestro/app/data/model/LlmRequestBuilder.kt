@@ -11,7 +11,6 @@ import kotlinx.serialization.json.put
  * Builds Gemini-compatible /v1beta/models request bodies.
  */
 object LlmRequestBuilder {
-
     fun build(
         messages: List<ChatMessage>,
         systemPrompt: String? = null,
@@ -59,7 +58,8 @@ object LlmRequestBuilder {
                         )
                         val isLastUser =
                             msg.role == ChatMessage.Role.USER &&
-                                index == messages.indexOfLast {
+                                index ==
+                                messages.indexOfLast {
                                     it.role == ChatMessage.Role.USER
                                 }
                         put(

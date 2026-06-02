@@ -18,7 +18,6 @@ class AuthViewModel(
     private val settingsRepository: SettingsRepository,
     private val serverApi: MaestroServerApi
 ) : ViewModel() {
-
     val isLoggedIn: StateFlow<Boolean> =
         settingsRepository.getAccessToken()
             .map { !it.isNullOrBlank() }
@@ -43,9 +42,10 @@ class AuthViewModel(
             _isLoading.value = true
             _message.value = null
             try {
-                val resp = serverApi.login(
-                    LoginRequest(username, password)
-                )
+                val resp =
+                    serverApi.login(
+                        LoginRequest(username, password)
+                    )
                 if (resp.isSuccessful) {
                     val body = resp.body()!!
                     settingsRepository.setTokens(
@@ -73,13 +73,14 @@ class AuthViewModel(
             _isLoading.value = true
             _message.value = null
             try {
-                val resp = serverApi.register(
-                    RegisterRequest(
-                        username,
-                        email,
-                        password
+                val resp =
+                    serverApi.register(
+                        RegisterRequest(
+                            username,
+                            email,
+                            password
+                        )
                     )
-                )
                 if (resp.isSuccessful) {
                     _message.value =
                         "회원가입 성공. 로그인해주세요."

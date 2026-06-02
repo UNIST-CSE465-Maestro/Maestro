@@ -6,15 +6,26 @@ import com.maestro.app.domain.model.PdfDocument
 
 interface DocumentRepository {
     suspend fun loadDocuments(): List<PdfDocument>
+
     suspend fun loadFolders(): List<Folder>
+
     suspend fun importPdf(uri: Uri, displayName: String): PdfDocument
+
     suspend fun deleteDocument(documentId: String)
+
     suspend fun renameDocument(documentId: String, newName: String)
+
     suspend fun moveDocument(documentId: String, targetFolderId: String?)
+
     suspend fun createFolder(name: String, parentId: String? = null): Folder
+
     suspend fun deleteFolder(folderId: String)
+
     suspend fun renameFolder(folderId: String, newName: String)
+
     suspend fun moveFolder(folderId: String, newParentId: String?)
+
     suspend fun updateDocument(doc: PdfDocument)
+
     suspend fun duplicateDocument(documentId: String): PdfDocument?
 }

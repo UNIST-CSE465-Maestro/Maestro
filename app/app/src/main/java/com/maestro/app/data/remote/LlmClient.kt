@@ -28,7 +28,6 @@ class LlmClient(
     private val httpClient: OkHttpClient,
     private val baseUrl: String = LlmRequestBuilder.BASE_URL
 ) {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     fun stream(
@@ -36,9 +35,10 @@ class LlmClient(
         requestBody: JsonObject,
         model: String = LlmRequestBuilder.DEFAULT_MODEL
     ): Flow<String> = callbackFlow {
-        val url = "$baseUrl/v1beta/models/$model" +
-            ":streamGenerateContent" +
-            "?alt=sse&key=$apiKey"
+        val url =
+            "$baseUrl/v1beta/models/$model" +
+                ":streamGenerateContent" +
+                "?alt=sse&key=$apiKey"
         val request = buildRequest(url, requestBody)
         var activeCall = httpClient.newCall(request)
 
@@ -53,7 +53,8 @@ class LlmClient(
                     if (!receivedFirstToken) {
                         try {
                             activeResponse?.close()
-                        } catch (_: Throwable) {}
+                        } catch (_: Throwable) {
+                        }
                         activeCall.cancel()
                     }
                 }
@@ -149,8 +150,9 @@ class LlmClient(
                     }
                 }
                 if (tokenCount == 0) {
-                    val preview = debugLines
-                        .joinToString("\n")
+                    val preview =
+                        debugLines
+                            .joinToString("\n")
                     channel.close(
                         Exception(
                             "HTTP $code 응답 " +
@@ -176,13 +178,15 @@ class LlmClient(
         requestBody: JsonObject,
         model: String = LlmRequestBuilder.DEFAULT_MODEL
     ): String = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/v1beta/models/$model" +
-            ":generateContent?key=$apiKey"
+        val url =
+            "$baseUrl/v1beta/models/$model" +
+                ":generateContent?key=$apiKey"
         val request = buildRequest(url, requestBody)
         val response =
             httpClient.newCall(request).execute()
-        val body = response.body?.string()
-            ?: throw Exception("Empty response")
+        val body =
+            response.body?.string()
+                ?: throw Exception("Empty response")
 
         if (!response.isSuccessful) {
             throw Exception(
@@ -197,8 +201,9 @@ class LlmClient(
         return withContext(Dispatchers.IO) {
             val url =
                 "$baseUrl/v1beta/models?key=$apiKey"
-            val request = Request.Builder()
-                .url(url).get().build()
+            val request =
+                Request.Builder()
+                    .url(url).get().build()
             httpClient.newCall(request)
                 .execute().isSuccessful
         }
@@ -207,13 +212,15 @@ class LlmClient(
     suspend fun fetchModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
         val url =
             "$baseUrl/v1beta/models?key=$apiKey"
-        val request = Request.Builder()
-            .url(url).get().build()
+        val request =
+            Request.Builder()
+                .url(url).get().build()
         val response =
             httpClient.newCall(request).execute()
         if (!response.isSuccessful) return@withContext emptyList()
-        val body = response.body?.string()
-            ?: return@withContext emptyList()
+        val body =
+            response.body?.string()
+                ?: return@withContext emptyList()
         try {
             val root =
                 json.parseToJsonElement(body)
@@ -221,25 +228,28 @@ class LlmClient(
             val models =
                 root["models"]?.jsonArray
                     ?: return@withContext emptyList()
-            val candidates = models.mapNotNull { model ->
-                val name = model.jsonObject["name"]
-                    ?.jsonPrimitive?.content
-                    ?: return@mapNotNull null
-                val id = name.removePrefix("models/")
-                if (!id.startsWith("gemini-")) {
-                    return@mapNotNull null
+            val candidates =
+                models.mapNotNull { model ->
+                    val name =
+                        model.jsonObject["name"]
+                            ?.jsonPrimitive?.content
+                            ?: return@mapNotNull null
+                    val id = name.removePrefix("models/")
+                    if (!id.startsWith("gemini-")) {
+                        return@mapNotNull null
+                    }
+                    val methods =
+                        model.jsonObject[
+                            "supportedGenerationMethods"
+                        ]?.jsonArray?.map {
+                            it.jsonPrimitive.content
+                        } ?: emptyList()
+                    if ("generateContent" in methods) {
+                        id
+                    } else {
+                        null
+                    }
                 }
-                val methods = model.jsonObject[
-                    "supportedGenerationMethods"
-                ]?.jsonArray?.map {
-                    it.jsonPrimitive.content
-                } ?: emptyList()
-                if ("generateContent" in methods) {
-                    id
-                } else {
-                    null
-                }
-            }
             candidates.filter { modelId ->
                 probeModel(apiKey, modelId)
             }.sorted()
@@ -249,10 +259,11 @@ class LlmClient(
     }
 
     suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("$baseUrl/v1beta/models?key=$apiKey")
-            .get()
-            .build()
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1beta/models?key=$apiKey")
+                .get()
+                .build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw Exception(
@@ -269,18 +280,19 @@ class LlmClient(
                     "[{\"text\":\"hi\"}]}]," +
                     "\"generationConfig\":" +
                     "{\"maxOutputTokens\":1}}"
-            val req = Request.Builder()
-                .url(
-                    "$baseUrl/v1beta/models/" +
-                        "$modelId:generateContent" +
-                        "?key=$apiKey"
-                )
-                .post(
-                    probeBody.toRequestBody(
-                        JSON_MEDIA_TYPE
+            val req =
+                Request.Builder()
+                    .url(
+                        "$baseUrl/v1beta/models/" +
+                            "$modelId:generateContent" +
+                            "?key=$apiKey"
                     )
-                )
-                .build()
+                    .post(
+                        probeBody.toRequestBody(
+                            JSON_MEDIA_TYPE
+                        )
+                    )
+                    .build()
             val resp =
                 httpClient.newCall(req).execute()
             val ok = resp.isSuccessful
@@ -324,31 +336,35 @@ class LlmClient(
             val obj =
                 json.parseToJsonElement(data)
                     .jsonObject
-            val candidate = obj["candidates"]
-                ?.jsonArray
-                ?.firstOrNull()
-                ?.jsonObject
-            val parts = candidate
-                ?.get("content")
-                ?.jsonObject
-                ?.get("parts")
-                ?.jsonArray
+            val candidate =
+                obj["candidates"]
+                    ?.jsonArray
+                    ?.firstOrNull()
+                    ?.jsonObject
+            val parts =
+                candidate
+                    ?.get("content")
+                    ?.jsonObject
+                    ?.get("parts")
+                    ?.jsonArray
             var isThinking = false
-            val text = parts?.mapNotNull { part ->
-                val partObj = part.jsonObject
-                if (partObj["thought"]
-                        ?.jsonPrimitive
-                        ?.booleanOrNull == true
-                ) {
-                    isThinking = true
-                    null
-                } else {
-                    partObj["text"]
-                        ?.jsonPrimitive?.content
-                }
-            }?.joinToString("")?.ifEmpty { null }
-            val done = candidate
-                ?.get("finishReason") != null
+            val text =
+                parts?.mapNotNull { part ->
+                    val partObj = part.jsonObject
+                    if (partObj["thought"]
+                            ?.jsonPrimitive
+                            ?.booleanOrNull == true
+                    ) {
+                        isThinking = true
+                        null
+                    } else {
+                        partObj["text"]
+                            ?.jsonPrimitive?.content
+                    }
+                }?.joinToString("")?.ifEmpty { null }
+            val done =
+                candidate
+                    ?.get("finishReason") != null
             ChunkResult(text, isThinking, done)
         } catch (_: Throwable) {
             ChunkResult(null, false, false)
@@ -375,23 +391,25 @@ class LlmClient(
     }
 
     private fun readErrorDetail(response: okhttp3.Response): String {
-        val body = try {
-            response.body?.string() ?: ""
-        } catch (_: Throwable) {
-            ""
-        }
+        val body =
+            try {
+                response.body?.string() ?: ""
+            } catch (_: Throwable) {
+                ""
+            }
         return parseErrorMessage(body, response.code)
     }
 
     private fun parseErrorMessage(body: String, code: Int): String {
-        val detail = try {
-            json.parseToJsonElement(body)
-                .jsonObject["error"]
-                ?.jsonObject?.get("message")
-                ?.jsonPrimitive?.content
-        } catch (_: Throwable) {
-            null
-        }
+        val detail =
+            try {
+                json.parseToJsonElement(body)
+                    .jsonObject["error"]
+                    ?.jsonObject?.get("message")
+                    ?.jsonPrimitive?.content
+            } catch (_: Throwable) {
+                null
+            }
         return "API error $code: " +
             "${detail ?: body.take(200)}"
     }

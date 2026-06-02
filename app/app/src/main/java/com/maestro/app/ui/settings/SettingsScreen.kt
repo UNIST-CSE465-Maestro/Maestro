@@ -32,6 +32,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,10 +48,7 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
-    viewModel: SettingsViewModel,
-    onBack: () -> Unit
-) {
+fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     val geminiKeySet by viewModel.geminiKeySet
         .collectAsState()
     val openAiKeySet by viewModel.openAiKeySet
@@ -64,6 +62,8 @@ fun SettingsScreen(
     val serverTokenSet by viewModel.serverTokenSet
         .collectAsState()
     val serverUsername by viewModel.serverUsername
+        .collectAsState()
+    val qeServerUrl by viewModel.qeServerUrl
         .collectAsState()
     val validationResult by viewModel
         .validationResult.collectAsState()
@@ -92,6 +92,14 @@ fun SettingsScreen(
     var serverPasswordInput by remember {
         mutableStateOf("")
     }
+    var qeServerUrlInput by remember {
+        mutableStateOf("")
+    }
+    LaunchedEffect(qeServerUrl) {
+        if (qeServerUrlInput.isBlank()) {
+            qeServerUrlInput = qeServerUrl
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -105,7 +113,8 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons
+                            imageVector =
+                            Icons
                                 .AutoMirrored
                                 .Filled
                                 .ArrowBack,
@@ -113,16 +122,19 @@ fun SettingsScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults
+                colors =
+                TopAppBarDefaults
                     .topAppBarColors(
-                        containerColor = MaterialTheme
+                        containerColor =
+                        MaterialTheme
                             .colorScheme.surface
                     )
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 24.dp)
@@ -130,15 +142,17 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            val providers = listOf(
-                ApiProviderTab("OPENROUTER", "OpenRouter", openRouterKeySet),
-                ApiProviderTab("GEMINI", "Gemini", geminiKeySet),
-                ApiProviderTab("OPENAI", "ChatGPT", openAiKeySet),
-                ApiProviderTab("CLAUDE", "Claude", claudeKeySet)
-            )
-            val activeProvider = providers.firstOrNull {
-                it.id == currentProvider
-            } ?: providers.first()
+            val providers =
+                listOf(
+                    ApiProviderTab("OPENROUTER", "OpenRouter", openRouterKeySet),
+                    ApiProviderTab("GEMINI", "Gemini", geminiKeySet),
+                    ApiProviderTab("OPENAI", "ChatGPT", openAiKeySet),
+                    ApiProviderTab("CLAUDE", "Claude", claudeKeySet)
+                )
+            val activeProvider =
+                providers.firstOrNull {
+                    it.id == currentProvider
+                } ?: providers.first()
             Text(
                 text = "LLM API Key",
                 fontWeight = FontWeight.Medium,
@@ -159,13 +173,15 @@ fun SettingsScreen(
                         text = {
                             Text(
                                 provider.label,
-                                color = if (provider.keySet) {
+                                color =
+                                if (provider.keySet) {
                                     Color(0xFF10B981)
                                 } else {
                                     MaterialTheme.colorScheme
                                         .onSurfaceVariant
                                 },
-                                fontWeight = if (
+                                fontWeight =
+                                if (
                                     provider.id == activeProvider.id
                                 ) {
                                     FontWeight.Bold
@@ -180,7 +196,8 @@ fun SettingsScreen(
             Spacer(Modifier.height(12.dp))
             ActiveApiKeyEditor(
                 provider = activeProvider,
-                value = when (activeProvider.id) {
+                value =
+                when (activeProvider.id) {
                     "GEMINI" -> geminiKeyInput
                     "OPENAI" -> openAiKeyInput
                     "CLAUDE" -> claudeKeyInput
@@ -248,13 +265,15 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (serverTokenSet) {
+                text =
+                if (serverTokenSet) {
                     "MinerU 서버 인증이 설정되어 있습니다"
                 } else {
                     "MinerU 서버 인증이 설정되지 않았습니다"
                 },
                 fontSize = 13.sp,
-                color = if (serverTokenSet) {
+                color =
+                if (serverTokenSet) {
                     Color(0xFF10B981)
                 } else {
                     MaterialTheme.colorScheme
@@ -263,11 +282,13 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = serverUsername?.let {
+                text =
+                serverUsername?.let {
                     "서버 계정: $it"
                 } ?: "서버 계정으로 인증하면 access/refresh token을 받아 MinerU 추출에 자동 사용합니다.",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
             Spacer(Modifier.height(12.dp))
@@ -309,7 +330,8 @@ fun SettingsScreen(
                 ) {
                     if (serverAuthInProgress) {
                         CircularProgressIndicator(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .height(16.dp)
                                 .width(16.dp),
                             strokeWidth = 2.dp
@@ -325,7 +347,8 @@ fun SettingsScreen(
                         serverPasswordInput = ""
                     },
                     enabled = serverTokenSet,
-                    colors = ButtonDefaults
+                    colors =
+                    ButtonDefaults
                         .outlinedButtonColors(
                             contentColor =
                             MaterialTheme.colorScheme
@@ -337,7 +360,8 @@ fun SettingsScreen(
             Text(
                 text = "고급: Bearer 토큰을 직접 저장할 수도 있습니다.",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
@@ -375,12 +399,50 @@ fun SettingsScreen(
                 Text(
                     text = result,
                     fontSize = 13.sp,
-                    color = if (isOk) {
+                    color =
+                    if (isOk) {
                         Color(0xFF10B981)
                     } else {
                         MaterialTheme.colorScheme.error
                     }
                 )
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = "퀴즈 인코더(QE) 서버",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text =
+                "생성된 퀴즈를 MobileKT Question Encoder 서버로 전송해 " +
+                    "문제 표현(임베딩·난이도)을 받아 태블릿에 저장합니다.",
+                fontSize = 13.sp,
+                color =
+                MaterialTheme.colorScheme
+                    .onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            SettingsTextField(
+                value = qeServerUrlInput,
+                onValueChange = {
+                    qeServerUrlInput = it
+                },
+                placeholder = "http://h-router.iptime.org:9511/"
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    viewModel.saveQeServerUrl(qeServerUrlInput)
+                },
+                enabled = qeServerUrlInput.isNotBlank()
+            ) {
+                Text("QE 서버 주소 저장")
             }
 
             Spacer(Modifier.height(24.dp))
@@ -408,13 +470,15 @@ private fun ActiveApiKeyEditor(
     onClear: () -> Unit
 ) {
     Text(
-        text = if (provider.keySet) {
+        text =
+        if (provider.keySet) {
             "${provider.label} API 키가 설정되어 있습니다"
         } else {
             "${provider.label} API 키가 설정되지 않았습니다"
         },
         fontSize = 13.sp,
-        color = if (provider.keySet) {
+        color =
+        if (provider.keySet) {
             Color(0xFF10B981)
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
@@ -446,7 +510,8 @@ private fun ActiveApiKeyEditor(
         ) {
             if (isValidating) {
                 CircularProgressIndicator(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .height(16.dp)
                         .width(16.dp),
                     strokeWidth = 2.dp
@@ -458,7 +523,8 @@ private fun ActiveApiKeyEditor(
         OutlinedButton(
             onClick = onClear,
             enabled = provider.keySet,
-            colors = ButtonDefaults.outlinedButtonColors(
+            colors =
+            ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.error
             )
         ) {
@@ -481,13 +547,15 @@ private fun SettingsTextField(
         placeholder = {
             Text(placeholder, fontSize = 14.sp)
         },
-        visualTransformation = if (isPassword) {
+        visualTransformation =
+        if (isPassword) {
             PasswordVisualTransformation()
         } else {
             VisualTransformation.None
         },
         singleLine = true,
-        colors = TextFieldDefaults.colors(
+        colors =
+        TextFieldDefaults.colors(
             focusedContainerColor =
             MaterialTheme.colorScheme.surfaceVariant,
             unfocusedContainerColor =

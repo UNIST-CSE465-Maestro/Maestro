@@ -50,11 +50,11 @@ private data class PageAnnotations(
 class AnnotationRepositoryImpl(
     context: Context
 ) : AnnotationRepository {
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = false
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = false
+        }
     private val dir =
         File(context.filesDir, "annotations").also { it.mkdirs() }
     private val imgDir =
@@ -62,13 +62,16 @@ class AnnotationRepositoryImpl(
 
     override suspend fun loadStrokes(documentId: String, pageIndex: Int): List<InkStroke> =
         withContext(Dispatchers.IO) {
-            val annotations = loadAnnotations(documentId)
-                ?: return@withContext emptyList()
-            val dtos = annotations.strokes[pageIndex.toString()]
-                ?: return@withContext emptyList()
+            val annotations =
+                loadAnnotations(documentId)
+                    ?: return@withContext emptyList()
+            val dtos =
+                annotations.strokes[pageIndex.toString()]
+                    ?: return@withContext emptyList()
             dtos.map { dto ->
                 InkStroke(
-                    points = dto.pts.map { p ->
+                    points =
+                    dto.pts.map { p ->
                         StrokePoint(
                             p.x.toFloat(),
                             p.y.toFloat(),
@@ -87,31 +90,35 @@ class AnnotationRepositoryImpl(
         strokes: List<InkStroke>,
         refWidth: Float
     ) = withContext(Dispatchers.IO) {
-        val existing = loadAnnotations(documentId)
-            ?: PageAnnotations()
-        val strokeDtos = strokes.map { stroke ->
-            StrokeDto(
-                color = stroke.color.toArgb(),
-                width = stroke.baseWidth.toDouble(),
-                pts = stroke.points.map { pt ->
-                    PointDto(
-                        pt.x.toDouble(),
-                        pt.y.toDouble(),
-                        pt.pressure.toDouble()
-                    )
-                }
-            )
-        }
+        val existing =
+            loadAnnotations(documentId)
+                ?: PageAnnotations()
+        val strokeDtos =
+            strokes.map { stroke ->
+                StrokeDto(
+                    color = stroke.color.toArgb(),
+                    width = stroke.baseWidth.toDouble(),
+                    pts =
+                    stroke.points.map { pt ->
+                        PointDto(
+                            pt.x.toDouble(),
+                            pt.y.toDouble(),
+                            pt.pressure.toDouble()
+                        )
+                    }
+                )
+            }
         val newStrokes = existing.strokes.toMutableMap()
         newStrokes[pageIndex.toString()] = strokeDtos
         val newRefWidths = existing.refWidths.toMutableMap()
         if (refWidth > 0f) {
             newRefWidths[pageIndex.toString()] = refWidth.toDouble()
         }
-        val updated = existing.copy(
-            strokes = newStrokes,
-            refWidths = newRefWidths
-        )
+        val updated =
+            existing.copy(
+                strokes = newStrokes,
+                refWidths = newRefWidths
+            )
         saveAnnotations(documentId, updated)
     }
 
@@ -119,15 +126,18 @@ class AnnotationRepositoryImpl(
         documentId: String,
         pageIndex: Int
     ): List<ImageOverlayData> = withContext(Dispatchers.IO) {
-        val annotations = loadAnnotations(documentId)
-            ?: return@withContext emptyList()
-        val dtos = annotations.images[pageIndex.toString()]
-            ?: return@withContext emptyList()
+        val annotations =
+            loadAnnotations(documentId)
+                ?: return@withContext emptyList()
+        val dtos =
+            annotations.images[pageIndex.toString()]
+                ?: return@withContext emptyList()
         dtos.mapNotNull { dto ->
             val imgFile = File(imgDir, dto.file)
             if (!imgFile.exists()) return@mapNotNull null
-            val bmp = BitmapFactory.decodeFile(imgFile.absolutePath)
-                ?: return@mapNotNull null
+            val bmp =
+                BitmapFactory.decodeFile(imgFile.absolutePath)
+                    ?: return@mapNotNull null
             ImageOverlayData(
                 bitmap = bmp,
                 x = dto.x.toFloat(),
@@ -143,24 +153,27 @@ class AnnotationRepositoryImpl(
         pageIndex: Int,
         overlays: List<ImageOverlayData>
     ) = withContext(Dispatchers.IO) {
-        val existing = loadAnnotations(documentId)
-            ?: PageAnnotations()
-        val imgDtos = overlays.mapIndexed { i, img ->
-            val imgFile = File(
-                imgDir,
-                "${documentId}_p${pageIndex}_i$i.png"
-            )
-            imgFile.outputStream().use {
-                img.bitmap.compress(Bitmap.CompressFormat.PNG, 90, it)
+        val existing =
+            loadAnnotations(documentId)
+                ?: PageAnnotations()
+        val imgDtos =
+            overlays.mapIndexed { i, img ->
+                val imgFile =
+                    File(
+                        imgDir,
+                        "${documentId}_p${pageIndex}_i$i.png"
+                    )
+                imgFile.outputStream().use {
+                    img.bitmap.compress(Bitmap.CompressFormat.PNG, 90, it)
+                }
+                ImageDto(
+                    file = imgFile.name,
+                    x = img.x.toDouble(),
+                    y = img.y.toDouble(),
+                    w = img.width.toDouble(),
+                    h = img.height.toDouble()
+                )
             }
-            ImageDto(
-                file = imgFile.name,
-                x = img.x.toDouble(),
-                y = img.y.toDouble(),
-                w = img.width.toDouble(),
-                h = img.height.toDouble()
-            )
-        }
         val newImages = existing.images.toMutableMap()
         newImages[pageIndex.toString()] = imgDtos
         val updated = existing.copy(images = newImages)
@@ -177,19 +190,21 @@ class AnnotationRepositoryImpl(
         val images = mutableMapOf<String, List<ImageDto>>()
 
         state.getAllPageIndices().forEach { pageIndex ->
-            val strokeDtos = state.strokesForPage(pageIndex).map { s ->
-                StrokeDto(
-                    color = s.color.toArgb(),
-                    width = s.baseWidth.toDouble(),
-                    pts = s.points.map { pt ->
-                        PointDto(
-                            pt.x.toDouble(),
-                            pt.y.toDouble(),
-                            pt.pressure.toDouble()
-                        )
-                    }
-                )
-            }
+            val strokeDtos =
+                state.strokesForPage(pageIndex).map { s ->
+                    StrokeDto(
+                        color = s.color.toArgb(),
+                        width = s.baseWidth.toDouble(),
+                        pts =
+                        s.points.map { pt ->
+                            PointDto(
+                                pt.x.toDouble(),
+                                pt.y.toDouble(),
+                                pt.pressure.toDouble()
+                            )
+                        }
+                    )
+                }
             strokes[pageIndex.toString()] = strokeDtos
             val rw = state.getPageRefWidth(pageIndex)
             if (rw > 0f) {
@@ -198,27 +213,29 @@ class AnnotationRepositoryImpl(
         }
 
         state.getAllImagePageIndices().forEach { pageIndex ->
-            val imgDtos = state.imagesForPage(pageIndex)
-                .mapIndexed { i, img ->
-                    val imgFile = File(
-                        imgDir,
-                        "${documentId}_p${pageIndex}_i$i.png"
-                    )
-                    imgFile.outputStream().use {
-                        img.bitmap.compress(
-                            Bitmap.CompressFormat.PNG,
-                            90,
-                            it
+            val imgDtos =
+                state.imagesForPage(pageIndex)
+                    .mapIndexed { i, img ->
+                        val imgFile =
+                            File(
+                                imgDir,
+                                "${documentId}_p${pageIndex}_i$i.png"
+                            )
+                        imgFile.outputStream().use {
+                            img.bitmap.compress(
+                                Bitmap.CompressFormat.PNG,
+                                90,
+                                it
+                            )
+                        }
+                        ImageDto(
+                            file = imgFile.name,
+                            x = img.x.toDouble(),
+                            y = img.y.toDouble(),
+                            w = img.width.toDouble(),
+                            h = img.height.toDouble()
                         )
                     }
-                    ImageDto(
-                        file = imgFile.name,
-                        x = img.x.toDouble(),
-                        y = img.y.toDouble(),
-                        w = img.width.toDouble(),
-                        h = img.height.toDouble()
-                    )
-                }
             images[pageIndex.toString()] = imgDtos
         }
 
@@ -236,19 +253,21 @@ class AnnotationRepositoryImpl(
 
         annotations.strokes.forEach { (key, dtos) ->
             val pageIndex = key.toIntOrNull() ?: return@forEach
-            val inkStrokes = dtos.map { dto ->
-                InkStroke(
-                    points = dto.pts.map { p ->
-                        StrokePoint(
-                            p.x.toFloat(),
-                            p.y.toFloat(),
-                            p.p.toFloat()
-                        )
-                    },
-                    color = Color(dto.color),
-                    baseWidth = dto.width.toFloat()
-                )
-            }
+            val inkStrokes =
+                dtos.map { dto ->
+                    InkStroke(
+                        points =
+                        dto.pts.map { p ->
+                            StrokePoint(
+                                p.x.toFloat(),
+                                p.y.toFloat(),
+                                p.p.toFloat()
+                            )
+                        },
+                        color = Color(dto.color),
+                        baseWidth = dto.width.toFloat()
+                    )
+                }
             state.loadPageStrokes(pageIndex, inkStrokes)
             val rw = annotations.refWidths[key]?.toFloat() ?: 0f
             if (rw > 0f) state.setPageRefWidthIfMissing(pageIndex, rw)
@@ -259,9 +278,10 @@ class AnnotationRepositoryImpl(
             dtos.forEach { dto ->
                 val imgFile = File(imgDir, dto.file)
                 if (!imgFile.exists()) return@forEach
-                val bmp = BitmapFactory.decodeFile(
-                    imgFile.absolutePath
-                ) ?: return@forEach
+                val bmp =
+                    BitmapFactory.decodeFile(
+                        imgFile.absolutePath
+                    ) ?: return@forEach
                 state.addImage(
                     pageIndex,
                     DrawingState.ImageOverlay(

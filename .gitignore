@@ -35,3 +35,9 @@ designs/
 Designs/
 demo videos/
 Demo Videos/
+
+# Large study materials & raw datasets (exceed GitHub 100MB limit)
+/공학역학 자료/
+/공학역학 자료.zip
+datasets/*
+!datasets/mikt_statics2011_mapping.json

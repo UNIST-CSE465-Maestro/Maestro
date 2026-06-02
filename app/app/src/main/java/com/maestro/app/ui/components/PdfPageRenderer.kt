@@ -39,9 +39,10 @@ private data class PageResult(
 @Composable
 fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val cacheKey = remember(uri, pageIndex) {
-        PageRenderCache.key(uri, pageIndex)
-    }
+    val cacheKey =
+        remember(uri, pageIndex) {
+            PageRenderCache.key(uri, pageIndex)
+        }
     var result by remember(uri, pageIndex) {
         mutableStateOf(PageRenderCache.get(cacheKey))
     }
@@ -57,9 +58,10 @@ fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
             return@LaunchedEffect
         }
         error = false
-        val r = withContext(Dispatchers.IO) {
-            renderPage(context, uri, pageIndex)
-        }
+        val r =
+            withContext(Dispatchers.IO) {
+                renderPage(context, uri, pageIndex)
+            }
         result = r
         if (r != null) {
             PageRenderCache.put(cacheKey, r)
@@ -72,7 +74,8 @@ fun PdfPageView(uri: Uri, pageIndex: Int, modifier: Modifier = Modifier) {
             ?: getPageAspectRatio(context, uri, pageIndex)
 
     Box(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
             .shadow(
@@ -130,8 +133,7 @@ private object PageRenderCache {
             ): Boolean = size > MAX_ENTRIES
         }
 
-    fun key(uri: Uri, pageIndex: Int): String =
-        "${uri}#page=$pageIndex"
+    fun key(uri: Uri, pageIndex: Int): String = "$uri#page=$pageIndex"
 
     @Synchronized
     fun get(key: String): PageResult? = entries[key]
@@ -144,27 +146,30 @@ private object PageRenderCache {
 
 @Composable
 private fun getPageAspectRatio(context: Context, uri: Uri, pageIndex: Int): Float {
-    val ratio = remember(uri, pageIndex) {
-        try {
-            val fd = openPfd(context, uri)
-                ?: return@remember 1f / 1.414f
-            val renderer = PdfRenderer(fd)
-            if (pageIndex >= renderer.pageCount) {
+    val ratio =
+        remember(uri, pageIndex) {
+            try {
+                val fd =
+                    openPfd(context, uri)
+                        ?: return@remember 1f / 1.414f
+                val renderer = PdfRenderer(fd)
+                if (pageIndex >= renderer.pageCount) {
+                    renderer.close()
+                    fd.close()
+                    return@remember 1f / 1.414f
+                }
+                val page = renderer.openPage(pageIndex)
+                val r =
+                    page.width.toFloat() /
+                        page.height.toFloat()
+                page.close()
                 renderer.close()
                 fd.close()
-                return@remember 1f / 1.414f
+                r
+            } catch (_: Throwable) {
+                1f / 1.414f
             }
-            val page = renderer.openPage(pageIndex)
-            val r = page.width.toFloat() /
-                page.height.toFloat()
-            page.close()
-            renderer.close()
-            fd.close()
-            r
-        } catch (_: Throwable) {
-            1f / 1.414f
         }
-    }
     return ratio
 }
 
@@ -181,19 +186,21 @@ private fun renderPage(context: Context, uri: Uri, pageIndex: Int): PageResult? 
         val maxDim = UxConfig.Canvas.PDF_MAX_RENDER_DIM
         val w = page.width
         val h = page.height
-        val scale = if (w > maxDim || h > maxDim) {
-            maxDim.toFloat() / maxOf(w, h)
-        } else {
-            UxConfig.Canvas.PDF_DEFAULT_SCALE
-        }
+        val scale =
+            if (w > maxDim || h > maxDim) {
+                maxDim.toFloat() / maxOf(w, h)
+            } else {
+                UxConfig.Canvas.PDF_DEFAULT_SCALE
+            }
         val bmpW = (w * scale).toInt().coerceAtLeast(1)
         val bmpH = (h * scale).toInt().coerceAtLeast(1)
 
-        val bmp = Bitmap.createBitmap(
-            bmpW,
-            bmpH,
-            Bitmap.Config.ARGB_8888
-        )
+        val bmp =
+            Bitmap.createBitmap(
+                bmpW,
+                bmpH,
+                Bitmap.Config.ARGB_8888
+            )
         bmp.eraseColor(android.graphics.Color.WHITE)
         page.render(
             bmp,
@@ -207,13 +214,16 @@ private fun renderPage(context: Context, uri: Uri, pageIndex: Int): PageResult? 
     } finally {
         try {
             page?.close()
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         try {
             renderer?.close()
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         try {
             fd?.close()
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
     }
 }
 
@@ -241,7 +251,8 @@ private fun LoadingDots() {
     val transition =
         rememberInfiniteTransition(label = "dots")
     Row(
-        horizontalArrangement = Arrangement.spacedBy(
+        horizontalArrangement =
+        Arrangement.spacedBy(
             UxConfig.Animation.LOADING_DOT_SPACING
         )
     ) {
@@ -249,7 +260,8 @@ private fun LoadingDots() {
             val alpha by transition.animateFloat(
                 initialValue = UxConfig.Animation.LOADING_DOT_INITIAL_ALPHA,
                 targetValue = UxConfig.Animation.LOADING_DOT_TARGET_ALPHA,
-                animationSpec = infiniteRepeatable(
+                animationSpec =
+                infiniteRepeatable(
                     tween(
                         UxConfig.Animation.LOADING_DOT_DURATION_MS,
                         delayMillis = index * UxConfig.Animation.LOADING_DOT_DELAY_MS

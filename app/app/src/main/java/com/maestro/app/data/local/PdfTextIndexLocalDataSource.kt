@@ -59,10 +59,11 @@ data class PdfTextIndexWord(
 class PdfTextIndexLocalDataSource {
     private val rootDir: File
     private val appContext: Context?
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
 
     constructor(context: Context) : this(
         rootDir = File(context.filesDir, "documents"),
@@ -123,52 +124,53 @@ class PdfTextIndexLocalDataSource {
     fun search(index: PdfTextIndex?, query: String): List<PdfSearchMatch> =
         searchIndex(index, query)
 
-    private fun buildIndex(
-        documentId: String,
-        pdfFile: File,
-        displayName: String
-    ): PdfTextIndex {
+    private fun buildIndex(documentId: String, pdfFile: File, displayName: String): PdfTextIndex {
         appContext?.let { PDFBoxResourceLoader.init(it) }
-        val pages = PDDocument.load(pdfFile).use { document ->
-            (0 until document.numberOfPages).map { pageIndex ->
-                val page = document.getPage(pageIndex)
-                val box = page.cropBox ?: page.mediaBox
-                val fallbackWidth = box.width.coerceAtLeast(1f)
-                val fallbackHeight = box.height.coerceAtLeast(1f)
-                val stripper = PositionCollectingStripper()
-                val pageNumber = pageIndex + 1
-                stripper.setSortByPosition(true)
-                stripper.setStartPage(pageNumber)
-                stripper.setEndPage(pageNumber)
-                stripper.getText(document)
-                val width = stripper.positions.firstOrNull()
-                    ?.getPageWidth()
-                    ?.coerceAtLeast(1f)
-                    ?: fallbackWidth
-                val height = stripper.positions.firstOrNull()
-                    ?.getPageHeight()
-                    ?.coerceAtLeast(1f)
-                    ?: fallbackHeight
-                PdfTextIndexPage(
-                    pageIndex = pageIndex,
-                    width = width,
-                    height = height,
-                    words = positionsToWords(
-                        stripper.positions,
-                        width,
-                        height
+        val pages =
+            PDDocument.load(pdfFile).use { document ->
+                (0 until document.numberOfPages).map { pageIndex ->
+                    val page = document.getPage(pageIndex)
+                    val box = page.cropBox ?: page.mediaBox
+                    val fallbackWidth = box.width.coerceAtLeast(1f)
+                    val fallbackHeight = box.height.coerceAtLeast(1f)
+                    val stripper = PositionCollectingStripper()
+                    val pageNumber = pageIndex + 1
+                    stripper.setSortByPosition(true)
+                    stripper.setStartPage(pageNumber)
+                    stripper.setEndPage(pageNumber)
+                    stripper.getText(document)
+                    val width =
+                        stripper.positions.firstOrNull()
+                            ?.getPageWidth()
+                            ?.coerceAtLeast(1f)
+                            ?: fallbackWidth
+                    val height =
+                        stripper.positions.firstOrNull()
+                            ?.getPageHeight()
+                            ?.coerceAtLeast(1f)
+                            ?: fallbackHeight
+                    PdfTextIndexPage(
+                        pageIndex = pageIndex,
+                        width = width,
+                        height = height,
+                        words =
+                        positionsToWords(
+                            stripper.positions,
+                            width,
+                            height
+                        )
                     )
-                )
+                }
             }
-        }
-        val index = PdfTextIndex(
-            schemaVersion = CURRENT_INDEX_VERSION,
-            documentId = documentId,
-            sourceName = displayName,
-            sourceLength = pdfFile.length(),
-            sourceModifiedAt = pdfFile.lastModified(),
-            pages = pages
-        )
+        val index =
+            PdfTextIndex(
+                schemaVersion = CURRENT_INDEX_VERSION,
+                documentId = documentId,
+                sourceName = displayName,
+                sourceLength = pdfFile.length(),
+                sourceModifiedAt = pdfFile.lastModified(),
+                pages = pages
+            )
         saveIndex(index)
         return index
     }
@@ -179,8 +181,10 @@ class PdfTextIndexLocalDataSource {
         file.writeText(json.encodeToString(index))
     }
 
-    private fun indexFile(documentId: String): File =
-        File(rootDir, "$documentId/pdf_text_index.json")
+    private fun indexFile(documentId: String): File = File(
+        rootDir,
+        "$documentId/pdf_text_index.json"
+    )
 
     private class PositionCollectingStripper : PDFTextStripper() {
         val positions = mutableListOf<TextPosition>()
@@ -196,19 +200,18 @@ class PdfTextIndexLocalDataSource {
         private const val TEXT_TOP_ASCENT_RATIO = 0.78f
         private const val TEXT_BOTTOM_DESCENT_RATIO = 0.22f
 
-        fun searchIndex(
-            index: PdfTextIndex?,
-            query: String
-        ): List<PdfSearchMatch> {
+        fun searchIndex(index: PdfTextIndex?, query: String): List<PdfSearchMatch> {
             val normalizedQuery = query.trim()
             if (index == null || normalizedQuery.isBlank()) {
                 return emptyList()
             }
-            val tokens = normalizedQuery.split(Regex("\\s+"))
-                .filter { it.isNotBlank() }
+            val tokens =
+                normalizedQuery.split(Regex("\\s+"))
+                    .filter { it.isNotBlank() }
             if (tokens.isEmpty()) return emptyList()
-            val normalizedTokens = tokens.map(::normalize)
-                .filter { it.isNotBlank() }
+            val normalizedTokens =
+                tokens.map(::normalize)
+                    .filter { it.isNotBlank() }
             if (normalizedTokens.isEmpty()) return emptyList()
             return index.pages.flatMap { page ->
                 if (normalizedTokens.size == 1) {
@@ -219,10 +222,7 @@ class PdfTextIndexLocalDataSource {
             }
         }
 
-        private fun searchSingleToken(
-            page: PdfTextIndexPage,
-            token: String
-        ): List<PdfSearchMatch> {
+        private fun searchSingleToken(page: PdfTextIndexPage, token: String): List<PdfSearchMatch> {
             return page.words.flatMap { word ->
                 word.matchesToken(page, token)
             }
@@ -235,13 +235,15 @@ class PdfTextIndexLocalDataSource {
             if (page.words.size < tokens.size) return emptyList()
             return buildList {
                 for (start in 0..page.words.size - tokens.size) {
-                    val window = page.words.subList(
-                        start,
-                        start + tokens.size
-                    )
-                    val text = window.joinToString(" ") {
-                        normalize(it.text)
-                    }
+                    val window =
+                        page.words.subList(
+                            start,
+                            start + tokens.size
+                        )
+                    val text =
+                        window.joinToString(" ") {
+                            normalize(it.text)
+                        }
                     if (text == tokens.joinToString(" ")) {
                         add(window.toMatch(page))
                     }
@@ -249,9 +251,7 @@ class PdfTextIndexLocalDataSource {
             }
         }
 
-        private fun List<PdfTextIndexWord>.toMatch(
-            page: PdfTextIndexPage
-        ): PdfSearchMatch {
+        private fun List<PdfTextIndexWord>.toMatch(page: PdfTextIndexPage): PdfSearchMatch {
             val left = minOf { it.left }
             val top = minOf { it.top }
             val right = maxOf { it.right }
@@ -271,17 +271,16 @@ class PdfTextIndexLocalDataSource {
         private fun PdfTextIndexWord.toMatch(
             page: PdfTextIndexPage,
             matchedText: String
-        ): PdfSearchMatch =
-            PdfSearchMatch(
-                pageIndex = page.pageIndex,
-                left = left,
-                top = top,
-                right = right,
-                bottom = bottom,
-                pageWidth = page.width,
-                pageHeight = page.height,
-                matchedText = matchedText
-            )
+        ): PdfSearchMatch = PdfSearchMatch(
+            pageIndex = page.pageIndex,
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            pageWidth = page.width,
+            pageHeight = page.height,
+            matchedText = matchedText
+        )
 
         private fun PdfTextIndexWord.matchesToken(
             page: PdfTextIndexPage,
@@ -295,18 +294,21 @@ class PdfTextIndexLocalDataSource {
             var start = normalized.value.indexOf(token)
             while (start >= 0) {
                 val end = start + token.length
-                val rawStart = normalized.rawIndices
-                    .getOrNull(start)
-                    ?: break
-                val rawEndExclusive = normalized.rawIndices
-                    .getOrNull(end - 1)
-                    ?.plus(1)
-                    ?: break
-                matches += toSegmentMatch(
-                    page = page,
-                    rawStart = rawStart,
-                    rawEndExclusive = rawEndExclusive
-                )
+                val rawStart =
+                    normalized.rawIndices
+                        .getOrNull(start)
+                        ?: break
+                val rawEndExclusive =
+                    normalized.rawIndices
+                        .getOrNull(end - 1)
+                        ?.plus(1)
+                        ?: break
+                matches +=
+                    toSegmentMatch(
+                        page = page,
+                        rawStart = rawStart,
+                        rawEndExclusive = rawEndExclusive
+                    )
                 start = normalized.value.indexOf(token, end)
             }
             return matches
@@ -318,29 +320,34 @@ class PdfTextIndexLocalDataSource {
             rawEndExclusive: Int
         ): PdfSearchMatch {
             val safeLength = text.length.coerceAtLeast(1)
-            val leftRatio = rawStart
-                .coerceIn(0, safeLength)
-                .toFloat() / safeLength
-            val rightRatio = rawEndExclusive
-                .coerceIn(rawStart + 1, safeLength)
-                .toFloat() / safeLength
+            val leftRatio =
+                rawStart
+                    .coerceIn(0, safeLength)
+                    .toFloat() / safeLength
+            val rightRatio =
+                rawEndExclusive
+                    .coerceIn(rawStart + 1, safeLength)
+                    .toFloat() / safeLength
             val width = (right - left).coerceAtLeast(1f)
             val segmentLeft = left + width * leftRatio
             val segmentRight = left + width * rightRatio
-            val minWidth = (bottom - top)
-                .coerceAtLeast(1f) * 0.45f
+            val minWidth =
+                (bottom - top)
+                    .coerceAtLeast(1f) * 0.45f
             return PdfSearchMatch(
                 pageIndex = page.pageIndex,
                 left = segmentLeft.coerceIn(left, right),
                 top = top,
-                right = max(
+                right =
+                max(
                     segmentRight.coerceIn(left, right),
                     segmentLeft + minWidth
                 ).coerceAtMost(right),
                 bottom = bottom,
                 pageWidth = page.width,
                 pageHeight = page.height,
-                matchedText = text.substring(
+                matchedText =
+                text.substring(
                     rawStart.coerceIn(0, text.length),
                     rawEndExclusive.coerceIn(0, text.length)
                 )
@@ -352,11 +359,12 @@ class PdfTextIndexLocalDataSource {
             pageWidth: Float,
             pageHeight: Float
         ): List<PdfTextIndexWord> {
-            val sorted = positions.sortedWith(
-                compareBy<TextPosition> {
-                    it.getYDirAdj()
-                }.thenBy { it.getXDirAdj() }
-            )
+            val sorted =
+                positions.sortedWith(
+                    compareBy<TextPosition> {
+                        it.getYDirAdj()
+                    }.thenBy { it.getXDirAdj() }
+                )
             val words = mutableListOf<PdfTextIndexWord>()
             var current: WordBuilder? = null
             sorted.forEach { position ->
@@ -367,45 +375,55 @@ class PdfTextIndexLocalDataSource {
                     current = null
                     return@forEach
                 }
-                val left = position.getXDirAdj()
-                    .coerceIn(0f, pageWidth)
-                val right = (left + position.getWidthDirAdj())
-                    .coerceIn(left, pageWidth)
-                val height = position.getHeightDir()
-                    .coerceAtLeast(1f)
-                val top = (position.getYDirAdj() -
-                    height * TEXT_TOP_ASCENT_RATIO)
-                    .coerceIn(0f, pageHeight)
-                val bottom = min(
-                    max(
-                        position.getYDirAdj() +
-                            height * TEXT_BOTTOM_DESCENT_RATIO,
-                        top + 1f
-                    ),
-                    pageHeight
-                )
-                val spaceWidth = position.getWidthOfSpace()
-                    .takeIf { it > 0f }
-                    ?: height * 0.35f
-                val builder = current
-                val startsNewWord = builder == null ||
-                    isNewWord(
-                        builder = builder,
-                        left = left,
-                        top = top,
-                        bottom = bottom,
-                        spaceWidth = spaceWidth
+                val left =
+                    position.getXDirAdj()
+                        .coerceIn(0f, pageWidth)
+                val right =
+                    (left + position.getWidthDirAdj())
+                        .coerceIn(left, pageWidth)
+                val height =
+                    position.getHeightDir()
+                        .coerceAtLeast(1f)
+                val top =
+                    (
+                        position.getYDirAdj() -
+                            height * TEXT_TOP_ASCENT_RATIO
+                        )
+                        .coerceIn(0f, pageHeight)
+                val bottom =
+                    min(
+                        max(
+                            position.getYDirAdj() +
+                                height * TEXT_BOTTOM_DESCENT_RATIO,
+                            top + 1f
+                        ),
+                        pageHeight
                     )
+                val spaceWidth =
+                    position.getWidthOfSpace()
+                        .takeIf { it > 0f }
+                        ?: height * 0.35f
+                val builder = current
+                val startsNewWord =
+                    builder == null ||
+                        isNewWord(
+                            builder = builder,
+                            left = left,
+                            top = top,
+                            bottom = bottom,
+                            spaceWidth = spaceWidth
+                        )
                 if (startsNewWord) {
                     builder?.finish(pageWidth, pageHeight)
                         ?.let(words::add)
-                    current = WordBuilder(
-                        text = StringBuilder(unicode),
-                        left = left,
-                        top = top,
-                        right = right,
-                        bottom = bottom
-                    )
+                    current =
+                        WordBuilder(
+                            text = StringBuilder(unicode),
+                            left = left,
+                            top = top,
+                            right = right,
+                            bottom = bottom
+                        )
                 } else {
                     builder.append(
                         text = unicode,
@@ -430,23 +448,21 @@ class PdfTextIndexLocalDataSource {
             val currentHeight =
                 (builder.bottom - builder.top).coerceAtLeast(1f)
             val nextHeight = (bottom - top).coerceAtLeast(1f)
-            val lineTolerance = max(
-                currentHeight,
-                nextHeight
-            ) * 0.72f
+            val lineTolerance =
+                max(
+                    currentHeight,
+                    nextHeight
+                ) * 0.72f
             val isNewLine = abs(top - builder.top) > lineTolerance
             val gap = left - builder.right
             return isNewLine || gap > spaceWidth * WORD_GAP_MULTIPLIER
         }
 
-        private fun normalize(text: String): String =
-            text.trim()
-                .lowercase(Locale.US)
-                .filter { it.isLetterOrDigit() }
+        private fun normalize(text: String): String = text.trim()
+            .lowercase(Locale.US)
+            .filter { it.isLetterOrDigit() }
 
-        private fun normalizeWithMapping(
-            text: String
-        ): NormalizedText {
+        private fun normalizeWithMapping(text: String): NormalizedText {
             val value = StringBuilder()
             val rawIndices = mutableListOf<Int>()
             text.forEachIndexed { index, char ->
@@ -476,13 +492,7 @@ class PdfTextIndexLocalDataSource {
             var right: Float,
             var bottom: Float
         ) {
-            fun append(
-                text: String,
-                left: Float,
-                top: Float,
-                right: Float,
-                bottom: Float
-            ) {
+            fun append(text: String, left: Float, top: Float, right: Float, bottom: Float) {
                 this.text.append(text)
                 this.left = min(this.left, left)
                 this.top = min(this.top, top)
@@ -490,10 +500,7 @@ class PdfTextIndexLocalDataSource {
                 this.bottom = max(this.bottom, bottom)
             }
 
-            fun finish(
-                pageWidth: Float,
-                pageHeight: Float
-            ): PdfTextIndexWord? {
+            fun finish(pageWidth: Float, pageHeight: Float): PdfTextIndexWord? {
                 val value = text.toString().trim()
                 if (value.isBlank()) return null
                 return PdfTextIndexWord(
@@ -501,7 +508,8 @@ class PdfTextIndexLocalDataSource {
                     left = left.coerceIn(0f, pageWidth),
                     top = top.coerceIn(0f, pageHeight),
                     right = right.coerceIn(left, pageWidth),
-                    bottom = min(
+                    bottom =
+                    min(
                         max(bottom, top + 1f),
                         pageHeight
                     )

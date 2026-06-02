@@ -32,10 +32,11 @@ data class StudyEvent(
 
 class StudyEventLocalDataSource {
     private val eventFile: File
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
 
     constructor(context: Context) : this(
         File(context.filesDir, "study_events/events.json")
@@ -57,17 +58,18 @@ class StudyEventLocalDataSource {
         metadata: Map<String, String> = emptyMap(),
         timestamp: Long = System.currentTimeMillis()
     ): StudyEvent {
-        val event = StudyEvent(
-            id = UUID.randomUUID().toString(),
-            type = type,
-            timestamp = timestamp,
-            documentId = documentId,
-            pageIndex = pageIndex,
-            conceptIds = conceptIds,
-            correctness = correctness,
-            promptLength = promptLength,
-            metadata = metadata
-        )
+        val event =
+            StudyEvent(
+                id = UUID.randomUUID().toString(),
+                type = type,
+                timestamp = timestamp,
+                documentId = documentId,
+                pageIndex = pageIndex,
+                conceptIds = conceptIds,
+                correctness = correctness,
+                promptLength = promptLength,
+                metadata = metadata
+            )
         save(listEvents() + event)
         return event
     }

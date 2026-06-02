@@ -34,8 +34,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.maestro.app.data.local.ModelArtifactState
-import com.maestro.app.data.local.ModelArtifactType
 import com.maestro.app.data.local.MonitoringLogCategory
 import com.maestro.app.data.local.MonitoringLogEntry
 import com.maestro.app.domain.model.ConceptKnowledge
@@ -48,32 +46,16 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ProfileScreen(
-    viewModel: ProfileViewModel,
-    onBack: () -> Unit
-) {
+fun ProfileScreen(viewModel: ProfileViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.updateAvatar(uri)
+    val imagePicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri != null) {
+                viewModel.updateAvatar(uri)
+            }
         }
-    }
-    val miktModelPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.uploadModel(ModelArtifactType.MIKT_ONNX, uri)
-        }
-    }
-    val miktContractPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.uploadModel(ModelArtifactType.MIKT_CONTRACT, uri)
-        }
-    }
     var editingName by remember {
         mutableStateOf(false)
     }
@@ -88,7 +70,8 @@ fun ProfileScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
             .background(MaestroBackground)
     ) {
@@ -106,13 +89,15 @@ fun ProfileScreen(
             return@Column
         }
         Row(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
                 .padding(20.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             LazyColumn(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .weight(0.38f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -120,7 +105,8 @@ fun ProfileScreen(
                 item {
                     ProfileHeader(
                         avatarPath = state.profile.avatarPath,
-                        displayName = state.profile.displayName
+                        displayName =
+                        state.profile.displayName
                             ?: state.username.ifBlank { "Maestro User" },
                         username = state.username,
                         editingName = editingName,
@@ -138,13 +124,7 @@ fun ProfileScreen(
                 }
                 item {
                     ModelUploadPanel(
-                        artifacts = state.modelArtifacts,
-                        onUploadMikt = {
-                            miktModelPicker.launch("*/*")
-                        },
-                        onUploadMiktContract = {
-                            miktContractPicker.launch("application/json")
-                        }
+                        ready = state.knowledgeEngineReady
                     )
                 }
                 item {
@@ -152,7 +132,8 @@ fun ProfileScreen(
                 }
             }
             LazyColumn(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .weight(0.62f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -206,12 +187,10 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileTopBar(
-    onBack: () -> Unit,
-    onRefresh: () -> Unit
-) {
+private fun ProfileTopBar(onBack: () -> Unit, onRefresh: () -> Unit) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .height(64.dp)
             .background(Slate50)
@@ -267,7 +246,8 @@ private fun ProfileHeader(
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -280,7 +260,8 @@ private fun ProfileHeader(
                 FilledIconButton(
                     onClick = onChangeAvatar,
                     modifier = Modifier.size(36.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
+                    colors =
+                    IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaestroPrimary
                     )
                 ) {
@@ -340,10 +321,11 @@ private fun ProfileHeader(
 
 @Composable
 private fun AvatarImage(avatarPath: String?, size: Int) {
-    val modifier = Modifier
-        .size(size.dp)
-        .clip(CircleShape)
-        .background(MaestroSurfaceContainer)
+    val modifier =
+        Modifier
+            .size(size.dp)
+            .clip(CircleShape)
+            .background(MaestroSurfaceContainer)
     if (avatarPath != null) {
         AsyncImage(
             model = File(avatarPath),
@@ -362,103 +344,39 @@ private fun AvatarImage(avatarPath: String?, size: Int) {
 }
 
 @Composable
-private fun ModelUploadPanel(
-    artifacts: List<ModelArtifactState>,
-    onUploadMikt: () -> Unit,
-    onUploadMiktContract: () -> Unit
-) {
+private fun ModelUploadPanel(ready: Boolean) {
     Surface(
         color = MaestroSurfaceContainerLowest,
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SectionTitle("MobileMIKT Runtime")
+            SectionTitle("MobileKT 지식 추적 엔진")
             Text(
-                "자주 바뀌는 런타임 파일만 업로드합니다. " +
-                    "concept map, QE 계약, validation/report는 " +
-                    "앱 내장 파일로 관리합니다.",
+                if (ready) {
+                    "MIKT + TAP 모델이 앱에 내장되어 있습니다. 퀴즈 응답마다 " +
+                        "지식 상태가 모델 출력(TAP readout)만으로 갱신됩니다."
+                } else {
+                    "추적 불가 — MIKT + TAP ONNX 모델이 앱에 내장되어 있지 않습니다. " +
+                        "mobile_mikt_update.onnx 와 mobile_tap_readout.onnx 를 " +
+                        "assets/model_artifacts 에 포함해 빌드해야 합니다."
+                },
                 fontSize = 12.sp,
                 color = Slate500,
                 lineHeight = 17.sp
             )
-            ModelArtifactRow(
-                state = artifacts.firstOrNull {
-                    it.type == ModelArtifactType.MIKT_ONNX
-                },
-                fallbackLabel = "mobile_mikt_predict.onnx",
-                note = "QE embedding과 풀이 history를 받아 pred_correct / " +
-                    "last_prediction을 내는 Android ONNX Runtime용 MIKT 모델입니다.",
-                uploadLabel = "ONNX 업로드",
-                onUpload = onUploadMikt
-            )
-            ModelArtifactRow(
-                state = artifacts.firstOrNull {
-                    it.type == ModelArtifactType.MIKT_CONTRACT
-                },
-                fallbackLabel = "mikt_predict_contract.json",
-                note = "ONNX input/output 이름, dtype, shape, sequence length, " +
-                    "mask, last_prediction 위치를 정의합니다.",
-                uploadLabel = "JSON 업로드",
-                onUpload = onUploadMiktContract
+            Text(
+                if (ready) "● 모델 준비됨" else "○ 모델 필요",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = if (ready) MaestroPrimary else Slate500
             )
         }
-    }
-}
-
-@Composable
-private fun ModelArtifactRow(
-    state: ModelArtifactState?,
-    fallbackLabel: String,
-    note: String,
-    uploadLabel: String,
-    onUpload: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaestroSurfaceContainerLow,
-                RoundedCornerShape(8.dp)
-            )
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    state?.label ?: fallbackLabel,
-                    fontWeight = FontWeight.Bold,
-                    color = MaestroOnSurface
-                )
-                Text(
-                    if (state?.isReady == true) {
-                        "${formatBytes(state.fileSizeBytes)} · ${formatDate(state.updatedAt)}"
-                    } else {
-                        "Not uploaded"
-                    },
-                    fontSize = 12.sp,
-                    color = if (state?.isReady == true) {
-                        MaestroPrimary
-                    } else {
-                        Slate500
-                    }
-                )
-            }
-            Button(onClick = onUpload) {
-                Text(uploadLabel)
-            }
-        }
-        Text(
-            note,
-            fontSize = 11.sp,
-            color = Slate500,
-            lineHeight = 16.sp
-        )
     }
 }
 
@@ -469,7 +387,8 @@ private fun SummaryPanel(summary: ProfileSummary) {
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -520,7 +439,8 @@ private fun KnowledgeOverview(
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -543,7 +463,8 @@ private fun KnowledgeOverview(
             }
             LinearProgressIndicator(
                 progress = { summary.averageMastery },
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(8.dp)),
@@ -573,7 +494,8 @@ private fun ConceptList(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .background(
                 MaestroSurfaceContainerLow,
                 RoundedCornerShape(8.dp)
@@ -608,10 +530,7 @@ private fun ConceptList(
 }
 
 @Composable
-private fun MonitoringConsole(
-    logs: List<MonitoringLogEntry>,
-    onDeleteLogs: (Set<String>) -> Unit
-) {
+private fun MonitoringConsole(logs: List<MonitoringLogEntry>, onDeleteLogs: (Set<String>) -> Unit) {
     var selectedCategory by remember {
         mutableStateOf(MonitoringLogCategory.KT_RUNTIME)
     }
@@ -624,10 +543,11 @@ private fun MonitoringConsole(
     var showDeleteConfirm by remember {
         mutableStateOf(false)
     }
-    val categoryLogs = logs
-        .filter { it.category == selectedCategory }
-        .sortedByDescending { it.timestamp }
-        .take(12)
+    val categoryLogs =
+        logs
+            .filter { it.category == selectedCategory }
+            .sortedByDescending { it.timestamp }
+            .take(12)
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -664,7 +584,8 @@ private fun MonitoringConsole(
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -678,7 +599,7 @@ private fun MonitoringConsole(
                         color = MaestroOnSurface
                     )
                     Text(
-                        "KT runtime, learning behavior, evaluation, device, reliability logs",
+                        "KT runtime, learning behavior, evaluation, device logs",
                         fontSize = 12.sp,
                         color = Slate500
                     )
@@ -699,7 +620,8 @@ private fun MonitoringConsole(
                             }
                         },
                         enabled = selectedLogIds.isNotEmpty(),
-                        colors = ButtonDefaults.buttonColors(
+                        colors =
+                        ButtonDefaults.buttonColors(
                             containerColor =
                             MaterialTheme.colorScheme.error,
                             contentColor =
@@ -732,7 +654,8 @@ private fun MonitoringConsole(
                     val selected = category == selectedCategory
                     Text(
                         category.label(),
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (selected) {
@@ -749,7 +672,8 @@ private fun MonitoringConsole(
                                 selectedCategory = category
                                 selectedLogIds = emptySet()
                             },
-                        color = if (selected) {
+                        color =
+                        if (selected) {
                             Color.White
                         } else {
                             Slate500
@@ -771,11 +695,12 @@ private fun MonitoringConsole(
                             deleteMode = deleteMode,
                             selected = log.id in selectedLogIds,
                             onSelectionChange = { checked ->
-                                selectedLogIds = if (checked) {
-                                    selectedLogIds + log.id
-                                } else {
-                                    selectedLogIds - log.id
-                                }
+                                selectedLogIds =
+                                    if (checked) {
+                                        selectedLogIds + log.id
+                                    } else {
+                                        selectedLogIds - log.id
+                                    }
                             }
                         )
                     }
@@ -803,7 +728,8 @@ private fun MonitoringLogRow(
     onSelectionChange: (Boolean) -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .background(
                 MaestroSurfaceContainerLow,
@@ -837,10 +763,11 @@ private fun MonitoringLogRow(
                 )
             }
         }
-        val contextLine = listOfNotNull(
-            log.documentId?.let { "doc=$it" },
-            log.conceptId?.let { "concept=$it" }
-        ).joinToString(" · ")
+        val contextLine =
+            listOfNotNull(
+                log.documentId?.let { "doc=$it" },
+                log.conceptId?.let { "concept=$it" }
+            ).joinToString(" · ")
         if (contextLine.isNotBlank()) {
             Text(
                 contextLine,
@@ -873,7 +800,8 @@ private fun DocumentKnowledgeRow(document: DocumentKnowledge) {
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -888,7 +816,9 @@ private fun DocumentKnowledgeRow(document: DocumentKnowledge) {
                         color = MaestroOnSurface
                     )
                     Text(
-                        "${document.pageCount} pages · ${document.activityCount} activities · ${formatDate(document.lastStudiedAt)}",
+                        "${document.pageCount} pages · " +
+                            "${document.activityCount} activities · " +
+                            formatDate(document.lastStudiedAt),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 12.sp,
@@ -917,9 +847,7 @@ private fun DocumentKnowledgeRow(document: DocumentKnowledge) {
 }
 
 @Composable
-private fun DocumentConceptRow(
-    concept: com.maestro.app.domain.model.DocumentConceptKnowledge
-) {
+private fun DocumentConceptRow(concept: com.maestro.app.domain.model.DocumentConceptKnowledge) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -939,7 +867,8 @@ private fun DocumentConceptRow(
         }
         LinearProgressIndicator(
             progress = { concept.mastery },
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .height(5.dp)
                 .clip(RoundedCornerShape(5.dp)),
@@ -960,18 +889,14 @@ private fun ConceptKnowledgeRow(concept: ConceptKnowledge) {
 }
 
 @Composable
-private fun KnowledgeRow(
-    title: String,
-    subtitle: String,
-    mastery: Float,
-    confidence: Float
-) {
+private fun KnowledgeRow(title: String, subtitle: String, mastery: Float, confidence: Float) {
     Surface(
         color = MaestroSurfaceContainerLowest,
         shape = RoundedCornerShape(8.dp)
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1001,7 +926,8 @@ private fun KnowledgeRow(
             }
             LinearProgressIndicator(
                 progress = { mastery },
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(6.dp)),
@@ -1062,7 +988,8 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun EmptyPanel(text: String) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .background(
                 MaestroSurfaceContainerLowest,
@@ -1078,7 +1005,8 @@ private fun EmptyPanel(text: String) {
 @Composable
 private fun MasteryBadge(mastery: Float) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .background(
                 Maestro50,
                 RoundedCornerShape(8.dp)
@@ -1094,25 +1022,13 @@ private fun MasteryBadge(mastery: Float) {
 }
 
 private fun percent(value: Float): String =
-    "${(value.coerceIn(0f, 1f) * 100).toInt()}%"
+    String.format(Locale.US, "%.1f%%", value.coerceIn(0f, 1f) * 100f)
 
-private fun MonitoringLogCategory.label(): String =
-    when (this) {
-        MonitoringLogCategory.DEVICE_RESOURCE -> "Device"
-        MonitoringLogCategory.KT_RUNTIME -> "KT Runtime"
-        MonitoringLogCategory.LEARNING_BEHAVIOR -> "Learning"
-        MonitoringLogCategory.DOMAIN_EVALUATION -> "Evaluation"
-        MonitoringLogCategory.UX_RELIABILITY -> "Reliability"
-    }
-
-private fun formatBytes(bytes: Long): String {
-    if (bytes <= 0L) return "0 B"
-    val mb = bytes / (1024f * 1024f)
-    return if (mb >= 1f) {
-        String.format(Locale.US, "%.1f MB", mb)
-    } else {
-        "${bytes / 1024L} KB"
-    }
+private fun MonitoringLogCategory.label(): String = when (this) {
+    MonitoringLogCategory.DEVICE_RESOURCE -> "Device"
+    MonitoringLogCategory.KT_RUNTIME -> "KT Runtime"
+    MonitoringLogCategory.LEARNING_BEHAVIOR -> "Learning"
+    MonitoringLogCategory.DOMAIN_EVALUATION -> "Evaluation"
 }
 
 private fun formatDate(value: Long?): String {

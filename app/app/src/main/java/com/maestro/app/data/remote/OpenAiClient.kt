@@ -27,7 +27,6 @@ class OpenAiClient(
     private val httpClient: OkHttpClient,
     private val baseUrl: String = BASE_URL
 ) {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     fun stream(
@@ -37,29 +36,31 @@ class OpenAiClient(
         images: List<ByteArray>,
         model: String = DEFAULT_MODEL
     ): Flow<String> = callbackFlow {
-        val body = buildRequestBody(
-            messages,
-            systemPrompt,
-            images,
-            model
-        )
-        val request = Request.Builder()
-            .url("$baseUrl/v1/chat/completions")
-            .post(
-                body.toString().toRequestBody(
-                    JSON_MEDIA_TYPE
+        val body =
+            buildRequestBody(
+                messages,
+                systemPrompt,
+                images,
+                model
+            )
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/chat/completions")
+                .post(
+                    body.toString().toRequestBody(
+                        JSON_MEDIA_TYPE
+                    )
                 )
-            )
-            .addHeader(
-                "Authorization",
-                "Bearer $apiKey"
-            )
-            .addHeader(
-                "Content-Type",
-                "application/json"
-            )
-            .applyOpenRouterHeaders()
-            .build()
+                .addHeader(
+                    "Authorization",
+                    "Bearer $apiKey"
+                )
+                .addHeader(
+                    "Content-Type",
+                    "application/json"
+                )
+                .applyOpenRouterHeaders()
+                .build()
         var activeCall = httpClient.newCall(request)
 
         var receivedFirstToken = false
@@ -72,7 +73,8 @@ class OpenAiClient(
                     if (!receivedFirstToken) {
                         try {
                             activeResponse?.close()
-                        } catch (_: Throwable) {}
+                        } catch (_: Throwable) {
+                        }
                         activeCall.cancel()
                     }
                 }
@@ -131,9 +133,10 @@ class OpenAiClient(
                                     .GENERATING_TOKEN
                             )
                         }
-                        val data = line
-                            .removePrefix("data: ")
-                            .trim()
+                        val data =
+                            line
+                                .removePrefix("data: ")
+                                .trim()
                         if (data == "[DONE]") break
                         if (data.isEmpty()) continue
                         val text = extractDelta(data)
@@ -171,37 +174,40 @@ class OpenAiClient(
         images: List<ByteArray>,
         model: String = DEFAULT_MODEL
     ): String = withContext(Dispatchers.IO) {
-        val body = buildRequestBody(
-            messages = messages,
-            systemPrompt = systemPrompt,
-            images = images,
-            model = model,
-            stream = false
-        )
-        val request = Request.Builder()
-            .url("$baseUrl/v1/chat/completions")
-            .post(
-                body.toString().toRequestBody(
-                    JSON_MEDIA_TYPE
+        val body =
+            buildRequestBody(
+                messages = messages,
+                systemPrompt = systemPrompt,
+                images = images,
+                model = model,
+                stream = false
+            )
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/chat/completions")
+                .post(
+                    body.toString().toRequestBody(
+                        JSON_MEDIA_TYPE
+                    )
                 )
-            )
-            .addHeader(
-                "Authorization",
-                "Bearer $apiKey"
-            )
-            .addHeader(
-                "Content-Type",
-                "application/json"
-            )
-            .applyOpenRouterHeaders()
-            .build()
+                .addHeader(
+                    "Authorization",
+                    "Bearer $apiKey"
+                )
+                .addHeader(
+                    "Content-Type",
+                    "application/json"
+                )
+                .applyOpenRouterHeaders()
+                .build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw Exception(readError(response))
             }
             val text = response.body?.string().orEmpty()
-            val root = json.parseToJsonElement(text)
-                .jsonObject
+            val root =
+                json.parseToJsonElement(text)
+                    .jsonObject
             root["choices"]?.jsonArray
                 ?.firstOrNull()
                 ?.jsonObject
@@ -218,30 +224,35 @@ class OpenAiClient(
     }
 
     suspend fun fetchModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("$baseUrl/v1/models")
-            .get()
-            .addHeader(
-                "Authorization",
-                "Bearer $apiKey"
-            )
-            .build()
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/models")
+                .get()
+                .addHeader(
+                    "Authorization",
+                    "Bearer $apiKey"
+                )
+                .build()
         val response =
             httpClient.newCall(request).execute()
         if (!response.isSuccessful) {
             return@withContext emptyList()
         }
-        val body = response.body?.string()
-            ?: return@withContext emptyList()
-        try {
-            val root = json.parseToJsonElement(body)
-                .jsonObject
-            val data = root["data"]?.jsonArray
+        val body =
+            response.body?.string()
                 ?: return@withContext emptyList()
-            val ids = data.mapNotNull { model ->
-                model.jsonObject["id"]
-                    ?.jsonPrimitive?.content
-            }
+        try {
+            val root =
+                json.parseToJsonElement(body)
+                    .jsonObject
+            val data =
+                root["data"]?.jsonArray
+                    ?: return@withContext emptyList()
+            val ids =
+                data.mapNotNull { model ->
+                    model.jsonObject["id"]
+                        ?.jsonPrimitive?.content
+                }
             if (isOpenRouter()) {
                 return@withContext (
                     listOf(OPENROUTER_DEFAULT_MODEL) +
@@ -251,27 +262,28 @@ class OpenAiClient(
                     ).distinct().sorted()
             }
             ids.filter { id ->
-                    id.startsWith("gpt-") ||
-                        id.startsWith("chatgpt-") ||
-                        id.matches(
-                            Regex("^o[0-9].*")
-                        )
-                }.sorted()
+                id.startsWith("gpt-") ||
+                    id.startsWith("chatgpt-") ||
+                    id.matches(
+                        Regex("^o[0-9].*")
+                    )
+            }.sorted()
         } catch (_: Throwable) {
             emptyList()
         }
     }
 
     suspend fun warmUp(apiKey: String) = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("$baseUrl/v1/models")
-            .get()
-            .addHeader(
-                "Authorization",
-                "Bearer $apiKey"
-            )
-            .applyOpenRouterHeaders()
-            .build()
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/models")
+                .get()
+                .addHeader(
+                    "Authorization",
+                    "Bearer $apiKey"
+                )
+                .applyOpenRouterHeaders()
+                .build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw Exception(
@@ -282,15 +294,16 @@ class OpenAiClient(
     }
 
     suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("$baseUrl/v1/models")
-            .get()
-            .addHeader(
-                "Authorization",
-                "Bearer $apiKey"
-            )
-            .applyOpenRouterHeaders()
-            .build()
+        val request =
+            Request.Builder()
+                .url("$baseUrl/v1/models")
+                .get()
+                .addHeader(
+                    "Authorization",
+                    "Bearer $apiKey"
+                )
+                .applyOpenRouterHeaders()
+                .build()
         httpClient.newCall(request)
             .execute().isSuccessful
     }
@@ -304,6 +317,9 @@ class OpenAiClient(
     ): JsonObject = buildJsonObject {
         put("model", model)
         put("stream", stream)
+        if (systemPrompt.isQuizPrompt()) {
+            put("max_tokens", QUIZ_MAX_TOKENS)
+        }
         put(
             "messages",
             buildJsonArray {
@@ -330,7 +346,8 @@ class OpenAiClient(
                     val isLastUser =
                         msg.role ==
                             ChatMessage.Role.USER &&
-                            idx == messages.indexOfLast {
+                            idx ==
+                            messages.indexOfLast {
                                 it.role ==
                                     ChatMessage.Role.USER
                             }
@@ -403,8 +420,9 @@ class OpenAiClient(
 
     private fun extractDelta(data: String): String? {
         return try {
-            val obj = json.parseToJsonElement(data)
-                .jsonObject
+            val obj =
+                json.parseToJsonElement(data)
+                    .jsonObject
             obj["choices"]?.jsonArray
                 ?.firstOrNull()?.jsonObject
                 ?.get("delta")?.jsonObject
@@ -416,25 +434,26 @@ class OpenAiClient(
     }
 
     private fun readError(response: okhttp3.Response): String {
-        val body = try {
-            response.body?.string() ?: ""
-        } catch (_: Throwable) {
-            ""
-        }
-        val detail = try {
-            json.parseToJsonElement(body)
-                .jsonObject["error"]
-                ?.jsonObject?.get("message")
-                ?.jsonPrimitive?.content
-        } catch (_: Throwable) {
-            null
-        }
+        val body =
+            try {
+                response.body?.string() ?: ""
+            } catch (_: Throwable) {
+                ""
+            }
+        val detail =
+            try {
+                json.parseToJsonElement(body)
+                    .jsonObject["error"]
+                    ?.jsonObject?.get("message")
+                    ?.jsonPrimitive?.content
+            } catch (_: Throwable) {
+                null
+            }
         return "API error ${response.code}: " +
             "${detail ?: body.take(200)}"
     }
 
-    private fun Request.Builder.applyOpenRouterHeaders():
-        Request.Builder {
+    private fun Request.Builder.applyOpenRouterHeaders(): Request.Builder {
         if (!isOpenRouter()) return this
         return addHeader(
             "HTTP-Referer",
@@ -445,8 +464,10 @@ class OpenAiClient(
         )
     }
 
-    private fun isOpenRouter(): Boolean =
-        baseUrl.contains("openrouter.ai")
+    private fun isOpenRouter(): Boolean = baseUrl.contains("openrouter.ai")
+
+    private fun String?.isQuizPrompt(): Boolean =
+        this?.contains("production quiz generation engine") == true
 
     companion object {
         const val BASE_URL =
@@ -454,8 +475,12 @@ class OpenAiClient(
         const val DEFAULT_MODEL = "gpt-4o-mini"
         const val OPENROUTER_BASE_URL =
             "https://openrouter.ai/api"
+
+        // A specific, instruction-following model rather than the "free"
+        // auto-router (which often lands on weaker, CJK-leaking models). Gemini
+        // 2.0 Flash gives reliable JSON and clean Korean/English output.
         const val OPENROUTER_DEFAULT_MODEL =
-            "openrouter/free"
+            "google/gemini-2.0-flash-exp:free"
         private val JSON_MEDIA_TYPE =
             "application/json; charset=utf-8"
                 .toMediaType()
@@ -463,5 +488,10 @@ class OpenAiClient(
         private const val RETRY_DELAY_MS = 2000L
         private const val FIRST_TOKEN_TIMEOUT_MS =
             30_000L
+
+        // Verbose Korean multi-select quizzes (question + 4 choices + 4
+        // explanations + 4 source sentences) overflow a small cap and get
+        // truncated mid-JSON, so allow ample headroom.
+        private const val QUIZ_MAX_TOKENS = 2048
     }
 }

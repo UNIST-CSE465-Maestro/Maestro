@@ -70,16 +70,18 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
             ToolButton(
                 icon = Icons.Default.Edit,
                 label = "Pen",
-                isActive = state.activeTool == DrawingTool.PEN &&
+                isActive =
+                state.activeTool == DrawingTool.PEN &&
                     !state.sPenButtonPressed,
                 activeColor = state.activeColor,
                 onClick = {
                     if (state.activeTool == DrawingTool.PEN) {
-                        openPopup = if (openPopup == PopupType.PEN) {
-                            PopupType.NONE
-                        } else {
-                            PopupType.PEN
-                        }
+                        openPopup =
+                            if (openPopup == PopupType.PEN) {
+                                PopupType.NONE
+                            } else {
+                                PopupType.PEN
+                            }
                     } else {
                         state.activeTool = DrawingTool.PEN
                         openPopup = PopupType.NONE
@@ -90,16 +92,18 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
             ToolButton(
                 icon = Icons.Outlined.AutoFixHigh,
                 label = "Eraser",
-                isActive = state.activeTool == DrawingTool.ERASER ||
+                isActive =
+                state.activeTool == DrawingTool.ERASER ||
                     state.sPenButtonPressed,
                 activeColor = Maestro600,
                 onClick = {
                     if (state.activeTool == DrawingTool.ERASER) {
-                        openPopup = if (openPopup == PopupType.ERASER) {
-                            PopupType.NONE
-                        } else {
-                            PopupType.ERASER
-                        }
+                        openPopup =
+                            if (openPopup == PopupType.ERASER) {
+                                PopupType.NONE
+                            } else {
+                                PopupType.ERASER
+                            }
                     } else {
                         state.activeTool = DrawingTool.ERASER
                         openPopup = PopupType.NONE
@@ -135,7 +139,8 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
             expanded = openPopup == PopupType.PEN,
             onDismissRequest = { openPopup = PopupType.NONE },
             offset = DpOffset(0.dp, UxConfig.Toolbar.POPUP_OFFSET_Y),
-            modifier = Modifier.background(
+            modifier =
+            Modifier.background(
                 MaestroSurfaceContainerLowest,
                 RoundedCornerShape(UxConfig.Toolbar.POPUP_CORNER)
             )
@@ -147,7 +152,8 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
             expanded = openPopup == PopupType.ERASER,
             onDismissRequest = { openPopup = PopupType.NONE },
             offset = DpOffset(0.dp, UxConfig.Toolbar.POPUP_OFFSET_Y),
-            modifier = Modifier.background(
+            modifier =
+            Modifier.background(
                 MaestroSurfaceContainerLowest,
                 RoundedCornerShape(UxConfig.Toolbar.POPUP_CORNER)
             )
@@ -160,7 +166,8 @@ fun FloatingToolbar(state: DrawingState, modifier: Modifier = Modifier) {
 @Composable
 private fun PenPopupContent(state: DrawingState) {
     Column(
-        modifier = Modifier.padding(
+        modifier =
+        Modifier.padding(
             UxConfig.Toolbar.POPUP_PADDING
         ).widthIn(min = UxConfig.Toolbar.POPUP_MIN_WIDTH)
     ) {
@@ -269,7 +276,8 @@ private fun PenPopupContent(state: DrawingState) {
 @Composable
 private fun EraserPopupContent(state: DrawingState) {
     Column(
-        modifier = Modifier.padding(
+        modifier =
+        Modifier.padding(
             UxConfig.Toolbar.POPUP_PADDING
         ).widthIn(min = UxConfig.Toolbar.POPUP_MIN_WIDTH)
     ) {
@@ -341,10 +349,11 @@ private fun EraserPopupContent(state: DrawingState) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        val desc = when (state.eraserMode) {
-            EraserMode.STROKE -> "닿은 획 전체를 지웁니다"
-            EraserMode.PARTIAL -> "닿은 부분만 잘라서 지웁니다"
-        }
+        val desc =
+            when (state.eraserMode) {
+                EraserMode.STROKE -> "닿은 획 전체를 지웁니다"
+                EraserMode.PARTIAL -> "닿은 부분만 잘라서 지웁니다"
+            }
         Text(desc, fontSize = 10.sp, color = Slate500)
     }
 }
@@ -402,10 +411,11 @@ private fun EraserModeChip(label: String, isSelected: Boolean, onClick: () -> Un
 
 @Composable
 private fun StylusIndicator(state: DrawingState) {
-    val label = buildString {
-        append("S Pen")
-        if (state.sPenButtonPressed) append(" · Btn")
-    }
+    val label =
+        buildString {
+            append("S Pen")
+            if (state.sPenButtonPressed) append(" · Btn")
+        }
     Row(
         Modifier
             .background(MaestroPrimary, RoundedCornerShape(UxConfig.Toolbar.CHIP_CORNER))

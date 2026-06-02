@@ -31,5 +31,7 @@ data class QuizGenerationRequest(
     val mastery: Float,
     val bloomLevel: Int,
     val selectionMode: String = "document",
-    val sourceLabel: String? = null
+    val sourceLabel: String? = null,
+    // Output language for the generated quiz: "ko" or "en".
+    val language: String = "ko"
 )

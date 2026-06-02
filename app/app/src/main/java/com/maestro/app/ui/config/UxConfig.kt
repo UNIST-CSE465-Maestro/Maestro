@@ -9,7 +9,6 @@ import androidx.compose.ui.unit.sp
  * Changing a value here updates it everywhere in the app.
  */
 object UxConfig {
-
     // ── Gesture thresholds ───────────────────────────
 
     object Gesture {

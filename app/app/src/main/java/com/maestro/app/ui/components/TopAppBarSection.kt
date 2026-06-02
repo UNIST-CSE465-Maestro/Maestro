@@ -59,7 +59,8 @@ fun TopAppBarSection(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .height(UxConfig.TopBar.HEIGHT)
             .background(Slate50)
@@ -120,7 +121,8 @@ fun TopAppBarSection(
                     Icons.Outlined.PushPin
                 },
                 contentDescription = "핀",
-                tint = if (isPinned) {
+                tint =
+                if (isPinned) {
                     MaestroPrimary
                 } else {
                     Slate500
@@ -139,7 +141,8 @@ fun TopAppBarSection(
                     Icons.Default.BookmarkBorder
                 },
                 contentDescription = "북마크",
-                tint = if (isBookmarked) {
+                tint =
+                if (isBookmarked) {
                     MaestroPrimary
                 } else {
                     Slate500
@@ -149,7 +152,8 @@ fun TopAppBarSection(
 
         IconButton(
             onClick = onInsertImage,
-            modifier = Modifier.size(
+            modifier =
+            Modifier.size(
                 UxConfig.TopBar.ICON_BUTTON_SIZE
             )
         ) {
@@ -187,7 +191,8 @@ fun TopAppBarSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .weight(1f)
                     .height(UxConfig.TopBar.SEARCH_FIELD_HEIGHT)
                     .clickable {
@@ -196,7 +201,8 @@ fun TopAppBarSection(
                     }
                     .background(
                         color = MaestroSurfaceContainerHigh,
-                        shape = RoundedCornerShape(
+                        shape =
+                        RoundedCornerShape(
                             UxConfig.TopBar.SEARCH_FIELD_CORNER
                         )
                     )
@@ -214,13 +220,15 @@ fun TopAppBarSection(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     singleLine = true,
-                    textStyle = TextStyle(
+                    textStyle =
+                    TextStyle(
                         fontSize = 14.sp,
                         color = MaestroOnSurface,
                         lineHeight = 18.sp
                     ),
                     cursorBrush = SolidColor(MaestroPrimary),
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .focusRequester(searchFocusRequester),
@@ -234,7 +242,8 @@ fun TopAppBarSection(
                                     "검색",
                                     fontSize = 14.sp,
                                     lineHeight = 18.sp,
-                                    color = MaestroOnSurfaceVariant.copy(
+                                    color =
+                                    MaestroOnSurfaceVariant.copy(
                                         alpha =
                                         UxConfig.TopBar.SEARCH_PLACEHOLDER_ALPHA
                                     )
@@ -268,20 +277,23 @@ fun TopAppBarSection(
             )
             Spacer(Modifier.width(2.dp))
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .width(38.dp)
                     .height(32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (canNavigateSearch) {
+                    text =
+                    if (canNavigateSearch) {
                         "${activeSearchResultIndex + 1}/$searchResultCount"
                     } else {
                         "0/0"
                     },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (canNavigateSearch) {
+                    color =
+                    if (canNavigateSearch) {
                         MaestroOnSurfaceVariant
                     } else {
                         MaestroOutline
@@ -300,24 +312,32 @@ fun TopAppBarSection(
         Button(
             onClick = onQuiz,
             shape = RoundedCornerShape(UxConfig.TopBar.QUIZ_BUTTON_CORNER),
-            colors = ButtonDefaults.buttonColors(
+            colors =
+            ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent
             ),
             contentPadding = PaddingValues(),
-            elevation = ButtonDefaults.buttonElevation(
+            elevation =
+            ButtonDefaults.buttonElevation(
                 defaultElevation = UxConfig.TopBar.QUIZ_BUTTON_ELEVATION
             )
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
+                        brush =
+                        Brush.linearGradient(
+                            colors =
+                            listOf(
                                 MaestroPrimary,
                                 MaestroPrimaryContainer
                             ),
                             start = Offset.Zero,
-                            end = Offset(UxConfig.TopBar.GRADIENT_END, UxConfig.TopBar.GRADIENT_END)
+                            end = Offset(
+                                UxConfig.TopBar.GRADIENT_END,
+                                UxConfig.TopBar.GRADIENT_END
+                            )
                         ),
                         shape = RoundedCornerShape(UxConfig.TopBar.QUIZ_BUTTON_CORNER)
                     )
@@ -363,13 +383,16 @@ private fun SearchMoveButton(
         enabled = enabled,
         onClick = onClick,
         modifier = Modifier.size(32.dp),
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = if (enabled) {
+        colors =
+        IconButtonDefaults.iconButtonColors(
+            containerColor =
+            if (enabled) {
                 MaestroSurfaceContainerLowest
             } else {
                 MaestroSurfaceContainerHigh
             },
-            contentColor = if (enabled) {
+            contentColor =
+            if (enabled) {
                 MaestroPrimary
             } else {
                 MaestroOutline
@@ -379,12 +402,14 @@ private fun SearchMoveButton(
         )
     ) {
         Icon(
-            imageVector = if (direction == SearchMoveDirection.Previous) {
+            imageVector =
+            if (direction == SearchMoveDirection.Previous) {
                 Icons.AutoMirrored.Filled.KeyboardArrowLeft
             } else {
                 Icons.AutoMirrored.Filled.KeyboardArrowRight
             },
-            contentDescription = if (direction == SearchMoveDirection.Previous) {
+            contentDescription =
+            if (direction == SearchMoveDirection.Previous) {
                 "이전 검색 결과"
             } else {
                 "다음 검색 결과"

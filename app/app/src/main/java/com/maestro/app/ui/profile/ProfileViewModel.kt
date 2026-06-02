@@ -14,6 +14,7 @@ import com.maestro.app.data.local.ProfileLocalDataSource
 import com.maestro.app.domain.model.KnowledgeDashboard
 import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
+import com.maestro.app.domain.service.KnowledgeTracingEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,11 +28,10 @@ data class ProfileUiState(
     val dashboard: KnowledgeDashboard = KnowledgeDashboard(),
     val modelArtifacts: List<ModelArtifactState> = emptyList(),
     val monitoringLogs: List<MonitoringLogEntry> = emptyList(),
+    val knowledgeEngineReady: Boolean = false,
     val errorMessage: String? = null
 ) {
-    fun logsFor(
-        category: MonitoringLogCategory
-    ): List<MonitoringLogEntry> =
+    fun logsFor(category: MonitoringLogCategory): List<MonitoringLogEntry> =
         monitoringLogs.filter { it.category == category }
 }
 
@@ -40,7 +40,8 @@ class ProfileViewModel(
     private val settingsRepository: SettingsRepository,
     private val knowledgeRepository: KnowledgeRepository,
     private val modelArtifacts: ModelArtifactLocalDataSource,
-    private val monitoringLogs: MonitoringLogLocalDataSource
+    private val monitoringLogs: MonitoringLogLocalDataSource,
+    private val knowledgeEngine: KnowledgeTracingEngine
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> =
@@ -50,23 +51,26 @@ class ProfileViewModel(
         refresh()
         viewModelScope.launch {
             profileDataSource.profile.collect { profile ->
-                _uiState.value = _uiState.value.copy(
-                    profile = profile
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        profile = profile
+                    )
             }
         }
         viewModelScope.launch {
             modelArtifacts.states.collect { artifacts ->
-                _uiState.value = _uiState.value.copy(
-                    modelArtifacts = artifacts
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        modelArtifacts = artifacts
+                    )
             }
         }
         viewModelScope.launch {
             monitoringLogs.logs.collect { logs ->
-                _uiState.value = _uiState.value.copy(
-                    monitoringLogs = logs
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        monitoringLogs = logs
+                    )
             }
         }
     }
@@ -74,29 +78,34 @@ class ProfileViewModel(
     fun refresh(showLoading: Boolean = true) {
         viewModelScope.launch {
             if (showLoading) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = true,
-                    errorMessage = null
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        isLoading = true,
+                        errorMessage = null
+                    )
             }
             try {
-                val username = settingsRepository
-                    .getUsername()
-                    .firstOrNull()
-                    .orEmpty()
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    username = username,
-                    profile = profileDataSource.getProfile(),
-                    dashboard = knowledgeRepository.loadDashboard(),
-                    modelArtifacts = modelArtifacts.states.value,
-                    monitoringLogs = monitoringLogs.listLogs()
-                )
+                val username =
+                    settingsRepository
+                        .getUsername()
+                        .firstOrNull()
+                        .orEmpty()
+                _uiState.value =
+                    _uiState.value.copy(
+                        isLoading = false,
+                        username = username,
+                        profile = profileDataSource.getProfile(),
+                        dashboard = knowledgeRepository.loadDashboard(),
+                        modelArtifacts = modelArtifacts.states.value,
+                        monitoringLogs = monitoringLogs.listLogs(),
+                        knowledgeEngineReady = knowledgeEngine.isReady()
+                    )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = e.message
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = e.message
+                    )
             }
         }
     }
@@ -118,9 +127,10 @@ class ProfileViewModel(
             try {
                 val state = modelArtifacts.saveModel(type, uri)
                 monitoringLogs.append(
-                    category = MonitoringLogCategory.UX_RELIABILITY,
+                    category = MonitoringLogCategory.KT_RUNTIME,
                     eventType = "model_uploaded",
-                    metadata = mapOf(
+                    metadata =
+                    mapOf(
                         "model_type" to type.name,
                         "file_size_bytes" to state.fileSizeBytes.toString(),
                         "file_path" to state.filePath.orEmpty()
@@ -129,16 +139,18 @@ class ProfileViewModel(
                 refresh()
             } catch (e: Exception) {
                 monitoringLogs.append(
-                    category = MonitoringLogCategory.UX_RELIABILITY,
+                    category = MonitoringLogCategory.KT_RUNTIME,
                     eventType = "model_upload_failed",
-                    metadata = mapOf(
+                    metadata =
+                    mapOf(
                         "model_type" to type.name,
                         "error" to (e.message ?: e::class.java.name)
                     )
                 )
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = e.message
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        errorMessage = e.message
+                    )
             }
         }
     }

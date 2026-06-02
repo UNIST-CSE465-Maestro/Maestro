@@ -40,10 +40,11 @@ data class QuizResponseRecord(
 
 class QuizResponseLocalDataSource {
     private val file: File
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
 
     constructor(context: Context) : this(
         File(context.filesDir, "quiz_response/responses.json")

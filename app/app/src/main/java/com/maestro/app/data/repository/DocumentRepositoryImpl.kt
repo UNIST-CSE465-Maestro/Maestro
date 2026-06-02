@@ -22,11 +22,11 @@ class DocumentRepositoryImpl(
     private val context: Context,
     private val pdfTextIndex: PdfTextIndexLocalDataSource
 ) : DocumentRepository {
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
     private val pdfDir = File(context.filesDir, "pdfs").also { it.mkdirs() }
     private val metaFile = File(context.filesDir, "pdf_meta.json")
     private val foldersFile = File(context.filesDir, "folders_meta.json")
@@ -59,12 +59,13 @@ class DocumentRepositoryImpl(
                 pdfFile = destFile,
                 displayName = name
             )
-            val doc = PdfDocument(
-                id = id,
-                uriString = Uri.fromFile(destFile).toString(),
-                displayName = name,
-                pageCount = pageCount
-            )
+            val doc =
+                PdfDocument(
+                    id = id,
+                    uriString = Uri.fromFile(destFile).toString(),
+                    displayName = name,
+                    pageCount = pageCount
+                )
 
             val all = loadDocuments().toMutableList()
             all += doc
@@ -83,25 +84,28 @@ class DocumentRepositoryImpl(
 
     override suspend fun renameDocument(documentId: String, newName: String) =
         withContext(Dispatchers.IO) {
-            val all = loadDocuments().map {
-                if (it.id == documentId) it.copy(displayName = newName) else it
-            }
+            val all =
+                loadDocuments().map {
+                    if (it.id == documentId) it.copy(displayName = newName) else it
+                }
             saveAllDocs(all)
         }
 
     override suspend fun moveDocument(documentId: String, targetFolderId: String?) =
         withContext(Dispatchers.IO) {
-            val all = loadDocuments().map {
-                if (it.id == documentId) it.copy(folderId = targetFolderId) else it
-            }
+            val all =
+                loadDocuments().map {
+                    if (it.id == documentId) it.copy(folderId = targetFolderId) else it
+                }
             saveAllDocs(all)
         }
 
     private fun saveAllDocs(docs: List<PdfDocument>) {
-        val dtos = docs.map { doc ->
-            val path = Uri.parse(doc.uriString).path ?: ""
-            DocumentDto.fromDomain(doc, path)
-        }
+        val dtos =
+            docs.map { doc ->
+                val path = Uri.parse(doc.uriString).path ?: ""
+                DocumentDto.fromDomain(doc, path)
+            }
         metaFile.writeText(json.encodeToString(dtos))
     }
 
@@ -118,11 +122,12 @@ class DocumentRepositoryImpl(
 
     override suspend fun createFolder(name: String, parentId: String?): Folder =
         withContext(Dispatchers.IO) {
-            val folder = Folder(
-                id = UUID.randomUUID().toString(),
-                name = name,
-                parentId = parentId
-            )
+            val folder =
+                Folder(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    parentId = parentId
+                )
             val all = loadFolders().toMutableList()
             all += folder
             saveFolders(all)
@@ -131,26 +136,29 @@ class DocumentRepositoryImpl(
 
     override suspend fun renameFolder(folderId: String, newName: String) =
         withContext(Dispatchers.IO) {
-            val all = loadFolders().map {
-                if (it.id == folderId) it.copy(name = newName) else it
-            }
+            val all =
+                loadFolders().map {
+                    if (it.id == folderId) it.copy(name = newName) else it
+                }
             saveFolders(all)
         }
 
     override suspend fun moveFolder(folderId: String, newParentId: String?) =
         withContext(Dispatchers.IO) {
-            val all = loadFolders().map {
-                if (it.id == folderId) it.copy(parentId = newParentId) else it
-            }
+            val all =
+                loadFolders().map {
+                    if (it.id == folderId) it.copy(parentId = newParentId) else it
+                }
             saveFolders(all)
         }
 
     override suspend fun deleteFolder(folderId: String) = withContext(Dispatchers.IO) {
         saveFolders(loadFolders().filter { it.id != folderId })
         // Move orphaned documents to root
-        val docs = loadDocuments().map {
-            if (it.folderId == folderId) it.copy(folderId = null) else it
-        }
+        val docs =
+            loadDocuments().map {
+                if (it.folderId == folderId) it.copy(folderId = null) else it
+            }
         saveAllDocs(docs)
     }
 
@@ -160,19 +168,22 @@ class DocumentRepositoryImpl(
     }
 
     override suspend fun updateDocument(doc: PdfDocument) = withContext(Dispatchers.IO) {
-        val all = loadDocuments().map {
-            if (it.id == doc.id) doc else it
-        }
+        val all =
+            loadDocuments().map {
+                if (it.id == doc.id) doc else it
+            }
         saveAllDocs(all)
     }
 
     override suspend fun duplicateDocument(documentId: String): PdfDocument? =
         withContext(Dispatchers.IO) {
             val all = loadDocuments()
-            val doc = all.find { it.id == documentId }
-                ?: return@withContext null
-            val srcPath = Uri.parse(doc.uriString).path
-                ?: return@withContext null
+            val doc =
+                all.find { it.id == documentId }
+                    ?: return@withContext null
+            val srcPath =
+                Uri.parse(doc.uriString).path
+                    ?: return@withContext null
             val srcFile = File(srcPath)
             if (!srcFile.exists()) return@withContext null
 
@@ -180,16 +191,19 @@ class DocumentRepositoryImpl(
             val destFile = File(pdfDir, "$newId.pdf")
             srcFile.copyTo(destFile)
 
-            val copyName = doc.displayName
-                .removeSuffix(".pdf") + " 사본.pdf"
-            val copy = PdfDocument(
-                id = newId,
-                uriString = Uri.fromFile(destFile)
-                    .toString(),
-                displayName = copyName,
-                pageCount = doc.pageCount,
-                folderId = doc.folderId
-            )
+            val copyName =
+                doc.displayName
+                    .removeSuffix(".pdf") + " 사본.pdf"
+            val copy =
+                PdfDocument(
+                    id = newId,
+                    uriString =
+                    Uri.fromFile(destFile)
+                        .toString(),
+                    displayName = copyName,
+                    pageCount = doc.pageCount,
+                    folderId = doc.folderId
+                )
             val updated = all.toMutableList()
             updated += copy
             saveAllDocs(updated)

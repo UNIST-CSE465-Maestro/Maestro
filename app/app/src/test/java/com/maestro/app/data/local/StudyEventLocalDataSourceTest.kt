@@ -39,9 +39,8 @@ class StudyEventLocalDataSourceTest {
         assertTrue(dataSource.listEvents().isEmpty())
     }
 
-    private fun tempFile(): File =
-        File(
-            System.getProperty("java.io.tmpdir"),
-            "maestro-study-events-${System.nanoTime()}.json"
-        )
+    private fun tempFile(): File = File(
+        System.getProperty("java.io.tmpdir"),
+        "maestro-study-events-${System.nanoTime()}.json"
+    )
 }

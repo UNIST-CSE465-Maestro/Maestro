@@ -5,11 +5,15 @@ import android.net.Uri
 import com.maestro.app.data.local.ExtractionProgressStore
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.PdfTextIndexLocalDataSource
+import com.maestro.app.data.local.QuestionRepresentationLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.remote.MaterialAnalyzerClient
+import com.maestro.app.data.remote.QuestionEncoderClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
+import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
+import com.maestro.app.domain.service.KnowledgeTracingEngine
 import com.maestro.app.fake.FakeDocumentRepository
 import com.maestro.app.util.MainCoroutineRule
 import com.maestro.app.util.TestFixtures
@@ -27,7 +31,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
-
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
@@ -40,6 +43,12 @@ class ViewerViewModelTest {
         mockk(relaxed = true)
     private val settingsRepo: SettingsRepository =
         mockk(relaxed = true)
+    private val knowledgeRepository: KnowledgeRepository =
+        mockk(relaxed = true)
+    private val questionEncoderClient: QuestionEncoderClient =
+        mockk(relaxed = true)
+    private val knowledgeEngine: KnowledgeTracingEngine =
+        mockk(relaxed = true)
     private val appContext: Context = mockk(relaxed = true)
     private val extractionProgressStore =
         ExtractionProgressStore()
@@ -47,40 +56,54 @@ class ViewerViewModelTest {
     private lateinit var quizResponses: QuizResponseLocalDataSource
     private lateinit var monitoringLogs: MonitoringLogLocalDataSource
     private lateinit var pdfTextIndex: PdfTextIndexLocalDataSource
+    private lateinit var questionRepresentations:
+        QuestionRepresentationLocalDataSource
 
     @Before
     fun setup() {
         docRepo = FakeDocumentRepository()
         io.mockk.every {
             appContext.filesDir
-        } returns java.io.File(
-            System.getProperty("java.io.tmpdir"),
-            "maestro-test"
-        )
-        studyEvents = StudyEventLocalDataSource(
+        } returns
             java.io.File(
                 System.getProperty("java.io.tmpdir"),
-                "maestro-test-events-${System.nanoTime()}.json"
+                "maestro-test"
             )
-        )
-        quizResponses = QuizResponseLocalDataSource(
-            java.io.File(
-                System.getProperty("java.io.tmpdir"),
-                "maestro-test-quiz-${System.nanoTime()}.json"
+        studyEvents =
+            StudyEventLocalDataSource(
+                java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "maestro-test-events-${System.nanoTime()}.json"
+                )
             )
-        )
-        monitoringLogs = MonitoringLogLocalDataSource(
-            java.io.File(
-                System.getProperty("java.io.tmpdir"),
-                "maestro-test-monitoring-${System.nanoTime()}.json"
+        quizResponses =
+            QuizResponseLocalDataSource(
+                java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "maestro-test-quiz-${System.nanoTime()}.json"
+                )
             )
-        )
-        pdfTextIndex = PdfTextIndexLocalDataSource(
-            java.io.File(
-                System.getProperty("java.io.tmpdir"),
-                "maestro-test-text-index-${System.nanoTime()}"
+        monitoringLogs =
+            MonitoringLogLocalDataSource(
+                java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "maestro-test-monitoring-${System.nanoTime()}.json"
+                )
             )
-        )
+        pdfTextIndex =
+            PdfTextIndexLocalDataSource(
+                java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "maestro-test-text-index-${System.nanoTime()}"
+                )
+            )
+        questionRepresentations =
+            QuestionRepresentationLocalDataSource(
+                java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "maestro-test-qe-${System.nanoTime()}.json"
+                )
+            )
     }
 
     @After
@@ -96,8 +119,12 @@ class ViewerViewModelTest {
             analyzerClient = analyzerClient,
             settingsRepository = settingsRepo,
             documentRepository = docRepo,
+            knowledgeRepository = knowledgeRepository,
             studyEvents = studyEvents,
             quizResponses = quizResponses,
+            questionEncoderClient = questionEncoderClient,
+            questionRepresentations = questionRepresentations,
+            knowledgeEngine = knowledgeEngine,
             monitoringLogs = monitoringLogs,
             pdfTextIndex = pdfTextIndex,
             extractionProgressStore = extractionProgressStore,
@@ -110,10 +137,11 @@ class ViewerViewModelTest {
 
     @Test
     fun `toggleBookmark adds page to bookmarks`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            pageCount = 5
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                pageCount = 5
+            )
         docRepo.docs += doc
 
         createViewModel()
@@ -130,11 +158,12 @@ class ViewerViewModelTest {
 
     @Test
     fun `toggleBookmark removes existing bookmark`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            pageCount = 5,
-            bookmarkedPages = setOf(1, 3)
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                pageCount = 5,
+                bookmarkedPages = setOf(1, 3)
+            )
         docRepo.docs += doc
 
         createViewModel()
@@ -157,11 +186,12 @@ class ViewerViewModelTest {
 
     @Test
     fun `bookmarkedPages loads from document`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            pageCount = 5,
-            bookmarkedPages = setOf(0, 2, 4)
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                pageCount = 5,
+                bookmarkedPages = setOf(0, 2, 4)
+            )
         docRepo.docs += doc
 
         createViewModel()
@@ -175,11 +205,12 @@ class ViewerViewModelTest {
 
     @Test
     fun `isCurrentPageBookmarked reflects state`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            pageCount = 5,
-            bookmarkedPages = setOf(2)
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                pageCount = 5,
+                bookmarkedPages = setOf(2)
+            )
         docRepo.docs += doc
 
         createViewModel()

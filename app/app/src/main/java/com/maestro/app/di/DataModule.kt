@@ -4,12 +4,14 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.DeviceResourceSampler
 import com.maestro.app.data.local.ExtractionProgressStore
+import com.maestro.app.data.local.KnowledgeStateStore
 import com.maestro.app.data.local.LocalMlKitContentExtractor
 import com.maestro.app.data.local.ModelArtifactLocalDataSource
 import com.maestro.app.data.local.MonitoringLogLocalDataSource
 import com.maestro.app.data.local.PdfMerger
 import com.maestro.app.data.local.PdfTextIndexLocalDataSource
 import com.maestro.app.data.local.ProfileLocalDataSource
+import com.maestro.app.data.local.QuestionRepresentationLocalDataSource
 import com.maestro.app.data.local.QuizResponseLocalDataSource
 import com.maestro.app.data.local.StudyEventLocalDataSource
 import com.maestro.app.data.local.TextLayerContentBuilder
@@ -19,22 +21,22 @@ import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.MaestroServerApi
 import com.maestro.app.data.remote.MaterialAnalyzerClient
 import com.maestro.app.data.remote.OpenAiClient
+import com.maestro.app.data.remote.QuestionEncoderClient
 import com.maestro.app.data.repository.AnnotationRepositoryImpl
 import com.maestro.app.data.repository.DocumentRepositoryImpl
 import com.maestro.app.data.repository.KnowledgeRepositoryImpl
 import com.maestro.app.data.repository.SettingsRepositoryImpl
-import com.maestro.app.data.service.HeuristicKnowledgeTracer
 import com.maestro.app.data.service.LlmServiceImpl
-import com.maestro.app.data.service.OnnxMiktKnowledgeTracer
+import com.maestro.app.data.service.OnnxTapKnowledgeEngine
 import com.maestro.app.data.service.QuizServiceImpl
 import com.maestro.app.data.work.ExtractionWorkScheduler
 import com.maestro.app.data.work.WorkManagerExtractionWorkScheduler
 import com.maestro.app.domain.repository.DocumentRepository
 import com.maestro.app.domain.repository.KnowledgeRepository
 import com.maestro.app.domain.repository.SettingsRepository
+import com.maestro.app.domain.service.KnowledgeTracingEngine
 import com.maestro.app.domain.service.LlmService
 import com.maestro.app.domain.service.QuizService
-import com.maestro.app.domain.service.MiktKnowledgeTracer
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -46,129 +48,147 @@ import retrofit2.Retrofit
 
 private val json = Json { ignoreUnknownKeys = true }
 
-val dataModule = module {
-    single<DocumentRepository> {
-        DocumentRepositoryImpl(get(), get())
-    }
-    single<SettingsRepository> {
-        SettingsRepositoryImpl(get())
-    }
-    single { AnnotationRepositoryImpl(get()) }
-    single { LlmClient(get()) }
-    single { OpenAiClient(get()) }
-    single(named("openRouterClient")) {
-        OpenAiClient(
-            httpClient = get(),
-            baseUrl = OpenAiClient.OPENROUTER_BASE_URL
-        )
-    }
-    single { ClaudeClient(get()) }
-    single<LlmService> {
-        LlmServiceImpl(
-            get<LlmClient>(),
-            get<OpenAiClient>(),
-            get<ClaudeClient>(),
-            get(named("openRouterClient")),
-            get()
-        )
-    }
-    single { ConversationLocalDataSource(get()) }
-    single { ExtractionProgressStore() }
-    single { LocalMlKitContentExtractor(get()) }
-    single {
-        ModelArtifactLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single {
-        MonitoringLogLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single {
-        DeviceResourceSampler(
-            get<android.content.Context>()
-        )
-    }
-    single {
-        QuizResponseLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single<ExtractionWorkScheduler> {
-        WorkManagerExtractionWorkScheduler(get())
-    }
-    single { ProfileLocalDataSource(get()) }
-    single {
-        StudyEventLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single { PdfMerger(get()) }
-    single {
-        PdfTextIndexLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single { TextLayerContentBuilder() }
-    single {
-        ViewerTabStateLocalDataSource(
-            get<android.content.Context>()
-        )
-    }
-    single<QuizService> { QuizServiceImpl(get()) }
-    single<MiktKnowledgeTracer> {
-        OnnxMiktKnowledgeTracer(
-            context = get<android.content.Context>(),
-            modelArtifacts = get(),
-            monitoringLogs = get(),
-            resourceSampler = get(),
-            fallback = HeuristicKnowledgeTracer()
-        )
-    }
-    single<KnowledgeRepository> {
-        KnowledgeRepositoryImpl(
-            context = get<android.content.Context>(),
-            documentRepository = get(),
-            studyEvents = get(),
-            modelArtifacts = get(),
-            tracer = get()
-        )
-    }
-
-    // Maestro Server Retrofit + API
-    single<MaestroServerApi> {
-        val settings = get<SettingsRepository>()
-        val baseUrl = runBlocking {
-            settings.getServerUrl().firstOrNull()
-        } ?: "https://maestro.jwchae.com/"
-        val normalizedUrl = if (
-            baseUrl.endsWith("/")
-        ) {
-            baseUrl
-        } else {
-            "$baseUrl/"
+val dataModule =
+    module {
+        single<DocumentRepository> {
+            DocumentRepositoryImpl(get(), get())
         }
-        Retrofit.Builder()
-            .baseUrl(normalizedUrl)
-            .client(
-                get<OkHttpClient>(
-                    named("maestroServer")
-                )
+        single<SettingsRepository> {
+            SettingsRepositoryImpl(get())
+        }
+        single { AnnotationRepositoryImpl(get()) }
+        single { LlmClient(get()) }
+        single { OpenAiClient(get()) }
+        single(named("openRouterClient")) {
+            OpenAiClient(
+                httpClient = get(),
+                baseUrl = OpenAiClient.OPENROUTER_BASE_URL
             )
-            .addConverterFactory(
-                json.asConverterFactory(
-                    "application/json".toMediaType()
-                )
+        }
+        single { ClaudeClient(get()) }
+        single<LlmService> {
+            LlmServiceImpl(
+                get<LlmClient>(),
+                get<OpenAiClient>(),
+                get<ClaudeClient>(),
+                get(named("openRouterClient")),
+                get()
             )
-            .build()
-            .create(MaestroServerApi::class.java)
-    }
+        }
+        single { ConversationLocalDataSource(get()) }
+        single { ExtractionProgressStore() }
+        single { LocalMlKitContentExtractor(get()) }
+        single {
+            ModelArtifactLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single {
+            MonitoringLogLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single {
+            DeviceResourceSampler(
+                get<android.content.Context>()
+            )
+        }
+        single {
+            QuizResponseLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single {
+            QuestionRepresentationLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single {
+            QuestionEncoderClient(
+                httpClient = get<OkHttpClient>(named("llmApi")),
+                settingsRepository = get()
+            )
+        }
+        single<ExtractionWorkScheduler> {
+            WorkManagerExtractionWorkScheduler(get())
+        }
+        single { ProfileLocalDataSource(get()) }
+        single {
+            StudyEventLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single { PdfMerger(get()) }
+        single {
+            PdfTextIndexLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single { TextLayerContentBuilder() }
+        single {
+            ViewerTabStateLocalDataSource(
+                get<android.content.Context>()
+            )
+        }
+        single<QuizService> { QuizServiceImpl(get()) }
+        single {
+            KnowledgeStateStore(
+                get<android.content.Context>()
+            )
+        }
+        single<KnowledgeTracingEngine> {
+            OnnxTapKnowledgeEngine(
+                context = get<android.content.Context>(),
+                store = get(),
+                monitoringLogs = get(),
+                resourceSampler = get()
+            )
+        }
+        single<KnowledgeRepository> {
+            KnowledgeRepositoryImpl(
+                context = get<android.content.Context>(),
+                documentRepository = get(),
+                studyEvents = get(),
+                modelArtifacts = get(),
+                knowledgeEngine = get()
+            )
+        }
 
-    single {
-        MaterialAnalyzerClient(
-            api = get(),
-            context = get()
-        )
+        // Maestro Server Retrofit + API
+        single<MaestroServerApi> {
+            val settings = get<SettingsRepository>()
+            val baseUrl =
+                runBlocking {
+                    settings.getServerUrl().firstOrNull()
+                } ?: "https://maestro.jwchae.com/"
+            val normalizedUrl =
+                if (
+                    baseUrl.endsWith("/")
+                ) {
+                    baseUrl
+                } else {
+                    "$baseUrl/"
+                }
+            Retrofit.Builder()
+                .baseUrl(normalizedUrl)
+                .client(
+                    get<OkHttpClient>(
+                        named("maestroServer")
+                    )
+                )
+                .addConverterFactory(
+                    json.asConverterFactory(
+                        "application/json".toMediaType()
+                    )
+                )
+                .build()
+                .create(MaestroServerApi::class.java)
+        }
+
+        single {
+            MaterialAnalyzerClient(
+                api = get(),
+                context = get()
+            )
+        }
     }
-}

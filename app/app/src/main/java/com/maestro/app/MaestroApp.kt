@@ -38,7 +38,8 @@ class MaestroApp : Application() {
                 throwable.printStackTrace(pw)
                 pw.flush()
                 File(filesDir, "crash_log.txt").writeText(sw.toString())
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
             defaultHandler?.uncaughtException(thread, throwable)
         }
     }

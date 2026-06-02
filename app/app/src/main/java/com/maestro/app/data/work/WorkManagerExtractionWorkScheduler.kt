@@ -17,16 +17,17 @@ class WorkManagerExtractionWorkScheduler(
         mode: String,
         replaceExisting: Boolean
     ) {
-        val request = OneTimeWorkRequestBuilder<PdfExtractionWorker>()
-            .setInputData(
-                workDataOf(
-                    PdfExtractionWorker.KEY_DOCUMENT_ID to documentId,
-                    PdfExtractionWorker.KEY_URI_STRING to uriString,
-                    PdfExtractionWorker.KEY_MODE to mode
+        val request =
+            OneTimeWorkRequestBuilder<PdfExtractionWorker>()
+                .setInputData(
+                    workDataOf(
+                        PdfExtractionWorker.KEY_DOCUMENT_ID to documentId,
+                        PdfExtractionWorker.KEY_URI_STRING to uriString,
+                        PdfExtractionWorker.KEY_MODE to mode
+                    )
                 )
-            )
-            .setConstraints(constraintsFor(mode))
-            .build()
+                .setConstraints(constraintsFor(mode))
+                .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             PdfExtractionWorker.uniqueWorkName(documentId),
             if (replaceExisting) {
@@ -39,11 +40,12 @@ class WorkManagerExtractionWorkScheduler(
     }
 
     private fun constraintsFor(mode: String): Constraints {
-        val networkType = if (mode == PdfExtractionWorker.MODE_LOCAL_MLKIT) {
-            NetworkType.NOT_REQUIRED
-        } else {
-            NetworkType.CONNECTED
-        }
+        val networkType =
+            if (mode == PdfExtractionWorker.MODE_LOCAL_MLKIT) {
+                NetworkType.NOT_REQUIRED
+            } else {
+                NetworkType.CONNECTED
+            }
         return Constraints.Builder()
             .setRequiredNetworkType(networkType)
             .build()

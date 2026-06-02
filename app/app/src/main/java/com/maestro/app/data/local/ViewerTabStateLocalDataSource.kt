@@ -33,10 +33,11 @@ data class PersistedViewerTabState(
 
 class ViewerTabStateLocalDataSource {
     private val file: File
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
 
     constructor(context: Context) : this(
         File(context.filesDir, "viewer_tabs/state.json")
@@ -47,23 +48,21 @@ class ViewerTabStateLocalDataSource {
         file.parentFile?.mkdirs()
     }
 
-    suspend fun load(): PersistedViewerTabState =
-        withContext(Dispatchers.IO) {
-            if (!file.exists()) {
-                return@withContext PersistedViewerTabState()
-            }
-            try {
-                json.decodeFromString<PersistedViewerTabState>(
-                    file.readText()
-                )
-            } catch (_: Throwable) {
-                PersistedViewerTabState()
-            }
+    suspend fun load(): PersistedViewerTabState = withContext(Dispatchers.IO) {
+        if (!file.exists()) {
+            return@withContext PersistedViewerTabState()
         }
+        try {
+            json.decodeFromString<PersistedViewerTabState>(
+                file.readText()
+            )
+        } catch (_: Throwable) {
+            PersistedViewerTabState()
+        }
+    }
 
-    suspend fun save(state: PersistedViewerTabState) =
-        withContext(Dispatchers.IO) {
-            file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(state))
-        }
+    suspend fun save(state: PersistedViewerTabState) = withContext(Dispatchers.IO) {
+        file.parentFile?.mkdirs()
+        file.writeText(json.encodeToString(state))
+    }
 }

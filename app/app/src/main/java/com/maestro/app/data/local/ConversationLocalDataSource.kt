@@ -34,48 +34,55 @@ data class ConversationSummary(
 )
 
 class ConversationLocalDataSource(context: Context) {
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
-    private val convDir = File(
-        context.filesDir,
-        "conversations"
-    ).also { it.mkdirs() }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
+    private val convDir =
+        File(
+            context.filesDir,
+            "conversations"
+        ).also { it.mkdirs() }
 
     fun create(): String {
-        val id = "conv_" + SimpleDateFormat(
-            "yyyyMMdd_HHmmss", Locale.US
-        ).format(Date()) +
-            "_" + UUID.randomUUID().toString().take(6)
-        val dto = ConversationDto(
-            id = id,
-            created = System.currentTimeMillis(),
-            updated = System.currentTimeMillis()
-        )
+        val id =
+            "conv_" +
+                SimpleDateFormat(
+                    "yyyyMMdd_HHmmss", Locale.US
+                ).format(Date()) +
+                "_" + UUID.randomUUID().toString().take(6)
+        val dto =
+            ConversationDto(
+                id = id,
+                created = System.currentTimeMillis(),
+                updated = System.currentTimeMillis()
+            )
         save(id, dto)
         return id
     }
 
     fun appendMessage(conversationId: String, message: ChatMessage) {
         val dto = load(conversationId) ?: return
-        val msgDto = ConversationMessageDto(
-            role = message.role.name.lowercase(),
-            content = message.content,
-            ts = message.timestamp
-        )
-        val updated = dto.copy(
-            messages = dto.messages + msgDto,
-            updated = System.currentTimeMillis(),
-            title = if (dto.title.isBlank() &&
-                message.role == ChatMessage.Role.USER
-            ) {
-                message.content.take(50)
-            } else {
-                dto.title
-            }
-        )
+        val msgDto =
+            ConversationMessageDto(
+                role = message.role.name.lowercase(),
+                content = message.content,
+                ts = message.timestamp
+            )
+        val updated =
+            dto.copy(
+                messages = dto.messages + msgDto,
+                updated = System.currentTimeMillis(),
+                title =
+                if (dto.title.isBlank() &&
+                    message.role == ChatMessage.Role.USER
+                ) {
+                    message.content.take(50)
+                } else {
+                    dto.title
+                }
+            )
         save(conversationId, updated)
     }
 
@@ -83,7 +90,8 @@ class ConversationLocalDataSource(context: Context) {
         val dto = load(conversationId) ?: return emptyList()
         return dto.messages.map { m ->
             ChatMessage(
-                role = if (m.role == "assistant") {
+                role =
+                if (m.role == "assistant") {
                     ChatMessage.Role.ASSISTANT
                 } else {
                     ChatMessage.Role.USER
@@ -100,9 +108,10 @@ class ConversationLocalDataSource(context: Context) {
                 ?.filter { it.extension == "json" }
                 ?.mapNotNull { file ->
                     try {
-                        val dto = json.decodeFromString<ConversationDto>(
-                            file.readText()
-                        )
+                        val dto =
+                            json.decodeFromString<ConversationDto>(
+                                file.readText()
+                            )
                         ConversationSummary(
                             id = dto.id,
                             title = dto.title.ifBlank { "새 대화" },

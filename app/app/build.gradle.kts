@@ -8,12 +8,13 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) {
-        file.inputStream().use(::load)
+val localProperties =
+    Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.exists()) {
+            file.inputStream().use(::load)
+        }
     }
-}
 
 fun secretProperty(vararg names: String): String {
     return names.firstNotNullOfOrNull { name ->
@@ -23,9 +24,10 @@ fun secretProperty(vararg names: String): String {
 }
 
 fun buildConfigString(value: String): String {
-    val escaped = value
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
+    val escaped =
+        value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
     return "\"$escaped\""
 }
 
@@ -126,6 +128,14 @@ dependencies {
 
     // Local OCR experiment
     implementation(libs.mlkit.text.recognition)
+
+    // Markdown + LaTeX rendering for LLM chat
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.ext.latex)
+    implementation(libs.markwon.inline.parser)
+    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.linkify)
 
     // Test
     testImplementation(libs.junit)

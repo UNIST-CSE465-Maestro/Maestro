@@ -5,13 +5,16 @@ import com.maestro.app.domain.model.InkStroke
 
 interface AnnotationRepository {
     suspend fun loadStrokes(documentId: String, pageIndex: Int): List<InkStroke>
+
     suspend fun saveStrokes(
         documentId: String,
         pageIndex: Int,
         strokes: List<InkStroke>,
         refWidth: Float
     )
+
     suspend fun loadImageOverlays(documentId: String, pageIndex: Int): List<ImageOverlayData>
+
     suspend fun saveImageOverlays(
         documentId: String,
         pageIndex: Int,

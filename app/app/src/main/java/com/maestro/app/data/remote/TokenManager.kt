@@ -15,27 +15,28 @@ class TokenManager(
     private val settingsRepository: SettingsRepository,
     private val apiProvider: () -> MaestroServerApi
 ) : Interceptor {
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         if (shouldSkipAuth(original.url.encodedPath)) {
             return chain.proceed(original)
         }
 
-        val token = runBlocking {
-            settingsRepository.getAccessToken()
-                .firstOrNull()
-        }.takeUnless { it.isNullOrBlank() }
-            ?: BuildConfig.MAESTRO_SERVER_BEARER_TOKEN
-                .takeUnless { it.isBlank() }
+        val token =
+            runBlocking {
+                settingsRepository.getAccessToken()
+                    .firstOrNull()
+            }.takeUnless { it.isNullOrBlank() }
+                ?: BuildConfig.MAESTRO_SERVER_BEARER_TOKEN
+                    .takeUnless { it.isBlank() }
 
-        val authed = if (!token.isNullOrBlank()) {
-            original.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        } else {
-            original
-        }
+        val authed =
+            if (!token.isNullOrBlank()) {
+                original.newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .build()
+            } else {
+                original
+            }
 
         val response = chain.proceed(authed)
 
@@ -44,25 +45,28 @@ class TokenManager(
         }
 
         // Attempt token refresh
-        val refreshToken = runBlocking {
-            settingsRepository.getRefreshToken()
-                .firstOrNull()
-        }
+        val refreshToken =
+            runBlocking {
+                settingsRepository.getRefreshToken()
+                    .firstOrNull()
+            }
         val refreshTokenValue = refreshToken ?: return response
         if (refreshTokenValue.isBlank()) {
             return response
         }
 
-        val newTokens = runBlocking {
-            try {
-                val resp = apiProvider().refresh(
-                    RefreshRequest(refreshTokenValue)
-                )
-                if (resp.isSuccessful) resp.body() else null
-            } catch (_: Exception) {
-                null
+        val newTokens =
+            runBlocking {
+                try {
+                    val resp =
+                        apiProvider().refresh(
+                            RefreshRequest(refreshTokenValue)
+                        )
+                    if (resp.isSuccessful) resp.body() else null
+                } catch (_: Exception) {
+                    null
+                }
             }
-        }
 
         if (newTokens == null) {
             runBlocking { settingsRepository.clearTokens() }
@@ -77,12 +81,13 @@ class TokenManager(
         }
 
         response.close()
-        val retry = original.newBuilder()
-            .header(
-                "Authorization",
-                "Bearer ${newTokens.access}"
-            )
-            .build()
+        val retry =
+            original.newBuilder()
+                .header(
+                    "Authorization",
+                    "Bearer ${newTokens.access}"
+                )
+                .build()
         return chain.proceed(retry)
     }
 

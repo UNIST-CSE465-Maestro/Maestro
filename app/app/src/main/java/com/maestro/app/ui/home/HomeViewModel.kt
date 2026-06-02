@@ -31,7 +31,6 @@ class HomeViewModel(
     private val extractionWorkScheduler: ExtractionWorkScheduler,
     private val appContext: Context
 ) : ViewModel() {
-
     private val _documents =
         MutableStateFlow<List<PdfDocument>>(emptyList())
     val documents: StateFlow<List<PdfDocument>> =
@@ -100,16 +99,18 @@ class HomeViewModel(
 
     private fun loadDocuments() {
         viewModelScope.launch {
-            val docs = repository.loadDocuments()
-                .sortedWith(
-                    compareByDescending<PdfDocument> {
-                        it.isPinned
-                    }.thenByDescending { it.addedTimestamp }
-                )
+            val docs =
+                repository.loadDocuments()
+                    .sortedWith(
+                        compareByDescending<PdfDocument> {
+                            it.isPinned
+                        }.thenByDescending { it.addedTimestamp }
+                    )
             _documents.value = docs
-            val sourceMap = docs.associate { doc ->
-                doc.id to extractedContentSources(doc)
-            }
+            val sourceMap =
+                docs.associate { doc ->
+                    doc.id to extractedContentSources(doc)
+                }
             _documentContentSources.value = sourceMap
             _docsWithExtractedContent.value =
                 sourceMap.filter { it.value.any }
@@ -159,10 +160,11 @@ class HomeViewModel(
      */
     fun importAndExtract(uri: Uri, mode: String) {
         viewModelScope.launch {
-            val doc = repository.importPdf(
-                uri,
-                "document.pdf"
-            )
+            val doc =
+                repository.importPdf(
+                    uri,
+                    "document.pdf"
+                )
             refresh()
             // Use the imported file URI, not the
             // original content:// URI which may
@@ -173,9 +175,10 @@ class HomeViewModel(
 
     fun retryExtraction(documentId: String, mode: String) {
         viewModelScope.launch {
-            val doc = repository.loadDocuments()
-                .find { it.id == documentId }
-                ?: return@launch
+            val doc =
+                repository.loadDocuments()
+                    .find { it.id == documentId }
+                    ?: return@launch
             extractInBackground(doc, doc.uriString, mode)
         }
     }
@@ -238,73 +241,71 @@ class HomeViewModel(
         refresh()
     }
 
-    private suspend fun latestDocument(
-        documentId: String,
-        fallback: PdfDocument
-    ): PdfDocument {
+    private suspend fun latestDocument(documentId: String, fallback: PdfDocument): PdfDocument {
         return repository.loadDocuments()
             .find { it.id == documentId }
             ?: fallback
     }
 
-    private fun hasExtractedContent(documentId: String): Boolean =
-        _documents.value
-            .firstOrNull { it.id == documentId }
-            ?.let { extractedContentSources(it).any }
-            ?: hasContent(documentId)
+    private fun hasExtractedContent(documentId: String): Boolean = _documents.value
+        .firstOrNull { it.id == documentId }
+        ?.let { extractedContentSources(it).any }
+        ?: hasContent(documentId)
 
-    private fun extractedContentSources(
-        doc: PdfDocument
-    ): ExtractedContentSources =
-        try {
-            val source = doc.extractionSource
+    private fun extractedContentSources(doc: PdfDocument): ExtractedContentSources = try {
+        val source =
+            doc.extractionSource
                 ?: contentSourceFromJson(doc.id)
-            ExtractedContentSources(
-                mineru = source ==
-                    PdfExtractionWorker.EXTRACTION_SOURCE_MINERU ||
-                    (
-                        source == null &&
-                            hasContent(doc.id)
-                        ),
-                textLayer = source ==
-                    PdfExtractionWorker.EXTRACTION_SOURCE_TEXT_LAYER
-            )
-        } catch (_: Throwable) {
-            ExtractedContentSources()
-        }
+        ExtractedContentSources(
+            mineru =
+            source ==
+                PdfExtractionWorker.EXTRACTION_SOURCE_MINERU ||
+                (
+                    source == null &&
+                        hasContent(doc.id)
+                    ),
+            textLayer =
+            source ==
+                PdfExtractionWorker.EXTRACTION_SOURCE_TEXT_LAYER
+        )
+    } catch (_: Throwable) {
+        ExtractedContentSources()
+    }
 
-    private fun hasContent(documentId: String): Boolean =
-        try {
-            val file = File(
+    private fun hasContent(documentId: String): Boolean = try {
+        val file =
+            File(
                 appContext.filesDir,
                 "documents/$documentId/content.md"
             )
-            file.exists() && file.length() > 0L
-        } catch (_: Throwable) {
-            false
-        }
+        file.exists() && file.length() > 0L
+    } catch (_: Throwable) {
+        false
+    }
 
-    private fun contentSourceFromJson(documentId: String): String? =
-        try {
-            val file = File(
+    private fun contentSourceFromJson(documentId: String): String? = try {
+        val file =
+            File(
                 appContext.filesDir,
                 "documents/$documentId/content.json"
             )
-            if (!file.exists() || file.length() == 0L) {
-                null
-            } else {
-                val sourceMatch = Regex(
+        if (!file.exists() || file.length() == 0L) {
+            null
+        } else {
+            val sourceMatch =
+                Regex(
                     "\"source\"\\s*:\\s*\"([^\"]+)\""
                 ).find(file.readText())
-                sourceMatch?.groupValues?.getOrNull(1)
-            }
-        } catch (_: Throwable) {
-            null
+            sourceMatch?.groupValues?.getOrNull(1)
         }
+    } catch (_: Throwable) {
+        null
+    }
 
     private fun shouldRecoverExtraction(doc: PdfDocument): Boolean {
-        val mode = doc.extractionMode
-            ?: DEFAULT_RECOVERY_MODE
+        val mode =
+            doc.extractionMode
+                ?: DEFAULT_RECOVERY_MODE
         return if (mode == "compare_mlkit_mineru" ||
             mode == "ai" ||
             mode == "standard" ||
@@ -352,10 +353,12 @@ class HomeViewModel(
     }
 
     fun isFolderNonEmpty(id: String): Boolean {
-        val hasDocs = _documents.value
-            .any { it.folderId == id }
-        val hasSubfolders = _folders.value
-            .any { it.parentId == id }
+        val hasDocs =
+            _documents.value
+                .any { it.folderId == id }
+        val hasSubfolders =
+            _folders.value
+                .any { it.parentId == id }
         return hasDocs || hasSubfolders
     }
 
@@ -396,8 +399,9 @@ class HomeViewModel(
             var cur: String? = targetParentId
             while (cur != null) {
                 if (cur == folderId) return@launch
-                cur = allFolders
-                    .find { it.id == cur }?.parentId
+                cur =
+                    allFolders
+                        .find { it.id == cur }?.parentId
             }
             repository.moveFolder(
                 folderId,
@@ -409,8 +413,9 @@ class HomeViewModel(
 
     fun togglePin(docId: String) {
         viewModelScope.launch {
-            val doc = _documents.value
-                .find { it.id == docId } ?: return@launch
+            val doc =
+                _documents.value
+                    .find { it.id == docId } ?: return@launch
             repository.updateDocument(
                 doc.copy(isPinned = !doc.isPinned)
             )
@@ -419,14 +424,15 @@ class HomeViewModel(
     }
 
     fun toggleSelect(docId: String) {
-        _selectedDocIds.value = _selectedDocIds.value
-            .toMutableSet().apply {
-                if (contains(docId)) {
-                    remove(docId)
-                } else {
-                    add(docId)
+        _selectedDocIds.value =
+            _selectedDocIds.value
+                .toMutableSet().apply {
+                    if (contains(docId)) {
+                        remove(docId)
+                    } else {
+                        add(docId)
+                    }
                 }
-            }
     }
 
     fun clearSelection() {
@@ -436,23 +442,28 @@ class HomeViewModel(
     fun mergeOrdered(orderedIds: List<String>) {
         viewModelScope.launch {
             if (orderedIds.size < 2) return@launch
-            val docMap = _documents.value
-                .associateBy { it.id }
-            val docs = orderedIds.mapNotNull {
-                docMap[it]
-            }
+            val docMap =
+                _documents.value
+                    .associateBy { it.id }
+            val docs =
+                orderedIds.mapNotNull {
+                    docMap[it]
+                }
             if (docs.size < 2) return@launch
 
-            val uris = docs.map {
-                Uri.parse(it.uriString)
-            }
-            val outputName = docs.first().displayName
-                .removeSuffix(".pdf") +
-                " 외 ${docs.size - 1}건 병합.pdf"
+            val uris =
+                docs.map {
+                    Uri.parse(it.uriString)
+                }
+            val outputName =
+                docs.first().displayName
+                    .removeSuffix(".pdf") +
+                    " 외 ${docs.size - 1}건 병합.pdf"
 
-            val resultUri = pdfMerger.merge(
-                uris, outputName
-            ) ?: return@launch
+            val resultUri =
+                pdfMerger.merge(
+                    uris, outputName
+                ) ?: return@launch
 
             repository.importPdf(resultUri, outputName)
             _selectedDocIds.value = emptySet()

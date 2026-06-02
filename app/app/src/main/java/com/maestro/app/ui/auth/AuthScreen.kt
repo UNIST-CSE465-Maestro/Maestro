@@ -84,7 +84,8 @@ fun AuthScreen(viewModel: AuthViewModel, onLoginSuccess: () -> Unit) {
     }
 
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
             .background(MaestroBackground)
             .imePadding()
@@ -92,7 +93,8 @@ fun AuthScreen(viewModel: AuthViewModel, onLoginSuccess: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .widthIn(max = 400.dp)
                 .padding(32.dp),
             horizontalAlignment =
@@ -122,7 +124,8 @@ fun AuthScreen(viewModel: AuthViewModel, onLoginSuccess: () -> Unit) {
                 indicator = { tabPositions ->
                     if (selectedTab < tabPositions.size) {
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .tabIndicatorOffset(
                                     tabPositions[selectedTab]
                                 ),
@@ -217,7 +220,8 @@ fun AuthScreen(viewModel: AuthViewModel, onLoginSuccess: () -> Unit) {
                 Text(
                     text = msg,
                     fontSize = 13.sp,
-                    color = if (isSuccess) {
+                    color =
+                    if (isSuccess) {
                         Color(0xFF10B981)
                     } else {
                         MaterialTheme.colorScheme.error
@@ -254,11 +258,13 @@ private fun LoginForm(
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onLogin,
-        enabled = username.isNotBlank() &&
+        enabled =
+        username.isNotBlank() &&
             password.isNotBlank() && !isLoading,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(
+        colors =
+        ButtonDefaults.buttonColors(
             containerColor = MaestroPrimary
         )
     ) {
@@ -267,7 +273,8 @@ private fun LoginForm(
         } else {
             Text(
                 "로그인",
-                modifier = Modifier.padding(
+                modifier =
+                Modifier.padding(
                     vertical = 4.dp
                 ),
                 fontWeight = FontWeight.SemiBold
@@ -308,12 +315,14 @@ private fun RegisterForm(
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onRegister,
-        enabled = username.isNotBlank() &&
+        enabled =
+        username.isNotBlank() &&
             email.isNotBlank() &&
             password.isNotBlank() && !isLoading,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(
+        colors =
+        ButtonDefaults.buttonColors(
             containerColor = MaestroPrimary
         )
     ) {
@@ -322,7 +331,8 @@ private fun RegisterForm(
         } else {
             Text(
                 "회원가입",
-                modifier = Modifier.padding(
+                modifier =
+                Modifier.padding(
                     vertical = 4.dp
                 ),
                 fontWeight = FontWeight.SemiBold
@@ -345,13 +355,15 @@ private fun AuthTextField(
         placeholder = {
             Text(placeholder, fontSize = 14.sp)
         },
-        visualTransformation = if (isPassword) {
+        visualTransformation =
+        if (isPassword) {
             PasswordVisualTransformation()
         } else {
             VisualTransformation.None
         },
         singleLine = true,
-        colors = TextFieldDefaults.colors(
+        colors =
+        TextFieldDefaults.colors(
             focusedContainerColor =
             MaterialTheme.colorScheme
                 .surfaceVariant,

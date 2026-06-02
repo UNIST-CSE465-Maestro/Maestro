@@ -102,11 +102,12 @@ fun HomeScreen(
     val extractionError by viewModel.extractionError
         .collectAsState()
 
-    val pdfPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.stagePdfImport(it) }
-    }
+    val pdfPickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument()
+        ) { uri: Uri? ->
+            uri?.let { viewModel.stagePdfImport(it) }
+        }
 
     // Long-press context menu state
     var contextPdf by remember { mutableStateOf<PdfDocument?>(null) }
@@ -125,13 +126,14 @@ fun HomeScreen(
     var rootOffset by remember { mutableStateOf(Offset.Zero) }
 
     // Hovered folder for visual highlight (recomputes on each recomposition)
-    val hoveredFolderId = if (dragItem != null && hasDragMoved) {
-        folderBoundsMap.entries.firstOrNull { (id, bounds) ->
-            bounds.contains(dragPosition) && id != dragItem?.id
-        }?.key
-    } else {
-        null
-    }
+    val hoveredFolderId =
+        if (dragItem != null && hasDragMoved) {
+            folderBoundsMap.entries.firstOrNull { (id, bounds) ->
+                bounds.contains(dragPosition) && id != dragItem?.id
+            }?.key
+        } else {
+            null
+        }
 
     fun clearDrag() {
         dragItem = null
@@ -167,13 +169,15 @@ fun HomeScreen(
             if (logFile.exists()) {
                 crashLog = logFile.readText()
             }
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         try {
             val dbgFile = java.io.File(context.filesDir, "maestro/debug.log")
             if (dbgFile.exists()) {
                 debugLog = dbgFile.readText()
             }
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
     }
 
     // Crash log dialog
@@ -184,7 +188,8 @@ fun HomeScreen(
                     java.io.File(context.filesDir, "crash_log.txt").delete()
                 } catch (
                     _: Throwable
-                ) {}
+                ) {
+                }
                 crashLog = null
             },
             title = { Text("크래시 로그", fontWeight = FontWeight.Bold) },
@@ -210,7 +215,8 @@ fun HomeScreen(
                         java.io.File(context.filesDir, "crash_log.txt").delete()
                     } catch (
                         _: Throwable
-                    ) {}
+                    ) {
+                    }
                     crashLog = null
                 }) { Text("확인") }
             }
@@ -225,7 +231,8 @@ fun HomeScreen(
                     java.io.File(context.filesDir, "maestro/debug.log").delete()
                 } catch (
                     _: Throwable
-                ) {}
+                ) {
+                }
                 debugLog = null
             },
             title = { Text("디버그 로그", fontWeight = FontWeight.Bold) },
@@ -251,7 +258,8 @@ fun HomeScreen(
                         java.io.File(context.filesDir, "maestro/debug.log").delete()
                     } catch (
                         _: Throwable
-                    ) {}
+                    ) {
+                    }
                     debugLog = null
                 }) { Text("확인 (로그 삭제)") }
             }
@@ -280,12 +288,14 @@ fun HomeScreen(
 
     // Delete confirmation
     if (showDeleteConfirm) {
-        val label = contextPdf?.displayName
-            ?: contextFolder?.name ?: ""
-        val isNonEmptyFolder = contextFolder != null &&
-            viewModel.isFolderNonEmpty(
-                contextFolder!!.id
-            )
+        val label =
+            contextPdf?.displayName
+                ?: contextFolder?.name ?: ""
+        val isNonEmptyFolder =
+            contextFolder != null &&
+                viewModel.isFolderNonEmpty(
+                    contextFolder!!.id
+                )
         AlertDialog(
             onDismissRequest = {
                 showDeleteConfirm = false
@@ -379,7 +389,8 @@ fun HomeScreen(
 
     if (showMergeOrderDialog) {
         MergeOrderDialog(
-            docs = documents.filter {
+            docs =
+            documents.filter {
                 it.id in selectedDocIds
             },
             onDismiss = { showMergeOrderDialog = false },
@@ -421,13 +432,15 @@ fun HomeScreen(
     val currentFolderName = folders.find { it.id == currentFolderId }?.name
 
     Box(
-        modifier = Modifier.fillMaxSize().background(MaestroBackground)
+        modifier =
+        Modifier.fillMaxSize().background(MaestroBackground)
             .onGloballyPositioned { rootOffset = it.positionInWindow() }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             HomeTopBar(
                 currentFolderName = currentFolderName,
-                onBack = if (currentFolderId != null) {
+                onBack =
+                if (currentFolderId != null) {
                     {
                         val parent = folders.find { it.id == currentFolderId }?.parentId
                         viewModel.navigateFolder(parent)
@@ -448,11 +461,13 @@ fun HomeScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = UxConfig.Home.GRID_MIN_SIZE),
-                    modifier = Modifier.weight(
+                    modifier =
+                    Modifier.weight(
                         1f
                     ).padding(horizontal = UxConfig.Home.GRID_PADDING_H),
                     userScrollEnabled = dragItem == null,
-                    contentPadding = PaddingValues(
+                    contentPadding =
+                    PaddingValues(
                         top = UxConfig.Home.GRID_PADDING_TOP,
                         bottom = UxConfig.Home.GRID_PADDING_BOTTOM
                     ),
@@ -466,34 +481,38 @@ fun HomeScreen(
                             FolderGridItem(
                                 folder = folder,
                                 isDropTarget = hoveredFolderId == folder.id,
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .onGloballyPositioned {
                                         folderBoundsMap[folder.id] = it.boundsInWindow()
                                         itemPos = it.positionInWindow()
                                         itemWidth = it.size.width
                                     }
                                     .pointerInput(folder.id) {
-                                        val handler = android.os.Handler(
-                                            android.os.Looper.getMainLooper()
-                                        )
+                                        val handler =
+                                            android.os.Handler(
+                                                android.os.Looper.getMainLooper()
+                                            )
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
                                             val startPos = itemPos + down.position
                                             var moved = false
                                             var longPressed = false
-                                            val runnable = Runnable {
-                                                longPressed = true
-                                                haptic.performHapticFeedback(
-                                                    HapticFeedbackType.LongPress
-                                                )
-                                                contextFolder = folder
-                                                contextPdf = null
-                                                dragItem = DragItem(
-                                                    folder.id, true, folder.name
-                                                )
-                                                dragPosition = startPos
-                                                hasDragMoved = false
-                                            }
+                                            val runnable =
+                                                Runnable {
+                                                    longPressed = true
+                                                    haptic.performHapticFeedback(
+                                                        HapticFeedbackType.LongPress
+                                                    )
+                                                    contextFolder = folder
+                                                    contextPdf = null
+                                                    dragItem =
+                                                        DragItem(
+                                                            folder.id, true, folder.name
+                                                        )
+                                                    dragPosition = startPos
+                                                    hasDragMoved = false
+                                                }
                                             handler.postDelayed(
                                                 runnable,
                                                 UxConfig.Gesture.LONG_PRESS_HOME_MS
@@ -504,7 +523,8 @@ fun HomeScreen(
                                                 if (change.changedToUp()) {
                                                     handler.removeCallbacks(runnable)
                                                     if (longPressed && moved) {
-                                                        val target = findDropTarget(folder.id, true)
+                                                        val target =
+                                                            findDropTarget(folder.id, true)
                                                         if (target != null) {
                                                             viewModel.moveFolder(
                                                                 folder.id,
@@ -520,8 +540,9 @@ fun HomeScreen(
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    val moved2 = drag.getDistance() >
-                                                        UxConfig.Gesture.DRAG_THRESHOLD_PX
+                                                    val moved2 =
+                                                        drag.getDistance() >
+                                                            UxConfig.Gesture.DRAG_THRESHOLD_PX
                                                     if (moved2) {
                                                         if (!moved) contextFolder = null
                                                         moved = true
@@ -596,33 +617,37 @@ fun HomeScreen(
                                 contentSources =
                                 documentContentSources[doc.id]
                                     ?: ExtractedContentSources(),
-                                modifier = Modifier
+                                modifier =
+                                Modifier
                                     .onGloballyPositioned {
                                         itemPos = it.positionInWindow()
                                         docItemWidth = it.size.width
                                     }
                                     .pointerInput(doc.id) {
-                                        val handler = android.os.Handler(
-                                            android.os.Looper.getMainLooper()
-                                        )
+                                        val handler =
+                                            android.os.Handler(
+                                                android.os.Looper.getMainLooper()
+                                            )
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
                                             val startPos = itemPos + down.position
                                             var moved = false
                                             var longPressed = false
-                                            val runnable = Runnable {
-                                                longPressed = true
-                                                haptic.performHapticFeedback(
-                                                    HapticFeedbackType.LongPress
-                                                )
-                                                contextPdf = doc
-                                                contextFolder = null
-                                                dragItem = DragItem(
-                                                    doc.id, false, doc.displayName
-                                                )
-                                                dragPosition = startPos
-                                                hasDragMoved = false
-                                            }
+                                            val runnable =
+                                                Runnable {
+                                                    longPressed = true
+                                                    haptic.performHapticFeedback(
+                                                        HapticFeedbackType.LongPress
+                                                    )
+                                                    contextPdf = doc
+                                                    contextFolder = null
+                                                    dragItem =
+                                                        DragItem(
+                                                            doc.id, false, doc.displayName
+                                                        )
+                                                    dragPosition = startPos
+                                                    hasDragMoved = false
+                                                }
                                             handler.postDelayed(
                                                 runnable,
                                                 UxConfig.Gesture.LONG_PRESS_HOME_MS
@@ -633,7 +658,8 @@ fun HomeScreen(
                                                 if (change.changedToUp()) {
                                                     handler.removeCallbacks(runnable)
                                                     if (longPressed && moved) {
-                                                        val target = findDropTarget(doc.id, false)
+                                                        val target =
+                                                            findDropTarget(doc.id, false)
                                                         if (target != null) {
                                                             viewModel.moveDocument(
                                                                 doc.id,
@@ -653,8 +679,9 @@ fun HomeScreen(
                                                 }
                                                 if (longPressed) {
                                                     val drag = change.positionChange()
-                                                    val moved2 = drag.getDistance() >
-                                                        UxConfig.Gesture.DRAG_THRESHOLD_PX
+                                                    val moved2 =
+                                                        drag.getDistance() >
+                                                            UxConfig.Gesture.DRAG_THRESHOLD_PX
                                                     if (moved2) {
                                                         if (!moved) contextPdf = null
                                                         moved = true
@@ -670,7 +697,8 @@ fun HomeScreen(
                             DropdownMenu(
                                 expanded = contextPdf?.id == doc.id,
                                 onDismissRequest = { contextPdf = null },
-                                offset = DpOffset(
+                                offset =
+                                DpOffset(
                                     with(density) { docItemWidth.toDp() },
                                     0.dp
                                 )
@@ -807,7 +835,8 @@ fun HomeScreen(
             val localX = dragPosition.x - rootOffset.x
             val localY = dragPosition.y - rootOffset.y
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .offset {
                         androidx.compose.ui.unit.IntOffset(
                             (localX - 60).toInt(),
@@ -858,7 +887,8 @@ fun HomeScreen(
                 shape = CircleShape,
                 containerColor = MaestroPrimary,
                 contentColor = Color.White,
-                elevation = FloatingActionButtonDefaults.elevation(
+                elevation =
+                FloatingActionButtonDefaults.elevation(
                     defaultElevation = UxConfig.Home.FAB_ELEVATION
                 )
             ) {
@@ -872,7 +902,8 @@ fun HomeScreen(
             DropdownMenu(
                 expanded = showFabMenu,
                 onDismissRequest = { showFabMenu = false },
-                modifier = Modifier.background(
+                modifier =
+                Modifier.background(
                     Color.White,
                     RoundedCornerShape(UxConfig.Home.FAB_MENU_CORNER)
                 )
@@ -912,7 +943,8 @@ fun HomeScreen(
         if (isMultiSelect) {
             val count = selectedDocIds.size
             Row(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .align(Alignment.BottomCenter)
                     .padding(UxConfig.Home.MERGE_BAR_MARGIN)
                     .fillMaxWidth()
@@ -964,13 +996,16 @@ fun HomeScreen(
                             showMergeOrderDialog = true
                         },
                         enabled = count >= 2,
-                        shape = RoundedCornerShape(
+                        shape =
+                        RoundedCornerShape(
                             UxConfig.Home.MERGE_BUTTON_CORNER
                         ),
-                        colors = ButtonDefaults.buttonColors(
+                        colors =
+                        ButtonDefaults.buttonColors(
                             containerColor = MaestroPrimary
                         ),
-                        contentPadding = PaddingValues(
+                        contentPadding =
+                        PaddingValues(
                             horizontal =
                             UxConfig.Home
                                 .MERGE_BUTTON_PADDING_H,
@@ -1065,7 +1100,8 @@ private fun HomeTopBar(
     avatarPath: String? = null
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(
+        modifier =
+        Modifier.fillMaxWidth().height(
             UxConfig.Home.TOP_BAR_HEIGHT
         ).background(Slate50).padding(horizontal = UxConfig.Home.TOP_BAR_PADDING_H),
         verticalAlignment = Alignment.CenterVertically
@@ -1106,7 +1142,8 @@ private fun HomeTopBar(
                 AsyncImage(
                     model = File(avatarPath),
                     contentDescription = "프로필",
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .size(30.dp)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop
@@ -1174,17 +1211,19 @@ private fun FolderGridItem(
     isDropTarget: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val borderMod = if (isDropTarget) {
-        Modifier.border(
-            UxConfig.Home.ITEM_BORDER_DROP_TARGET,
-            MaestroPrimary,
-            RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
-        )
-    } else {
-        Modifier
-    }
+    val borderMod =
+        if (isDropTarget) {
+            Modifier.border(
+                UxConfig.Home.ITEM_BORDER_DROP_TARGET,
+                MaestroPrimary,
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            )
+        } else {
+            Modifier
+        }
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .then(borderMod)
             .clip(RoundedCornerShape(UxConfig.Home.ITEM_CORNER))
             .shadow(
@@ -1202,7 +1241,8 @@ private fun FolderGridItem(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(UxConfig.Home.ITEM_ASPECT_RATIO)
+            modifier =
+            Modifier.fillMaxWidth().aspectRatio(UxConfig.Home.ITEM_ASPECT_RATIO)
                 .background(
                     if (isDropTarget) {
                         MaestroPrimary.copy(
@@ -1218,8 +1258,10 @@ private fun FolderGridItem(
                 Icons.Default.Folder,
                 contentDescription = null,
                 modifier = Modifier.size(UxConfig.Home.FOLDER_ICON_SIZE),
-                tint = MaestroPrimary.copy(
-                    alpha = if (isDropTarget) {
+                tint =
+                MaestroPrimary.copy(
+                    alpha =
+                    if (isDropTarget) {
                         UxConfig.Home.FOLDER_ICON_ALPHA_DROP
                     } else {
                         UxConfig.Home.FOLDER_ICON_ALPHA
@@ -1257,49 +1299,56 @@ private fun PdfGridItem(
         ExtractedContentSources(),
     modifier: Modifier = Modifier
 ) {
-    val thumbnail = remember(doc.uriString) {
-        var fd: android.os.ParcelFileDescriptor? = null
-        var renderer: PdfRenderer? = null
-        var page: PdfRenderer.Page? = null
-        try {
-            val path = Uri.parse(doc.uriString).path ?: return@remember null
-            val file = java.io.File(path)
-            if (!file.exists()) return@remember null
-            fd = android.os.ParcelFileDescriptor.open(
-                file, android.os.ParcelFileDescriptor.MODE_READ_ONLY
-            )
-            renderer = PdfRenderer(fd)
-            page = renderer.openPage(0)
-            val bmp = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-            bmp.eraseColor(android.graphics.Color.WHITE)
-            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            bmp
-        } catch (_: Throwable) {
-            null
-        } finally {
+    val thumbnail =
+        remember(doc.uriString) {
+            var fd: android.os.ParcelFileDescriptor? = null
+            var renderer: PdfRenderer? = null
+            var page: PdfRenderer.Page? = null
             try {
-                page?.close()
-            } catch (_: Throwable) {}
-            try {
-                renderer?.close()
-            } catch (_: Throwable) {}
-            try {
-                fd?.close()
-            } catch (_: Throwable) {}
+                val path = Uri.parse(doc.uriString).path ?: return@remember null
+                val file = java.io.File(path)
+                if (!file.exists()) return@remember null
+                fd =
+                    android.os.ParcelFileDescriptor.open(
+                        file, android.os.ParcelFileDescriptor.MODE_READ_ONLY
+                    )
+                renderer = PdfRenderer(fd)
+                page = renderer.openPage(0)
+                val bmp = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                bmp.eraseColor(android.graphics.Color.WHITE)
+                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                bmp
+            } catch (_: Throwable) {
+                null
+            } finally {
+                try {
+                    page?.close()
+                } catch (_: Throwable) {
+                }
+                try {
+                    renderer?.close()
+                } catch (_: Throwable) {
+                }
+                try {
+                    fd?.close()
+                } catch (_: Throwable) {
+                }
+            }
         }
-    }
 
-    val selBorder = if (isSelected) {
-        Modifier.border(
-            UxConfig.Home.ITEM_BORDER_DROP_TARGET,
-            MaestroPrimary,
-            RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
-        )
-    } else {
-        Modifier
-    }
+    val selBorder =
+        if (isSelected) {
+            Modifier.border(
+                UxConfig.Home.ITEM_BORDER_DROP_TARGET,
+                MaestroPrimary,
+                RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
+            )
+        } else {
+            Modifier
+        }
     Column(
-        modifier = modifier
+        modifier =
+        modifier
             .then(selBorder)
             .clip(
                 RoundedCornerShape(UxConfig.Home.ITEM_CORNER)
@@ -1315,7 +1364,8 @@ private fun PdfGridItem(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .aspectRatio(UxConfig.Home.ITEM_ASPECT_RATIO)
                 .background(MaestroSurfaceContainer),
@@ -1332,7 +1382,8 @@ private fun PdfGridItem(
                 Icon(
                     Icons.Default.PictureAsPdf,
                     contentDescription = null,
-                    modifier = Modifier.size(
+                    modifier =
+                    Modifier.size(
                         UxConfig.Home.PDF_PLACEHOLDER_ICON_SIZE
                     ),
                     tint = MaestroOutlineVariant
@@ -1340,7 +1391,8 @@ private fun PdfGridItem(
             }
             if (doc.isPinned) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                 ) {
@@ -1364,20 +1416,23 @@ private fun PdfGridItem(
             if (isExtractionDone) {
                 ContentSourceBadges(
                     sources = contentSources,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                 )
             } else if (isExtractionFailed) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                 ) {
                     Icon(
                         Icons.Default.Cancel,
                         contentDescription = "추출 실패 또는 누락",
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .size(18.dp),
                         tint = MaestroError
                     )
@@ -1385,7 +1440,8 @@ private fun PdfGridItem(
             }
             if (isExtracting) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .align(Alignment.BottomEnd)
                         .padding(6.dp)
                 ) {
@@ -1397,21 +1453,25 @@ private fun PdfGridItem(
             }
             if (isMultiSelectMode) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .align(Alignment.TopEnd)
                         .padding(UxConfig.Home.CHECKBOX_OFFSET)
                 ) {
                     Icon(
-                        imageVector = if (isSelected) {
+                        imageVector =
+                        if (isSelected) {
                             Icons.Default.CheckCircle
                         } else {
                             Icons.Default.RadioButtonUnchecked
                         },
                         contentDescription = null,
-                        modifier = Modifier.size(
+                        modifier =
+                        Modifier.size(
                             UxConfig.Home.CHECKBOX_SIZE
                         ),
-                        tint = if (isSelected) {
+                        tint =
+                        if (isSelected) {
                             MaestroPrimary
                         } else {
                             Slate500
@@ -1441,10 +1501,7 @@ private fun PdfGridItem(
 }
 
 @Composable
-private fun ContentSourceBadges(
-    sources: ExtractedContentSources,
-    modifier: Modifier = Modifier
-) {
+private fun ContentSourceBadges(sources: ExtractedContentSources, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1464,7 +1521,8 @@ private fun ContentSourceBadges(
 @Composable
 private fun SourceCheckCircle() {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .size(22.dp)
             .clip(CircleShape)
             .background(Color(0xFF10B981)),
@@ -1480,11 +1538,10 @@ private fun SourceCheckCircle() {
 }
 
 @Composable
-private fun SourceDoneCircle(
-    label: String
-) {
+private fun SourceDoneCircle(label: String) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .size(22.dp)
             .clip(CircleShape)
             .background(Color(0xFF10B981)),
@@ -1506,7 +1563,8 @@ private fun ExtractionProgressBadge(
     sources: List<ExtractionSourceProgress> = emptyList()
 ) {
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .background(
                 MaestroSurfaceContainerLowest.copy(alpha = 0.94f),
                 RoundedCornerShape(8.dp)
@@ -1517,27 +1575,29 @@ private fun ExtractionProgressBadge(
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            val displaySources = sources.ifEmpty {
-                listOf(
-                    ExtractionSourceProgress(
-                        label = "추출",
-                        progress = progress
+            val displaySources =
+                sources.ifEmpty {
+                    listOf(
+                        ExtractionSourceProgress(
+                            label = "추출",
+                            progress = progress
+                        )
                     )
-                )
-            }
+                }
             displaySources.forEach { item ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement =
                     Arrangement.spacedBy(5.dp)
                 ) {
-                    val color = when (item.status) {
-                        ExtractionSourceStatus.FAILED ->
-                            MaestroError
-                        ExtractionSourceStatus.DONE ->
-                            Color(0xFF10B981)
-                        else -> MaestroPrimary
-                    }
+                    val color =
+                        when (item.status) {
+                            ExtractionSourceStatus.FAILED ->
+                                MaestroError
+                            ExtractionSourceStatus.DONE ->
+                                Color(0xFF10B981)
+                            else -> MaestroPrimary
+                        }
                     CircularProgressIndicator(
                         progress = {
                             item.progress.coerceIn(0, 100) /
@@ -1572,48 +1632,53 @@ private fun MovePickerDialog(
     onConfirm: (targetFolderId: String?) -> Unit
 ) {
     // Collect excluded IDs (the folder itself + all descendants)
-    val excludedIds = remember(excludeFolderId, allFolders) {
-        if (excludeFolderId == null) {
-            emptySet()
-        } else {
-            val set = mutableSetOf(excludeFolderId)
-            fun collectChildren(parentId: String) {
-                allFolders.filter { it.parentId == parentId }.forEach {
-                    set += it.id
-                    collectChildren(it.id)
+    val excludedIds =
+        remember(excludeFolderId, allFolders) {
+            if (excludeFolderId == null) {
+                emptySet()
+            } else {
+                val set = mutableSetOf(excludeFolderId)
+
+                fun collectChildren(parentId: String) {
+                    allFolders.filter { it.parentId == parentId }.forEach {
+                        set += it.id
+                        collectChildren(it.id)
+                    }
                 }
+                collectChildren(excludeFolderId)
+                set
             }
-            collectChildren(excludeFolderId)
-            set
         }
-    }
 
     var browseFolderId by remember { mutableStateOf<String?>(null) }
 
     // Build breadcrumb path
-    val breadcrumbs = remember(browseFolderId, allFolders) {
-        val path = mutableListOf<Pair<String?, String>>() // id to name
-        path += (null to "PDF Studio")
-        if (browseFolderId != null) {
-            val chain = mutableListOf<Folder>()
-            var cur = browseFolderId
-            while (cur != null) {
-                val f = allFolders.find { it.id == cur } ?: break
-                chain += f
-                cur = f.parentId
+    val breadcrumbs =
+        remember(browseFolderId, allFolders) {
+            val path = mutableListOf<Pair<String?, String>>() // id to name
+            path += (null to "PDF Studio")
+            if (browseFolderId != null) {
+                val chain = mutableListOf<Folder>()
+                var cur = browseFolderId
+                while (cur != null) {
+                    val f = allFolders.find { it.id == cur } ?: break
+                    chain += f
+                    cur = f.parentId
+                }
+                chain.reversed().forEach { path += (it.id to it.name) }
             }
-            chain.reversed().forEach { path += (it.id to it.name) }
+            path
         }
-        path
-    }
 
-    val visibleFolders = allFolders.filter {
-        it.parentId == browseFolderId && it.id !in excludedIds
-    }
+    val visibleFolders =
+        allFolders.filter {
+            it.parentId == browseFolderId && it.id !in excludedIds
+        }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth().heightIn(
+        modifier =
+        Modifier.fillMaxWidth().heightIn(
             min = UxConfig.Home.MOVE_DIALOG_MIN_HEIGHT,
             max = UxConfig.Home.MOVE_DIALOG_MAX_HEIGHT
         ),
@@ -1653,7 +1718,8 @@ private fun MovePickerDialog(
                             name,
                             fontSize = UxConfig.Home.MOVE_DIALOG_BREADCRUMB_FONT_SIZE,
                             color = if (id == browseFolderId) MaestroPrimary else Slate500,
-                            fontWeight = if (id == browseFolderId) {
+                            fontWeight =
+                            if (id == browseFolderId) {
                                 FontWeight.Bold
                             } else {
                                 FontWeight.Normal
@@ -1668,7 +1734,8 @@ private fun MovePickerDialog(
         text = {
             if (visibleFolders.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(
+                    modifier =
+                    Modifier.fillMaxWidth().height(
                         UxConfig.Home.MOVE_DIALOG_EMPTY_HEIGHT
                     ),
                     contentAlignment = Alignment.Center
@@ -1697,13 +1764,15 @@ private fun MovePickerDialog(
                 }
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(
+                    verticalArrangement =
+                    Arrangement.spacedBy(
                         UxConfig.Home.MOVE_DIALOG_LIST_SPACING
                     )
                 ) {
                     items(visibleFolders, key = { it.id }) { folder ->
                         Row(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(UxConfig.Home.MOVE_DIALOG_ROW_CORNER))
                                 .clickable { browseFolderId = folder.id }
@@ -1718,7 +1787,8 @@ private fun MovePickerDialog(
                                     vertical = UxConfig.Home.MOVE_DIALOG_ROW_PADDING_V
                                 ),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(
+                            horizontalArrangement =
+                            Arrangement.spacedBy(
                                 UxConfig.Home.MOVE_DIALOG_ROW_SPACING
                             )
                         ) {
@@ -1726,7 +1796,8 @@ private fun MovePickerDialog(
                                 Icons.Default.Folder,
                                 contentDescription = null,
                                 modifier = Modifier.size(UxConfig.Home.MOVE_DIALOG_ICON_SIZE),
-                                tint = MaestroPrimary.copy(
+                                tint =
+                                MaestroPrimary.copy(
                                     alpha = UxConfig.Home.MOVE_DIALOG_ICON_ALPHA
                                 )
                             )
@@ -1765,9 +1836,10 @@ private fun MergeOrderDialog(
     onDismiss: () -> Unit,
     onConfirm: (orderedIds: List<String>) -> Unit
 ) {
-    val orderedDocs = remember(docs) {
-        mutableStateListOf(*docs.toTypedArray())
-    }
+    val orderedDocs =
+        remember(docs) {
+            mutableStateListOf(*docs.toTypedArray())
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1784,7 +1856,8 @@ private fun MergeOrderDialog(
                 items(orderedDocs.size) { index ->
                     val doc = orderedDocs[index]
                     Row(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
                             .background(
                                 Slate50,
@@ -1802,7 +1875,8 @@ private fun MergeOrderDialog(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaestroPrimary,
-                            modifier = Modifier.width(
+                            modifier =
+                            Modifier.width(
                                 24.dp
                             )
                         )
@@ -1813,7 +1887,8 @@ private fun MergeOrderDialog(
                             maxLines = 1,
                             overflow =
                             TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(
+                            modifier =
+                            Modifier.weight(
                                 1f
                             )
                         )
@@ -1832,7 +1907,8 @@ private fun MergeOrderDialog(
                                 }
                             },
                             enabled = index > 0,
-                            modifier = Modifier.size(
+                            modifier =
+                            Modifier.size(
                                 32.dp
                             )
                         ) {
@@ -1841,7 +1917,8 @@ private fun MergeOrderDialog(
                                     .KeyboardArrowUp,
                                 contentDescription =
                                 "위로",
-                                tint = if (index > 0) {
+                                tint =
+                                if (index > 0) {
                                     Slate500
                                 } else {
                                     Slate200
@@ -1866,9 +1943,11 @@ private fun MergeOrderDialog(
                                     )
                                 }
                             },
-                            enabled = index <
+                            enabled =
+                            index <
                                 orderedDocs.size - 1,
-                            modifier = Modifier.size(
+                            modifier =
+                            Modifier.size(
                                 32.dp
                             )
                         ) {
@@ -1877,7 +1956,8 @@ private fun MergeOrderDialog(
                                     .KeyboardArrowDown,
                                 contentDescription =
                                 "아래로",
-                                tint = if (
+                                tint =
+                                if (
                                     index <
                                     orderedDocs
                                         .size - 1

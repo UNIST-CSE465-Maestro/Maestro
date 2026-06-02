@@ -19,7 +19,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
-
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
@@ -29,34 +28,36 @@ class SettingsViewModelTest {
     /** Stub LlmService that returns predetermined validation results */
     private var nextValidationResult = true
 
-    private val stubLlmService = object : LlmService {
-        override fun stream(
-            messages: List<ChatMessage>,
-            systemPrompt: String?,
-            images: List<ByteArray>
-        ): Flow<String> = emptyFlow()
+    private val stubLlmService =
+        object : LlmService {
+            override fun stream(
+                messages: List<ChatMessage>,
+                systemPrompt: String?,
+                images: List<ByteArray>
+            ): Flow<String> = emptyFlow()
 
-        override suspend fun complete(
-            messages: List<ChatMessage>,
-            systemPrompt: String?,
-            images: List<ByteArray>
-        ): String = ""
+            override suspend fun complete(
+                messages: List<ChatMessage>,
+                systemPrompt: String?,
+                images: List<ByteArray>
+            ): String = ""
 
-        override suspend fun validateApiKey(apiKey: String): Boolean = nextValidationResult
-        override suspend fun fetchModels(): List<String> = emptyList()
+            override suspend fun validateApiKey(apiKey: String): Boolean = nextValidationResult
 
-        override suspend fun warmUp(): Result<Unit> =
-            Result.success(Unit)
-    }
+            override suspend fun fetchModels(): List<String> = emptyList()
+
+            override suspend fun warmUp(): Result<Unit> = Result.success(Unit)
+        }
 
     @Before
     fun setup() {
         settingsRepo = FakeSettingsRepository()
-        viewModel = SettingsViewModel(
-            settingsRepo,
-            stubLlmService,
-            mockk(relaxed = true)
-        )
+        viewModel =
+            SettingsViewModel(
+                settingsRepo,
+                stubLlmService,
+                mockk(relaxed = true)
+            )
     }
 
     @Test

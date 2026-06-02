@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class PdfMerger(private val context: Context) {
-
     /**
      * Merge multiple PDFs into one.
      * @param pdfUris list of PDF file URIs to merge
@@ -23,10 +22,11 @@ class PdfMerger(private val context: Context) {
     suspend fun merge(pdfUris: List<Uri>, outputName: String): Uri? = withContext(Dispatchers.IO) {
         if (pdfUris.size < 2) return@withContext null
 
-        val pdfDir = File(
-            context.filesDir,
-            "pdfs"
-        ).also { it.mkdirs() }
+        val pdfDir =
+            File(
+                context.filesDir,
+                "pdfs"
+            ).also { it.mkdirs() }
         val outId = UUID.randomUUID().toString()
         val outFile = File(pdfDir, "$outId.pdf")
         val newDoc = PdfDocument()
@@ -34,18 +34,20 @@ class PdfMerger(private val context: Context) {
         try {
             var pageIndex = 0
             for (uri in pdfUris) {
-                val path = uri.path
-                    ?: continue
+                val path =
+                    uri.path
+                        ?: continue
                 val file = File(path)
                 if (!file.exists()) continue
 
                 var fd: ParcelFileDescriptor? = null
                 var renderer: PdfRenderer? = null
                 try {
-                    fd = ParcelFileDescriptor.open(
-                        file,
-                        ParcelFileDescriptor.MODE_READ_ONLY
-                    )
+                    fd =
+                        ParcelFileDescriptor.open(
+                            file,
+                            ParcelFileDescriptor.MODE_READ_ONLY
+                        )
                     renderer = PdfRenderer(fd)
                     for (i in 0 until renderer.pageCount) {
                         var srcPage: PdfRenderer.Page? =
@@ -54,11 +56,12 @@ class PdfMerger(private val context: Context) {
                             srcPage = renderer.openPage(i)
                             val w = srcPage.width
                             val h = srcPage.height
-                            val bmp = Bitmap.createBitmap(
-                                w,
-                                h,
-                                Bitmap.Config.ARGB_8888
-                            )
+                            val bmp =
+                                Bitmap.createBitmap(
+                                    w,
+                                    h,
+                                    Bitmap.Config.ARGB_8888
+                                )
                             bmp.eraseColor(
                                 android.graphics.Color.WHITE
                             )

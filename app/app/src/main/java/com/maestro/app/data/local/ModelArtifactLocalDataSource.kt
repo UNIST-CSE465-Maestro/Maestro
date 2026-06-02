@@ -89,8 +89,9 @@ data class ModelArtifactState(
     val fileSizeBytes: Long = 0L,
     val updatedAt: Long? = null
 ) {
-    val isReady: Boolean = !filePath.isNullOrBlank() &&
-        fileSizeBytes > 0L
+    val isReady: Boolean =
+        !filePath.isNullOrBlank() &&
+            fileSizeBytes > 0L
 }
 
 class ModelArtifactLocalDataSource(
@@ -98,6 +99,7 @@ class ModelArtifactLocalDataSource(
 ) {
     private val modelDir =
         File(context.filesDir, "models").also { it.mkdirs() }
+
     init {
         syncBundledArtifacts()
     }
@@ -106,18 +108,14 @@ class ModelArtifactLocalDataSource(
     val states: StateFlow<List<ModelArtifactState>> =
         _states.asStateFlow()
 
-    fun getState(type: ModelArtifactType): ModelArtifactState =
-        stateFor(type)
+    fun getState(type: ModelArtifactType): ModelArtifactState = stateFor(type)
 
     fun getModelFile(type: ModelArtifactType): File? {
         return candidateFiles(type)
             .firstOrNull { it.exists() && it.length() > 0L }
     }
 
-    fun saveModel(
-        type: ModelArtifactType,
-        sourceUri: Uri
-    ): ModelArtifactState {
+    fun saveModel(type: ModelArtifactType, sourceUri: Uri): ModelArtifactState {
         val out = File(modelDir, type.fileName)
         context.contentResolver.openInputStream(sourceUri).use { input ->
             requireNotNull(input) {
@@ -137,14 +135,16 @@ class ModelArtifactLocalDataSource(
         _states.value = loadStates()
     }
 
-    private fun loadStates(): List<ModelArtifactState> =
-        ModelArtifactType.entries.map { stateFor(it) }
+    private fun loadStates(): List<ModelArtifactState> = ModelArtifactType.entries.map {
+        stateFor(
+            it
+        )
+    }
 
-    private fun stateFor(
-        type: ModelArtifactType
-    ): ModelArtifactState {
-        val file = candidateFiles(type)
-            .firstOrNull { it.exists() && it.length() > 0L }
+    private fun stateFor(type: ModelArtifactType): ModelArtifactState {
+        val file =
+            candidateFiles(type)
+                .firstOrNull { it.exists() && it.length() > 0L }
         return ModelArtifactState(
             type = type,
             label = type.label,

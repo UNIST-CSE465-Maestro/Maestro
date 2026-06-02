@@ -1,8 +1,12 @@
 package com.maestro.app.ui.components
 
 import android.graphics.BitmapFactory
+import android.util.TypedValue
+import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +30,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,8 +38,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
@@ -43,6 +49,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -50,8 +57,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -70,14 +79,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.maestro.app.data.local.ConversationLocalDataSource
 import com.maestro.app.data.local.ConversationSummary
 import com.maestro.app.data.local.LocalMlKitContentExtractor
@@ -88,22 +100,31 @@ import com.maestro.app.data.remote.ClaudeClient
 import com.maestro.app.data.remote.LlmClient
 import com.maestro.app.data.remote.OpenAiClient
 import com.maestro.app.domain.model.ChatMessage
+import com.maestro.app.domain.model.ConceptKnowledge
 import com.maestro.app.domain.model.CropCapturePayload
 import com.maestro.app.domain.model.EngineeringMechanicsConceptCatalog
 import com.maestro.app.domain.model.GeneratedQuizQuestion
-import com.maestro.app.domain.model.QuizGenerationRequest
 import com.maestro.app.domain.model.LlmProvider
+import com.maestro.app.domain.model.QuizGenerationRequest
 import com.maestro.app.domain.model.SelectedTextQuizPayload
 import com.maestro.app.domain.repository.SettingsRepository
 import com.maestro.app.domain.service.LlmService
+import com.maestro.app.domain.service.QuizPhase
+import com.maestro.app.domain.service.QuizProgress
 import com.maestro.app.domain.service.QuizService
 import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.viewer.LlmConnectionState
-import kotlinx.coroutines.launch
+import io.noties.markwon.Markwon
+import io.noties.markwon.ext.latex.JLatexMathPlugin
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private fun buildSystemPrompt(
     documentContent: String?,
@@ -111,23 +132,26 @@ private fun buildSystemPrompt(
     userPrompt: String,
     extraContext: String
 ): String {
-    val base = "You are a helpful AI assistant " +
-        "integrated into Maestro, a PDF " +
-        "annotation app. Help the user " +
-        "understand and work with their documents. " +
-        "Always respond in Korean."
+    val base =
+        "You are a helpful AI assistant " +
+            "integrated into Maestro, a PDF " +
+            "annotation app. Help the user " +
+            "understand and work with their documents. " +
+            "Always respond in Korean."
     if (documentContent.isNullOrBlank()) return base
-    val context = buildFocusedDocumentContext(
-        documentContent = documentContent,
-        pageIndex = pageIndex,
-        query = userPrompt,
-        maxChars = CHAT_CONTEXT_CHARS
-    )
-    val extra = extraContext.takeIf { it.isNotBlank() }
-        ?.let {
-            "\n\nAdditional OCR context from the selected image region:\n\n$it"
-        }
-        .orEmpty()
+    val context =
+        buildFocusedDocumentContext(
+            documentContent = documentContent,
+            pageIndex = pageIndex,
+            query = userPrompt,
+            maxChars = CHAT_CONTEXT_CHARS
+        )
+    val extra =
+        extraContext.takeIf { it.isNotBlank() }
+            ?.let {
+                "\n\nAdditional OCR context from the selected image region:\n\n$it"
+            }
+            .orEmpty()
     return "$base\n\n" +
         "The user is currently viewing a document. " +
         "Use this focused context from the saved parsed document. " +
@@ -150,21 +174,23 @@ private fun buildFocusedDocumentContext(
     if (currentPage.isNotBlank()) {
         sections += "## Current Page ${pageIndex + 1}\n$currentPage"
     }
-    val relevant = relevantSnippets(
-        documentContent = documentContent,
-        query = query.orEmpty(),
-        excluded = currentPage,
-        maxChars = maxChars / 2
-    )
+    val relevant =
+        relevantSnippets(
+            documentContent = documentContent,
+            query = query.orEmpty(),
+            excluded = currentPage,
+            maxChars = maxChars / 2
+        )
     if (relevant.isNotBlank()) {
         sections += "## Related Snippets\n$relevant"
     } else if (currentPage.isBlank()) {
         sections += "## Opening Content\n" +
             documentContent.take(maxChars / 2)
     }
-    val joined = sections.joinToString("\n\n").ifBlank {
-        documentContent
-    }
+    val joined =
+        sections.joinToString("\n\n").ifBlank {
+            documentContent
+        }
     return joined.take(maxChars)
 }
 
@@ -185,118 +211,342 @@ private fun pageSection(documentContent: String, pageIndex: Int): String {
     val pattern = Regex("(?m)^# Page (\\d+)\\s*$")
     val matches = pattern.findAll(documentContent).toList()
     if (matches.isEmpty()) return ""
-    val matchIndex = matches.indexOfFirst {
-        it.groupValues.getOrNull(1)?.toIntOrNull() == target
-    }
+    val matchIndex =
+        matches.indexOfFirst {
+            it.groupValues.getOrNull(1)?.toIntOrNull() == target
+        }
     if (matchIndex < 0) return ""
     val start = matches[matchIndex].range.last + 1
-    val end = matches.getOrNull(matchIndex + 1)?.range?.first
-        ?: documentContent.length
+    val end =
+        matches.getOrNull(matchIndex + 1)?.range?.first
+            ?: documentContent.length
     return documentContent.substring(start, end)
         .trim()
 }
 
 private fun buildDocumentQuizContext(documentContent: String): String {
     if (documentContent.isBlank()) return ""
+    val rawPageSections = numberedPageSections(documentContent)
+    val candidateChunks =
+        if (rawPageSections.isNotEmpty()) {
+            rawPageSections
+                .dropQuizBoundaryPages()
+                .quizChunksFromPages()
+        } else if (rawPageSections.isEmpty()) {
+            quizChunksFromParagraphs(documentContent)
+        } else {
+            emptyList()
+        }
+    val sampleContent =
+        candidateChunks
+            .sortedByDescending { it.score }
+            .take(DOCUMENT_SAMPLE_COUNT)
+            .joinToString("\n\n") { chunk ->
+                "## ${chunk.label}\n${chunk.text.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
+            }
+    if (sampleContent.isBlank()) return ""
     val sections = mutableListOf<String>()
     val outline = documentOutline(documentContent)
     if (outline.isNotBlank()) {
         sections += "## Document Outline\n$outline"
     }
-    val pageSections = numberedPageSections(documentContent)
-    if (pageSections.isNotEmpty()) {
-        sections += balancedPageSamples(pageSections)
-    } else {
-        sections += balancedParagraphSamples(documentContent)
-    }
+    sections += sampleContent
     return sections.joinToString("\n\n")
         .take(QUIZ_CONTEXT_CHARS)
 }
 
+private fun buildPageRangeQuizContext(documentContent: String, pages: Set<Int>): String {
+    if (documentContent.isBlank()) return ""
+    val pageSections = numberedPageSections(documentContent)
+    if (pageSections.isEmpty()) return buildDocumentQuizContext(documentContent)
+    val chunks =
+        pageSections
+            .filter { (page, _) -> page in pages }
+            .filterNot { (_, body) -> body.isAdministrativeQuizPage() }
+            .quizChunksFromPages()
+    return chunks.sortedByDescending { it.score }
+        .take(DOCUMENT_SAMPLE_COUNT)
+        .joinToString("\n\n") { chunk ->
+            "## ${chunk.label}\n${chunk.text.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
+        }.take(QUIZ_CONTEXT_CHARS)
+}
+
+private fun buildCurrentPageQuizContext(documentContent: String, pageIndex: Int): String {
+    val pageBody = pageSection(documentContent, pageIndex)
+    if (pageBody.isBlank() || pageBody.isAdministrativeQuizPage()) return ""
+    val chunks = listOf(pageIndex + 1 to pageBody).quizChunksFromPages()
+    return chunks.sortedByDescending { it.score }
+        .take(DOCUMENT_SAMPLE_COUNT)
+        .joinToString("\n\n") { chunk ->
+            "## ${chunk.label}\n${chunk.text.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
+        }.take(QUIZ_CONTEXT_CHARS)
+}
+
 private fun buildWeaknessQuizContext(
     documentContent: String,
+    weakConcepts: List<ConceptKnowledge>,
     quizHistory: List<QuizResponseRecord>,
     fallbackPageIndex: Int
 ): String {
-    val weakRecords = quizHistory
-        .filterNot { it.isCorrect }
-        .sortedByDescending { it.answeredAt }
-        .take(5)
-    if (weakRecords.isEmpty()) {
-        return buildDocumentQuizContext(documentContent)
+    val chunks = quizCandidateChunks(documentContent)
+    if (chunks.isEmpty()) {
+        return ""
     }
-    val query = weakRecords.joinToString(" ") {
-        it.question + " " + it.sourceSentence
-    }
-    val related = relevantSnippets(
-        documentContent = documentContent,
-        query = query,
-        excluded = "",
-        maxChars = QUIZ_CONTEXT_CHARS - 1200
-    )
-    if (related.isBlank()) {
-        return buildFocusedDocumentContext(
-            documentContent = documentContent,
-            pageIndex = fallbackPageIndex,
-            query = query,
-            maxChars = QUIZ_CONTEXT_CHARS
-        )
-    }
-    val outline = documentOutline(documentContent)
+    val weakConceptIds =
+        weakConcepts
+            .sortedBy { it.mastery }
+            .take(WEAK_KC_COUNT)
+            .map { it.id }
+    val conceptFiltered =
+        if (weakConceptIds.isNotEmpty()) {
+            chunks.filter { chunk ->
+                EngineeringMechanicsConceptCatalog
+                    .bestMatch(chunk.text)
+                    .id in weakConceptIds
+            }
+        } else {
+            chunks
+        }
+    val sourceCounts =
+        quizHistory.mapNotNull {
+            it.sourceSentence.takeIf { source -> source.isNotBlank() }
+        }
+    val selected =
+        conceptFiltered
+            .sortedWith(
+                compareBy<QuizCandidateChunk> { chunk ->
+                    sourceCounts.count { source ->
+                        chunk.text.contains(source.take(40), ignoreCase = true)
+                    }
+                }.thenByDescending { it.score }
+            )
+            .take(WEAKNESS_SAMPLE_COUNT)
+    if (selected.isEmpty()) return ""
+    val weakLabel =
+        weakConcepts
+            .filter { it.id in weakConceptIds }
+            .joinToString(", ") { "${it.name} ${(it.mastery * 100).toInt()}%" }
+            .ifBlank {
+                "low practice concepts"
+            }
     return listOf(
-        "## Weak Concepts",
-        weakRecords.joinToString("\n") {
-            "- L${it.bloomLevel}: ${it.question.take(120)}"
-        },
-        "## Document Outline\n$outline",
-        "## Related Weakness Snippets\n$related"
+        "## Weak KC targets\n$weakLabel",
+        selected.joinToString("\n\n") { chunk ->
+            "## ${chunk.label}\n${chunk.text.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
+        }
     ).joinToString("\n\n").take(QUIZ_CONTEXT_CHARS)
 }
 
-private fun numberedPageSections(
-    documentContent: String
-): List<Pair<Int, String>> {
+private fun numberedPageSections(documentContent: String): List<Pair<Int, String>> {
     val pattern = Regex("(?m)^# Page (\\d+)\\s*$")
     val matches = pattern.findAll(documentContent).toList()
     return matches.mapIndexedNotNull { index, match ->
-        val page = match.groupValues.getOrNull(1)?.toIntOrNull()
-            ?: return@mapIndexedNotNull null
+        val page =
+            match.groupValues.getOrNull(1)?.toIntOrNull()
+                ?: return@mapIndexedNotNull null
         val start = match.range.last + 1
-        val end = matches.getOrNull(index + 1)?.range?.first
-            ?: documentContent.length
+        val end =
+            matches.getOrNull(index + 1)?.range?.first
+                ?: documentContent.length
         page to documentContent.substring(start, end).trim()
     }.filter { it.second.isNotBlank() }
 }
 
-private fun balancedPageSamples(
-    pages: List<Pair<Int, String>>
-): String {
-    val selected = if (pages.size <= DOCUMENT_SAMPLE_COUNT) {
-        pages
-    } else {
-        (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
-            pages[(index * (pages.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1)))
-                .roundToInt()]
-        }.distinctBy { it.first }
-    }
+private fun balancedPageSamples(pages: List<Pair<Int, String>>): String {
+    val selected =
+        if (pages.size <= DOCUMENT_SAMPLE_COUNT) {
+            pages
+        } else {
+            (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
+                pages[
+                    (index * (pages.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1)))
+                        .roundToInt()
+                ]
+            }.distinctBy { it.first }
+        }
     return selected.joinToString("\n\n") { (page, body) ->
         "## Page $page\n${body.take(DOCUMENT_PAGE_SAMPLE_CHARS)}"
     }
 }
 
-private fun balancedParagraphSamples(documentContent: String): String {
-    val paragraphs = documentContent.split(Regex("\\n\\s*\\n"))
-        .map { it.trim() }
-        .filter { it.length >= 80 }
-    if (paragraphs.isEmpty()) return documentContent.take(QUIZ_CONTEXT_CHARS)
-    val selected = if (paragraphs.size <= DOCUMENT_SAMPLE_COUNT) {
-        paragraphs
+private fun List<Pair<Int, String>>.dropQuizBoundaryPages(): List<Pair<Int, String>> {
+    if (size <= 2) return emptyList()
+    return drop(1).dropLast(1)
+        .filterNot { (_, body) -> body.isAdministrativeQuizPage() }
+}
+
+private data class QuizCandidateChunk(
+    val label: String,
+    val text: String,
+    val score: Int
+)
+
+private fun quizCandidateChunks(documentContent: String): List<QuizCandidateChunk> {
+    val pages = numberedPageSections(documentContent)
+    return if (pages.isNotEmpty()) {
+        pages.dropQuizBoundaryPages().quizChunksFromPages()
     } else {
-        (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
-            paragraphs[(index * (paragraphs.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1)))
-                .roundToInt()]
+        quizChunksFromParagraphs(documentContent)
+    }
+}
+
+private fun List<Pair<Int, String>>.quizChunksFromPages(): List<QuizCandidateChunk> {
+    return flatMap { (page, body) ->
+        body.splitQuizChunks().mapIndexedNotNull { index, chunk ->
+            val score = chunk.quizWorthinessScore()
+            if (score >= QUIZ_WORTHY_MIN_SCORE) {
+                QuizCandidateChunk(
+                    label = "Page $page · chunk ${index + 1}",
+                    text = chunk,
+                    score = score
+                )
+            } else {
+                null
+            }
         }
     }
+}
+
+private fun quizChunksFromParagraphs(documentContent: String): List<QuizCandidateChunk> {
+    val paragraphs = documentContent.splitQuizChunks()
+    val bodyParagraphs =
+        if (paragraphs.size > 4) {
+            paragraphs.drop(1).dropLast(1)
+        } else {
+            paragraphs
+        }
+    return bodyParagraphs.mapIndexedNotNull { index, chunk ->
+        val score = chunk.quizWorthinessScore()
+        if (score >= QUIZ_WORTHY_MIN_SCORE) {
+            QuizCandidateChunk(
+                label = "Concept chunk ${index + 1}",
+                text = chunk,
+                score = score
+            )
+        } else {
+            null
+        }
+    }
+}
+
+private fun String.isAdministrativeQuizPage(): Boolean {
+    val lower = lowercase(Locale.US)
+    val blockedTerms =
+        listOf(
+            "course intro",
+            "instructor",
+            "office hr",
+            "office hour",
+            "teaching assistant",
+            "copyright",
+            "mcgraw-hill",
+            "references",
+            "bibliography",
+            "thank you",
+            "appendix",
+            "homework",
+            "assignment",
+            "exam",
+            "grading",
+            "grade",
+            "policy",
+            "attendance",
+            "covid",
+            "syllabus",
+            "office",
+            "@unist.ac.kr"
+        )
+    return blockedTerms.count { lower.containsAdminTerm(it) } >= 2
+}
+
+private fun String.splitQuizChunks(): List<String> {
+    return split(Regex("\\n\\s*\\n|(?m)^[-•]\\s+"))
+        .flatMap { chunk ->
+            val trimmed = chunk.normalizeQuizText()
+            if (trimmed.length > 700) {
+                trimmed.chunked(600)
+            } else {
+                listOf(trimmed)
+            }
+        }
+        .map { it.normalizeQuizText() }
+        .filter { it.length in 80..900 }
+        .filterNot { it.isAdministrativeQuizPage() }
+}
+
+private fun String.normalizeQuizText(): String = lineSequence()
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .joinToString(" ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+
+/**
+ * Matches an admin/boilerplate term with word boundaries for plain word terms
+ * (so "exam" no longer matches "example", "ta" no longer matches "data"), while
+ * keeping substring matching for terms with punctuation (e.g. "@unist.ac.kr",
+ * "mcgraw-hill").
+ */
+private fun String.containsAdminTerm(term: String): Boolean {
+    val trimmed = term.trim()
+    return if (trimmed.matches(Regex("[a-z0-9 ]+"))) {
+        Regex("\\b${Regex.escape(trimmed)}\\b").containsMatchIn(this)
+    } else {
+        contains(term)
+    }
+}
+
+private fun String.quizWorthinessScore(): Int {
+    val lower = lowercase(Locale.US)
+    val adminPenalty =
+        QUIZ_ADMIN_TERMS.count { term ->
+            lower.containsAdminTerm(term)
+        } * 8
+    if (adminPenalty >= 16) return 0
+    val conceptScore =
+        EngineeringMechanicsConceptCatalog.concepts.maxOf { concept ->
+            concept.keywords.sumOf { keyword ->
+                Regex("\\b${Regex.escape(keyword.lowercase(Locale.US))}\\b")
+                    .findAll(lower)
+                    .count()
+            }
+        } * 8
+    if (conceptScore == 0) return 0
+    val explanationScore = QUIZ_EXPLANATION_TERMS.count { lower.contains(it) } * 2
+    val mathScore =
+        listOf("=", "m/s", "rad", "ft/s", "kg", "n ", "lb").count {
+            lower.contains(it)
+        } * 2
+    val densityScore = if (count { it.isLetterOrDigit() } >= 60) 2 else 0
+    return conceptScore + explanationScore + mathScore + densityScore - adminPenalty
+}
+
+private fun String.hasKcQuizEvidence(): Boolean = quizWorthinessScore() >= QUIZ_WORTHY_MIN_SCORE
+
+private fun balancedParagraphSamples(documentContent: String): String {
+    val paragraphs =
+        documentContent.split(Regex("\\n\\s*\\n"))
+            .map { it.trim() }
+            .filter { it.length >= 80 }
+    if (paragraphs.isEmpty()) return documentContent.take(QUIZ_CONTEXT_CHARS)
+    val quizParagraphs =
+        if (paragraphs.size > 4) {
+            paragraphs.drop(1).dropLast(1)
+        } else {
+            paragraphs
+        }.filterNot { it.isAdministrativeQuizPage() }
+    if (quizParagraphs.isEmpty()) return ""
+    val selected =
+        if (quizParagraphs.size <= DOCUMENT_SAMPLE_COUNT) {
+            quizParagraphs
+        } else {
+            (0 until DOCUMENT_SAMPLE_COUNT).map { index ->
+                val sampleIndex =
+                    index *
+                        (quizParagraphs.lastIndex.toFloat() / (DOCUMENT_SAMPLE_COUNT - 1))
+                quizParagraphs[sampleIndex.roundToInt()]
+            }
+        }
     return selected.joinToString("\n\n---\n\n") {
         it.take(DOCUMENT_PAGE_SAMPLE_CHARS)
     }
@@ -308,10 +558,11 @@ private fun relevantSnippets(
     excluded: String,
     maxChars: Int
 ): String {
-    val tokens = query.lowercase(Locale.US)
-        .split(Regex("[^\\p{L}\\p{N}]+"))
-        .filter { it.length >= 3 }
-        .toSet()
+    val tokens =
+        query.lowercase(Locale.US)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length >= 3 }
+            .toSet()
     if (tokens.isEmpty()) return ""
     return documentContent.split(Regex("\\n\\s*\\n"))
         .asSequence()
@@ -331,9 +582,57 @@ private fun relevantSnippets(
 }
 
 private const val CHAT_CONTEXT_CHARS = 7000
-private const val QUIZ_CONTEXT_CHARS = 7000
-private const val DOCUMENT_SAMPLE_COUNT = 10
-private const val DOCUMENT_PAGE_SAMPLE_CHARS = 650
+private const val QUIZ_CONTEXT_CHARS = 2800
+private const val DOCUMENT_SAMPLE_COUNT = 4
+private const val DOCUMENT_PAGE_SAMPLE_CHARS = 420
+private const val QUIZ_WORTHY_MIN_SCORE = 8
+private const val WEAK_KC_COUNT = 3
+private const val WEAKNESS_SAMPLE_COUNT = 3
+private val QUIZ_ADMIN_TERMS =
+    listOf(
+        "course intro",
+        "instructor",
+        "office hr",
+        "office hour",
+        "ta ",
+        "teaching assistant",
+        "email",
+        "@unist.ac.kr",
+        "homework",
+        "assignment",
+        "exam",
+        "grading",
+        "grade",
+        "policy",
+        "attendance",
+        "covid",
+        "syllabus",
+        "copyright",
+        "mcgraw-hill",
+        "references",
+        "bibliography",
+        "thank you"
+    )
+private val QUIZ_EXPLANATION_TERMS =
+    listOf(
+        "because",
+        "therefore",
+        "when",
+        "if",
+        "where",
+        "relation",
+        "equation",
+        "component",
+        "direction",
+        "magnitude",
+        "vector",
+        "motion",
+        "force",
+        "moment",
+        "energy",
+        "velocity",
+        "acceleration"
+    )
 
 private data class QueuedLlmRequest(
     val text: String,
@@ -359,7 +658,7 @@ private enum class QuizScopeMode(
     val label: String,
     val selectionMode: String
 ) {
-    DOCUMENT("문서 전체", "document"),
+    DOCUMENT("페이지 범위", "page_range"),
     CURRENT_PAGE("현재 페이지", "current_page"),
     SELECTION("선택 영역", "selection"),
     WEAKNESS("약점 보완", "weakness")
@@ -378,8 +677,12 @@ fun LlmSidebar(
     documentJsonContent: String? = null,
     documentId: String,
     pageIndex: Int = 0,
+    pageCount: Int = 0,
     quizMastery: Float = 0.35f,
+    quizConceptMastery: Pair<Float, Float>? = null,
+    quizConceptCurrentMastery: Float? = null,
     quizHistory: List<QuizResponseRecord> = emptyList(),
+    weakConcepts: List<ConceptKnowledge> = emptyList(),
     sidebarMode: StudySidebarMode = StudySidebarMode.CHAT,
     onSidebarModeChanged: (StudySidebarMode) -> Unit = {},
     pendingImage: ByteArray? = null,
@@ -389,6 +692,7 @@ fun LlmSidebar(
     onRetryConnection: () -> Unit = {},
     onLlmRequested: (prompt: String, hasImage: Boolean) -> Unit = { _, _ -> },
     onQuizRequested: (conceptId: String, bloomLevel: Int) -> Unit = { _, _ -> },
+    onQuizGenerated: (quiz: GeneratedQuizQuestion) -> Unit = {},
     onQuizAnswered: (
         conceptId: String,
         bloomLevel: Int,
@@ -411,21 +715,25 @@ fun LlmSidebar(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val minWidthPx = with(density) {
-        UxConfig.Viewer.SIDEBAR_MIN_WIDTH.toPx()
-    }
-    val maxWidthPx = with(density) {
-        UxConfig.Viewer.SIDEBAR_MAX_WIDTH.toPx()
-    }
-    val defaultWidthPx = with(density) {
-        UxConfig.Viewer.SIDEBAR_DEFAULT_WIDTH.toPx()
-    }
+    val minWidthPx =
+        with(density) {
+            UxConfig.Viewer.SIDEBAR_MIN_WIDTH.toPx()
+        }
+    val maxWidthPx =
+        with(density) {
+            UxConfig.Viewer.SIDEBAR_MAX_WIDTH.toPx()
+        }
+    val defaultWidthPx =
+        with(density) {
+            UxConfig.Viewer.SIDEBAR_DEFAULT_WIDTH.toPx()
+        }
 
     val savedProviderName by settingsRepository
         .getLlmProvider()
         .collectAsState(initial = null)
-    val currentProvider = savedProviderName
-        ?: LlmProvider.OPENROUTER.name
+    val currentProvider =
+        savedProviderName
+            ?: LlmProvider.OPENROUTER.name
     val geminiKey by settingsRepository
         .getGeminiApiKey()
         .collectAsState(initial = null)
@@ -438,18 +746,22 @@ fun LlmSidebar(
     val openRouterKey by settingsRepository
         .getOpenRouterApiKey()
         .collectAsState(initial = null)
-    val hasApiKey = when (currentProvider) {
-        LlmProvider.OPENAI.name ->
-            !openAiKey.isNullOrBlank()
-        LlmProvider.CLAUDE.name ->
-            !claudeKey.isNullOrBlank()
-        LlmProvider.OPENROUTER.name ->
-            !openRouterKey.isNullOrBlank()
-        else -> !geminiKey.isNullOrBlank()
-    }
+    val hasApiKey =
+        when (currentProvider) {
+            LlmProvider.OPENAI.name ->
+                !openAiKey.isNullOrBlank()
+            LlmProvider.CLAUDE.name ->
+                !claudeKey.isNullOrBlank()
+            LlmProvider.OPENROUTER.name ->
+                !openRouterKey.isNullOrBlank()
+            else -> !geminiKey.isNullOrBlank()
+        }
     val savedModel by settingsRepository
         .getLlmModel()
         .collectAsState(initial = null)
+    val quizLanguage by settingsRepository
+        .getQuizLanguage()
+        .collectAsState(initial = "ko")
     var availableModels by remember {
         mutableStateOf<List<String>>(emptyList())
     }
@@ -465,18 +777,20 @@ fun LlmSidebar(
                 listOf(ClaudeClient.DEFAULT_MODEL)
             LlmProvider.OPENROUTER.name ->
                 listOf(OpenAiClient.OPENROUTER_DEFAULT_MODEL)
-            else -> listOf(
-                LlmRequestBuilder.DEFAULT_MODEL
-            )
+            else ->
+                listOf(
+                    LlmRequestBuilder.DEFAULT_MODEL
+                )
         }
     }
 
     var widthPx by remember {
         mutableStateOf(defaultWidthPx)
     }
-    val messages = remember {
-        mutableStateListOf<ChatMessage>()
-    }
+    val messages =
+        remember {
+            mutableStateListOf<ChatMessage>()
+        }
     var currentInput by remember {
         mutableStateOf("")
     }
@@ -543,40 +857,72 @@ fun LlmSidebar(
     var quizScopeMode by remember(documentId) {
         mutableStateOf(QuizScopeMode.DOCUMENT)
     }
-    val baseQuizContent = remember(
-        documentContent,
-        pageIndex,
-        quizScopeMode,
-        quizSourceOverride,
-        quizHistory
-    ) {
-        val content = documentContent.orEmpty()
-        when (quizScopeMode) {
-            QuizScopeMode.CURRENT_PAGE -> buildFocusedDocumentContext(
-                documentContent = content,
-                pageIndex = pageIndex,
-                query = null,
-                maxChars = QUIZ_CONTEXT_CHARS
-            )
-            QuizScopeMode.WEAKNESS -> buildWeaknessQuizContext(
-                documentContent = content,
-                quizHistory = quizHistory,
-                fallbackPageIndex = pageIndex
-            )
-            QuizScopeMode.SELECTION -> quizSourceOverride?.content.orEmpty()
-            QuizScopeMode.DOCUMENT -> buildDocumentQuizContext(content)
+    var quizPageRangeSpec by remember(documentId) {
+        mutableStateOf((pageIndex + 1).toString())
+    }
+    var quizPageRangeError by remember(documentId) {
+        mutableStateOf<String?>(null)
+    }
+    val baseQuizContent =
+        remember(
+            documentContent,
+            pageIndex,
+            quizScopeMode,
+            quizSourceOverride,
+            quizHistory,
+            quizPageRangeSpec,
+            pageCount,
+            weakConcepts
+        ) {
+            val content = documentContent.orEmpty()
+            when (quizScopeMode) {
+                QuizScopeMode.CURRENT_PAGE ->
+                    buildCurrentPageQuizContext(
+                        documentContent = content,
+                        pageIndex = pageIndex
+                    )
+                QuizScopeMode.WEAKNESS ->
+                    buildWeaknessQuizContext(
+                        documentContent = content,
+                        weakConcepts = weakConcepts,
+                        quizHistory = quizHistory,
+                        fallbackPageIndex = pageIndex
+                    )
+                QuizScopeMode.SELECTION -> quizSourceOverride?.content.orEmpty()
+                QuizScopeMode.DOCUMENT ->
+                    buildPageRangeQuizContext(
+                        documentContent = content,
+                        pages =
+                        parsePageRangeSpec(
+                            spec = quizPageRangeSpec,
+                            maxPage = pageCount
+                        ).getOrNull().orEmpty()
+                    )
+            }
         }
-    }
-    val quizContent = quizSourceOverride?.content
-        ?: baseQuizContent
-    val quizSourceLabel = quizSourceOverride?.label
-        ?: quizScopeMode.label
-    val quizConceptName = remember(quizContent) {
-        extractQuizConcept(quizContent)
-    }
-    val quizConceptId = remember(documentId, quizConceptName) {
-        stableConceptId(documentId, quizConceptName)
-    }
+    val quizContent =
+        quizSourceOverride?.content
+            ?: baseQuizContent
+    // Whether the page currently shown in the viewer yields quiz-worthy content.
+    // Used to enable the "현재 페이지" scope only on a generatable page.
+    val currentPageHasContent =
+        remember(documentContent, pageIndex) {
+            buildCurrentPageQuizContext(
+                documentContent = documentContent.orEmpty(),
+                pageIndex = pageIndex
+            ).isNotBlank()
+        }
+    val quizSourceLabel =
+        quizSourceOverride?.label
+            ?: quizScopeMode.label
+    val quizConceptName =
+        remember(quizContent) {
+            extractQuizConcept(quizContent)
+        }
+    val quizConceptId =
+        remember(documentId, quizConceptName) {
+            stableConceptId(documentId, quizConceptName)
+        }
     var selectedBloomLevel by remember(
         documentId,
         quizConceptName,
@@ -601,6 +947,9 @@ fun LlmSidebar(
     var quizLoading by remember(documentId) {
         mutableStateOf(false)
     }
+    var quizProgress by remember(documentId) {
+        mutableStateOf<QuizProgress?>(null)
+    }
     var quizError by remember(documentId) {
         mutableStateOf<String?>(null)
     }
@@ -612,12 +961,14 @@ fun LlmSidebar(
     }
 
     LaunchedEffect(pendingQuizCrop, documentJsonContent) {
-        val payload = pendingQuizCrop
-            ?: return@LaunchedEffect
-        val selection = StructuredContentCropExtractor.extract(
-            documentJsonContent,
-            payload
-        )
+        val payload =
+            pendingQuizCrop
+                ?: return@LaunchedEffect
+        val selection =
+            StructuredContentCropExtractor.extract(
+                documentJsonContent,
+                payload
+            )
         currentQuiz = null
         selectedQuizChoice = null
         selectedQuizChoices = emptySet()
@@ -625,30 +976,33 @@ fun LlmSidebar(
         quizStartedAt = null
         quizLoading = false
         if (selection.content.isBlank()) {
-            val ocrText = runCatching {
-                localMlKitContentExtractor.extractImageText(
-                    payload.imageBytes
-                )
-            }.getOrDefault("")
+            val ocrText =
+                runCatching {
+                    localMlKitContentExtractor.extractImageText(
+                        payload.imageBytes
+                    )
+                }.getOrDefault("")
             if (ocrText.isBlank()) {
                 quizSourceOverride = null
                 quizError =
                     "선택한 영역에서 추출 가능한 텍스트를 찾지 " +
-                        "못했습니다. 텍스트가 포함된 영역을 선택하거나 " +
-                        "AI 설명 기능을 사용해 주세요."
+                    "못했습니다. 텍스트가 포함된 영역을 선택하거나 " +
+                    "AI 설명 기능을 사용해 주세요."
             } else {
-                quizSourceOverride = QuizSourceOverride(
-                    content = ocrText,
-                    label = "선택 영역 OCR · 페이지 ${payload.pageIndex + 1}"
-                )
+                quizSourceOverride =
+                    QuizSourceOverride(
+                        content = ocrText,
+                        label = "선택 영역 OCR · 페이지 ${payload.pageIndex + 1}"
+                    )
                 quizScopeMode = QuizScopeMode.SELECTION
                 quizError = null
             }
         } else {
-            quizSourceOverride = QuizSourceOverride(
-                content = selection.content,
-                label = selection.label
-            )
+            quizSourceOverride =
+                QuizSourceOverride(
+                    content = selection.content,
+                    label = selection.label
+                )
             quizScopeMode = QuizScopeMode.SELECTION
             quizError = null
         }
@@ -656,6 +1010,19 @@ fun LlmSidebar(
     }
 
     fun generateQuizQuestion() {
+        if (quizScopeMode == QuizScopeMode.DOCUMENT) {
+            val parsed =
+                parsePageRangeSpec(
+                    spec = quizPageRangeSpec,
+                    maxPage = pageCount
+                )
+            if (parsed.isFailure || parsed.getOrNull().orEmpty().isEmpty()) {
+                quizPageRangeError = PAGE_RANGE_ERROR
+                quizError = PAGE_RANGE_ERROR
+                return
+            }
+            quizPageRangeError = null
+        }
         if (quizContent.isBlank() ||
             quizLoading ||
             llmConnectionState != LlmConnectionState.READY ||
@@ -663,7 +1030,14 @@ fun LlmSidebar(
         ) {
             return
         }
+        if (!quizContent.hasKcQuizEvidence()) {
+            quizError =
+                "선택한 범위에서 업로드된 KC셋과 연결되는 학습 내용을 찾지 못했습니다. " +
+                "공학역학 KC가 포함된 페이지나 영역을 선택해 주세요."
+            return
+        }
         quizLoading = true
+        quizProgress = null
         quizError = null
         selectedQuizChoice = null
         selectedQuizChoices = emptySet()
@@ -672,28 +1046,38 @@ fun LlmSidebar(
         onQuizRequested(quizConceptId, selectedBloomLevel)
         scope.launch {
             try {
-                currentQuiz = quizService.generateQuestion(
-                    QuizGenerationRequest(
-                        documentContent = quizContent,
-                        conceptName = quizConceptName,
-                        mastery = quizMastery,
-                        bloomLevel = selectedBloomLevel,
-                        selectionMode = quizScopeMode.selectionMode,
-                        sourceLabel = quizSourceLabel
-                    )
-                )
+                val generated =
+                    quizService.generateQuestion(
+                        QuizGenerationRequest(
+                            documentContent = quizContent,
+                            conceptName = quizConceptName,
+                            mastery = quizMastery,
+                            bloomLevel = selectedBloomLevel,
+                            selectionMode = quizScopeMode.selectionMode,
+                            sourceLabel = quizSourceLabel,
+                            language = quizLanguage
+                        )
+                    ) { progress ->
+                        quizProgress = progress
+                    }
+                currentQuiz = generated
                 quizStartedAt = System.currentTimeMillis()
+                // Send the generated quiz to the QE server and cache the
+                // returned representation locally.
+                onQuizGenerated(generated)
             } catch (e: Exception) {
                 quizError = mapQuizError(e)
             } finally {
                 quizLoading = false
+                quizProgress = null
             }
         }
     }
 
     LaunchedEffect(pendingQuizText) {
-        val payload = pendingQuizText
-            ?: return@LaunchedEffect
+        val payload =
+            pendingQuizText
+                ?: return@LaunchedEffect
         currentQuiz = null
         selectedQuizChoice = null
         selectedQuizChoices = emptySet()
@@ -706,10 +1090,11 @@ fun LlmSidebar(
                 "선택한 텍스트가 비어 있어 퀴즈를 만들 수 없습니다."
             pendingTextQuizGeneration = false
         } else {
-            quizSourceOverride = QuizSourceOverride(
-                content = payload.text,
-                label = payload.label
-            )
+            quizSourceOverride =
+                QuizSourceOverride(
+                    content = payload.text,
+                    label = payload.label
+                )
             quizScopeMode = QuizScopeMode.SELECTION
             quizError = null
             pendingTextQuizGeneration = true
@@ -774,41 +1159,45 @@ fun LlmSidebar(
         isLoading = false
         errorMessage = null
         onLlmRequested(text, imgs.isNotEmpty())
-        val userMsg = ChatMessage(
-            role = ChatMessage.Role.USER,
-            content = text
-        )
-        messages.add(userMsg)
-        activeJob = scope.launch {
-            val convId = conversationId
-                ?: conversationDataSource
-                    .create()
-                    .also { conversationId = it }
-            conversationDataSource
-                .appendMessage(convId, userMsg)
-            val extraOcrContext = if (imgs.isNotEmpty()) {
-                runCatching {
-                    localMlKitContentExtractor.extractImageText(
-                        imgs.first()
-                    )
-                }.getOrDefault("")
-            } else {
-                ""
-            }
-            streamAssistantResponse(
-                messages,
-                llmService,
-                conversationDataSource,
-                convId,
-                imgs,
-                documentContent,
-                pageIndex,
-                text,
-                extraOcrContext,
-                { errorMessage = it },
-                { isLoading = it }
+        val userMsg =
+            ChatMessage(
+                role = ChatMessage.Role.USER,
+                content = text
             )
-        }
+        messages.add(userMsg)
+        activeJob =
+            scope.launch {
+                val convId =
+                    conversationId
+                        ?: conversationDataSource
+                            .create()
+                            .also { conversationId = it }
+                conversationDataSource
+                    .appendMessage(convId, userMsg)
+                val extraOcrContext =
+                    if (imgs.isNotEmpty()) {
+                        runCatching {
+                            localMlKitContentExtractor.extractImageText(
+                                imgs.first()
+                            )
+                        }.getOrDefault("")
+                    } else {
+                        ""
+                    }
+                streamAssistantResponse(
+                    messages,
+                    llmService,
+                    conversationDataSource,
+                    convId,
+                    imgs,
+                    documentContent,
+                    pageIndex,
+                    text,
+                    extraOcrContext,
+                    { errorMessage = it },
+                    { isLoading = it }
+                )
+            }
     }
 
     fun submitMessage(text: String, imgs: List<ByteArray> = emptyList()) {
@@ -817,7 +1206,8 @@ fun LlmSidebar(
                 sendMessage(text, imgs)
             }
             LlmConnectionState.CONNECTING,
-            LlmConnectionState.FAILED -> {
+            LlmConnectionState.FAILED
+            -> {
                 queuedRequest = QueuedLlmRequest(text, imgs)
                 errorMessage = null
                 if (llmConnectionState ==
@@ -847,16 +1237,18 @@ fun LlmSidebar(
         pendingPrompt != lastProcessedPrompt
     ) {
         lastProcessedPrompt = pendingPrompt
-        val imgs = if (pendingImage != null) {
-            listOf(pendingImage)
-        } else {
-            emptyList()
-        }
-        val text = pendingPrompt
-            .replace(
-                Regex("\\n<!--\\d+-->$"),
-                ""
-            )
+        val imgs =
+            if (pendingImage != null) {
+                listOf(pendingImage)
+            } else {
+                emptyList()
+            }
+        val text =
+            pendingPrompt
+                .replace(
+                    Regex("\\n<!--\\d+-->$"),
+                    ""
+                )
         onPendingConsumed()
         submitMessage(text, imgs)
     }
@@ -866,13 +1258,15 @@ fun LlmSidebar(
     val widthDp = with(density) { widthPx.toDp() }
 
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .width(widthDp)
             .fillMaxHeight()
     ) {
         // Drag handle
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .width(6.dp)
                 .fillMaxHeight()
                 .background(
@@ -884,21 +1278,27 @@ fun LlmSidebar(
                             _,
                             dx
                         ->
-                        widthPx = (widthPx - dx)
-                            .coerceIn(
-                                minWidthPx,
-                                maxWidthPx
-                            )
+                        widthPx =
+                            (widthPx - dx)
+                                .coerceIn(
+                                    minWidthPx,
+                                    maxWidthPx
+                                )
                     }
                 }
         )
 
         Column(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
                 .background(
                     MaterialTheme.colorScheme.surface
                 )
+                // Shrink the panel when the soft keyboard is shown so the
+                // chat input stays visible above it (app uses edge-to-edge
+                // with decorFitsSystemWindows=false, so resize isn't automatic).
+                .imePadding()
         ) {
             SidebarTopBar(
                 currentProvider = currentProvider,
@@ -916,7 +1316,8 @@ fun LlmSidebar(
                             .setLlmModel("")
                     }
                 },
-                currentModel = savedModel?.ifBlank {
+                currentModel =
+                savedModel?.ifBlank {
                     null
                 } ?: when (currentProvider) {
                     LlmProvider.OPENAI.name ->
@@ -984,7 +1385,8 @@ fun LlmSidebar(
             )
 
             HorizontalDivider(
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .outlineVariant
             )
 
@@ -1022,8 +1424,9 @@ fun LlmSidebar(
                     onDeleteConversation = { summary ->
                         conversationDataSource
                             .deleteConversation(summary.id)
-                        historyList = historyList
-                            .filter { it.id != summary.id }
+                        historyList =
+                            historyList
+                                .filter { it.id != summary.id }
                         if (conversationId == summary.id) {
                             conversationId = null
                             messages.clear()
@@ -1061,19 +1464,38 @@ fun LlmSidebar(
                         quizError = null
                     },
                     hasSelectionSource = quizSourceOverride != null,
+                    currentPageHasContent = currentPageHasContent,
                     pageIndex = pageIndex,
+                    pageCount = pageCount,
                     conceptName = quizConceptName,
                     conceptId = quizConceptId,
                     mastery = quizMastery,
+                    conceptMastery = quizConceptMastery,
+                    conceptCurrentMastery = quizConceptCurrentMastery,
                     selectedBloomLevel = selectedBloomLevel,
                     onBloomLevelSelected = {
                         selectedBloomLevel = it
+                    },
+                    quizLanguage = quizLanguage,
+                    onQuizLanguageChange = { lang ->
+                        scope.launch {
+                            settingsRepository.setQuizLanguage(lang)
+                        }
+                    },
+                    pageRangeSpec = quizPageRangeSpec,
+                    pageRangeError = quizPageRangeError,
+                    onPageRangeSpecChanged = {
+                        quizPageRangeSpec = it
+                        quizPageRangeError = null
+                        currentQuiz = null
+                        quizError = null
                     },
                     quiz = currentQuiz,
                     selectedChoice = selectedQuizChoice,
                     selectedChoices = selectedQuizChoices,
                     answered = quizAnswered,
                     loading = quizLoading,
+                    progress = quizProgress,
                     error = quizError,
                     connectionState = llmConnectionState,
                     connectionError = llmConnectionError,
@@ -1095,9 +1517,10 @@ fun LlmSidebar(
                                 quizAnswered = true
                                 val correct =
                                     submitted == current.answerKeys.toSet()
-                                val elapsed = quizStartedAt?.let {
-                                    System.currentTimeMillis() - it
-                                }
+                                val elapsed =
+                                    quizStartedAt?.let {
+                                        System.currentTimeMillis() - it
+                                    }
                                 val submittedText =
                                     submitted.sorted().joinToString(",")
                                 onQuizAnswered(
@@ -1120,7 +1543,8 @@ fun LlmSidebar(
                 )
             } else if (!hasApiKey) {
                 Box(
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .padding(24.dp),
@@ -1133,9 +1557,11 @@ fun LlmSidebar(
                         Icon(
                             Icons.Default.Key,
                             contentDescription = null,
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .size(48.dp),
-                            tint = MaterialTheme
+                            tint =
+                            MaterialTheme
                                 .colorScheme
                                 .outline
                         )
@@ -1143,20 +1569,25 @@ fun LlmSidebar(
                         val providerName =
                             when (currentProvider) {
                                 LlmProvider.OPENAI
-                                    .name -> "ChatGPT"
+                                    .name
+                                -> "ChatGPT"
                                 LlmProvider.CLAUDE
-                                    .name -> "Claude"
+                                    .name
+                                -> "Claude"
                                 LlmProvider.OPENROUTER
-                                    .name -> "OpenRouter"
+                                    .name
+                                -> "OpenRouter"
                                 else -> "Gemini"
                             }
                         Text(
                             "$providerName API 키가 " +
                                 "설정되지 않았습니다",
                             fontSize = 15.sp,
-                            fontWeight = FontWeight
+                            fontWeight =
+                            FontWeight
                                 .SemiBold,
-                            color = MaterialTheme
+                            color =
+                            MaterialTheme
                                 .colorScheme
                                 .onSurface
                         )
@@ -1165,7 +1596,8 @@ fun LlmSidebar(
                             "설정 화면에서 $providerName" +
                                 " API 키를 입력해주세요.",
                             fontSize = 13.sp,
-                            color = MaterialTheme
+                            color =
+                            MaterialTheme
                                 .colorScheme
                                 .onSurfaceVariant
                         )
@@ -1185,18 +1617,26 @@ fun LlmSidebar(
                 }
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement
+                    verticalArrangement =
+                    Arrangement
                         .spacedBy(8.dp)
                 ) {
                     item {
                         Spacer(Modifier.height(8.dp))
                     }
-                    items(messages) { msg ->
-                        MessageBubble(message = msg)
+                    itemsIndexed(messages) { index, msg ->
+                        MessageBubble(
+                            message = msg,
+                            isStreaming =
+                            isLoading &&
+                                index == messages.lastIndex &&
+                                msg.role == ChatMessage.Role.ASSISTANT
+                        )
                     }
                     item {
                         Spacer(Modifier.height(8.dp))
@@ -1206,10 +1646,12 @@ fun LlmSidebar(
                 if (errorMessage != null) {
                     Text(
                         text = errorMessage ?: "",
-                        color = MaterialTheme
+                        color =
+                        MaterialTheme
                             .colorScheme.error,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(
+                        modifier =
+                        Modifier.padding(
                             horizontal = 12.dp,
                             vertical = 4.dp
                         )
@@ -1218,7 +1660,8 @@ fun LlmSidebar(
             }
 
             HorizontalDivider(
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .outlineVariant
             )
 
@@ -1235,9 +1678,10 @@ fun LlmSidebar(
                             pendingImages + bytes
                     },
                     onRemoveImage = { index ->
-                        pendingImages = pendingImages
-                            .toMutableList()
-                            .apply { removeAt(index) }
+                        pendingImages =
+                            pendingImages
+                                .toMutableList()
+                                .apply { removeAt(index) }
                     },
                     onSend = {
                         val text = currentInput.trim()
@@ -1246,9 +1690,10 @@ fun LlmSidebar(
                         ) {
                             return@SidebarInput
                         }
-                        val msgText = text.ifBlank {
-                            "이 이미지를 분석해줘"
-                        }
+                        val msgText =
+                            text.ifBlank {
+                                "이 이미지를 분석해줘"
+                            }
                         val imgs = pendingImages
                         pendingImages = emptyList()
                         currentInput = ""
@@ -1269,18 +1714,21 @@ private fun StudySidebarTabs(
     onHistoryPaneChanged: (HistoryPane) -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         SidebarTab(
-            label = if (showHistory) {
+            label =
+            if (showHistory) {
                 "Chat History"
             } else {
                 "Chat"
             },
-            selected = if (showHistory) {
+            selected =
+            if (showHistory) {
                 historyPane == HistoryPane.CHAT
             } else {
                 mode == StudySidebarMode.CHAT
@@ -1302,12 +1750,14 @@ private fun StudySidebarTabs(
             modifier = Modifier.weight(1f)
         )
         SidebarTab(
-            label = if (showHistory) {
+            label =
+            if (showHistory) {
                 "Quiz History"
             } else {
                 "Quiz"
             },
-            selected = if (showHistory) {
+            selected =
+            if (showHistory) {
                 historyPane == HistoryPane.QUIZ
             } else {
                 mode == StudySidebarMode.QUIZ
@@ -1339,18 +1789,21 @@ private fun SidebarTab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val fg = if (selected) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val bg =
+        if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    val fg =
+        if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     Row(
-        modifier = modifier
+        modifier =
+        modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .clickable(onClick = onClick)
@@ -1382,17 +1835,27 @@ private fun QuizPanel(
     scopeMode: QuizScopeMode,
     onScopeModeSelected: (QuizScopeMode) -> Unit,
     hasSelectionSource: Boolean,
+    currentPageHasContent: Boolean,
     pageIndex: Int,
+    pageCount: Int,
     conceptName: String,
     conceptId: String,
     mastery: Float,
+    conceptMastery: Pair<Float, Float>? = null,
+    conceptCurrentMastery: Float? = null,
     selectedBloomLevel: Int,
     onBloomLevelSelected: (Int) -> Unit,
+    quizLanguage: String,
+    onQuizLanguageChange: (String) -> Unit,
+    pageRangeSpec: String,
+    pageRangeError: String?,
+    onPageRangeSpecChanged: (String) -> Unit,
     quiz: GeneratedQuizQuestion?,
     selectedChoice: String?,
     selectedChoices: Set<String>,
     answered: Boolean,
     loading: Boolean,
+    progress: QuizProgress?,
     error: String?,
     connectionState: LlmConnectionState,
     connectionError: String?,
@@ -1406,7 +1869,8 @@ private fun QuizPanel(
     val content = documentContent.orEmpty()
 
     LazyColumn(
-        modifier = modifier
+        modifier =
+        modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1416,17 +1880,33 @@ private fun QuizPanel(
             QuizHeader(
                 conceptName = conceptName,
                 conceptId = conceptId,
-                mastery = mastery,
+                // Show the quizzed concept's mastery (matches the gauge) when we
+                // have it; fall back to the document average otherwise.
+                mastery = conceptCurrentMastery ?: mastery,
                 pageIndex = pageIndex,
                 scopeMode = scopeMode,
                 onScopeModeSelected = onScopeModeSelected,
                 hasSelectionSource = hasSelectionSource,
+                currentPageHasContent = currentPageHasContent,
                 selectedBloomLevel = selectedBloomLevel,
                 onBloomLevelSelected = {
                     onBloomLevelSelected(it)
                 },
+                quizLanguage = quizLanguage,
+                onQuizLanguageChange = onQuizLanguageChange,
                 quizService = quizService
             )
+        }
+
+        if (scopeMode == QuizScopeMode.DOCUMENT) {
+            item {
+                QuizPageRangeControls(
+                    value = pageRangeSpec,
+                    pageCount = pageCount,
+                    error = pageRangeError,
+                    onValueChanged = onPageRangeSpecChanged
+                )
+            }
         }
 
         sourceLabel?.let { label ->
@@ -1457,15 +1937,15 @@ private fun QuizPanel(
         } else if (content.isBlank()) {
             item {
                 QuizMessage(
-                    title = "학습 자료가 아직 없습니다",
-                    body = "이 PDF의 context.md 추출이 완료되면 문서 내용 기반 퀴즈를 만들 수 있습니다."
+                    title = "KC와 연결된 학습 내용이 없습니다",
+                    body = "선택한 범위에서 업로드된 KC셋과 직접 연결되는 문단을 찾지 못했습니다."
                 )
             }
         }
 
         if (loading) {
             item {
-                QuizLoadingCard()
+                QuizLoadingCard(progress = progress)
             }
         }
 
@@ -1483,6 +1963,8 @@ private fun QuizPanel(
             item {
                 QuizQuestionCard(
                     quiz = currentQuiz,
+                    mastery = mastery,
+                    conceptMastery = conceptMastery,
                     selectedChoice = selectedChoice,
                     selectedChoices = selectedChoices,
                     answered = answered,
@@ -1497,7 +1979,8 @@ private fun QuizPanel(
         item {
             QuizActionButton(
                 loading = loading,
-                enabled = content.isNotBlank() &&
+                enabled =
+                content.isNotBlank() &&
                     hasApiKey &&
                     connectionState == LlmConnectionState.READY,
                 hasQuestion = quiz != null,
@@ -1511,12 +1994,10 @@ private fun QuizPanel(
 }
 
 @Composable
-private fun QuizSourceCard(
-    label: String,
-    onClear: () -> Unit
-) {
+private fun QuizSourceCard(label: String, onClear: () -> Unit) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(
@@ -1541,24 +2022,127 @@ private fun QuizSourceCard(
         )
         TextButton(
             onClick = onClear,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .clip(RoundedCornerShape(6.dp))
                 .background(Color.White),
-            colors = ButtonDefaults.textButtonColors(
+            colors =
+            ButtonDefaults.textButtonColors(
                 contentColor = MaterialTheme.colorScheme.primary
             ),
-            contentPadding = PaddingValues(
+            contentPadding =
+            PaddingValues(
                 horizontal = 10.dp,
                 vertical = 4.dp
             )
         ) {
             Text(
-                "문서 전체",
+                "페이지 범위",
                 fontWeight = FontWeight.Bold
             )
         }
     }
 }
+
+@Composable
+private fun QuizPageRangeControls(
+    value: String,
+    pageCount: Int,
+    error: String?,
+    onValueChanged: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        TextField(
+            value = value,
+            onValueChange = onValueChanged,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = {
+                Text("페이지 범위", fontSize = 11.sp)
+            },
+            placeholder = {
+                Text("예: 1-4, 9-11, 21-", fontSize = 12.sp)
+            },
+            isError = error != null,
+            colors =
+            TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+        Text(
+            error ?: "쉼표와 하이픈으로 지정 · 전체 ${pageCount.coerceAtLeast(0)}쪽",
+            fontSize = 11.sp,
+            color =
+            if (error == null) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+        )
+    }
+}
+
+private fun parsePageRangeSpec(spec: String, maxPage: Int): Result<Set<Int>> {
+    val normalized = spec.replace(" ", "")
+    if (normalized.isBlank() ||
+        normalized.any { it !in '0'..'9' && it != ',' && it != '-' }
+    ) {
+        return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+    }
+    val upper = maxPage.coerceAtLeast(1)
+    val pages = mutableSetOf<Int>()
+    normalized.split(",").forEach { part ->
+        if (part.isBlank()) {
+            return Result.failure(
+                IllegalArgumentException(PAGE_RANGE_ERROR)
+            )
+        }
+        if (part.contains("-")) {
+            val pieces = part.split("-")
+            if (pieces.size != 2 || (pieces[0].isBlank() && pieces[1].isBlank())) {
+                return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+            }
+            val start =
+                if (pieces[0].isBlank()) {
+                    1
+                } else {
+                    pieces[0].toIntOrNull()
+                        ?: return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+                }
+            val end =
+                if (pieces[1].isBlank()) {
+                    upper
+                } else {
+                    pieces[1].toIntOrNull()
+                        ?: return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+                }
+            if (start < 1 || end < start) {
+                return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+            }
+            pages += start..end.coerceAtMost(upper)
+        } else {
+            val page =
+                part.toIntOrNull()
+                    ?: return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+            if (page !in 1..upper) {
+                return Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+            }
+            pages += page
+        }
+    }
+    return if (pages.isEmpty()) {
+        Result.failure(IllegalArgumentException(PAGE_RANGE_ERROR))
+    } else {
+        Result.success(pages)
+    }
+}
+
+private const val PAGE_RANGE_ERROR =
+    "올바른 페이지 범위를 입력해주세요. 예: 1-4, 9-11, 21-"
 
 @Composable
 private fun QuizHeader(
@@ -1569,12 +2153,16 @@ private fun QuizHeader(
     scopeMode: QuizScopeMode,
     onScopeModeSelected: (QuizScopeMode) -> Unit,
     hasSelectionSource: Boolean,
+    currentPageHasContent: Boolean,
     selectedBloomLevel: Int,
     onBloomLevelSelected: (Int) -> Unit,
+    quizLanguage: String,
+    onQuizLanguageChange: (String) -> Unit,
     quizService: QuizService
 ) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -1588,7 +2176,7 @@ private fun QuizHeader(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "개념: $conceptName · 페이지 ${pageIndex + 1} · mastery ${((mastery * 100).toInt())}%",
+            "개념: $conceptName · 페이지 ${pageIndex + 1} · mastery ${masteryPct(mastery)}%",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 16.sp
@@ -1598,8 +2186,12 @@ private fun QuizHeader(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(QuizScopeMode.entries) { mode ->
-                val enabled = mode != QuizScopeMode.SELECTION ||
-                    hasSelectionSource
+                val enabled =
+                    when (mode) {
+                        QuizScopeMode.SELECTION -> hasSelectionSource
+                        QuizScopeMode.CURRENT_PAGE -> currentPageHasContent
+                        else -> true
+                    }
                 QuizScopeChip(
                     label = mode.label,
                     selected = mode == scopeMode,
@@ -1624,18 +2216,67 @@ private fun QuizHeader(
                 )
             }
         }
+        Spacer(Modifier.height(10.dp))
+        QuizLanguageToggle(
+            language = quizLanguage,
+            onLanguageChange = onQuizLanguageChange
+        )
+    }
+}
+
+/** Switch that selects the quiz output language (Korean / English). */
+@Composable
+private fun QuizLanguageToggle(language: String, onLanguageChange: (String) -> Unit) {
+    val isEnglish = language.equals("en", ignoreCase = true)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "퀴즈 언어",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "한국어",
+            fontSize = 12.sp,
+            fontWeight = if (!isEnglish) FontWeight.Bold else FontWeight.Normal,
+            color =
+            if (!isEnglish) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+        Spacer(Modifier.width(6.dp))
+        Switch(
+            checked = isEnglish,
+            onCheckedChange = { checked ->
+                onLanguageChange(if (checked) "en" else "ko")
+            }
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "English",
+            fontSize = 12.sp,
+            fontWeight = if (isEnglish) FontWeight.Bold else FontWeight.Normal,
+            color =
+            if (isEnglish) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
     }
 }
 
 @Composable
-private fun BloomChip(
-    level: Int,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
+private fun BloomChip(level: Int, selected: Boolean, onClick: () -> Unit) {
     Text(
         "L$level",
-        modifier = Modifier
+        modifier =
+        Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(
                 if (selected) {
@@ -1646,7 +2287,8 @@ private fun BloomChip(
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
-        color = if (selected) {
+        color =
+        if (selected) {
             MaterialTheme.colorScheme.onPrimary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
@@ -1657,15 +2299,11 @@ private fun BloomChip(
 }
 
 @Composable
-private fun QuizScopeChip(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
+private fun QuizScopeChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Text(
         label,
-        modifier = Modifier
+        modifier =
+        Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(
                 when {
@@ -1676,7 +2314,8 @@ private fun QuizScopeChip(
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
-        color = when {
+        color =
+        when {
             selected -> MaterialTheme.colorScheme.onPrimaryContainer
             enabled -> MaterialTheme.colorScheme.onSurfaceVariant
             else -> MaterialTheme.colorScheme.outline
@@ -1689,6 +2328,8 @@ private fun QuizScopeChip(
 @Composable
 private fun QuizQuestionCard(
     quiz: GeneratedQuizQuestion,
+    mastery: Float,
+    conceptMastery: Pair<Float, Float>?,
     selectedChoice: String?,
     selectedChoices: Set<String>,
     answered: Boolean,
@@ -1696,8 +2337,12 @@ private fun QuizQuestionCard(
     onSubmit: (Set<String>) -> Unit
 ) {
     val multiple = quiz.mcqType == "multiple_select"
+    // Document-level average as of when this question was presented, used only as
+    // a fallback when the per-concept (before, after) pair is not yet available.
+    val masteryBefore = remember(quiz) { mastery }
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -1719,17 +2364,19 @@ private fun QuizQuestionCard(
         )
         Spacer(Modifier.height(12.dp))
         quiz.choices.toSortedMap().forEach { (key, value) ->
-            val selected = if (multiple) {
-                key in selectedChoices
-            } else {
-                selectedChoice == key
-            }
+            val selected =
+                if (multiple) {
+                    key in selectedChoices
+                } else {
+                    selectedChoice == key
+                }
             QuizChoiceRow(
                 keyLabel = key,
                 text = value,
                 selected = selected,
                 correct = answered && key in quiz.answerKeys,
-                wrong = answered &&
+                wrong =
+                answered &&
                     selected &&
                     key !in quiz.answerKeys,
                 enabled = !answered,
@@ -1743,22 +2390,43 @@ private fun QuizQuestionCard(
                             }
                         )
                     } else {
+                        // Single-select: pick one, but don't submit until the
+                        // learner presses the "정답 확인" button.
                         onAnswerChanged(setOf(key))
-                        onSubmit(setOf(key))
                     }
                 }
             )
             Spacer(Modifier.height(8.dp))
         }
-        if (multiple && !answered) {
-            TextButton(
+        if (!answered) {
+            Spacer(Modifier.height(4.dp))
+            Button(
                 enabled = selectedChoices.isNotEmpty(),
                 onClick = {
                     onSubmit(selectedChoices)
                 },
-                modifier = Modifier.align(Alignment.End)
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text("정답 확인")
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "정답 확인",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
         if (answered) {
@@ -1768,12 +2436,100 @@ private fun QuizQuestionCard(
                 explanation = quiz.explanation,
                 selectedChoice = selectedChoice,
                 selectedChoiceExplanation =
-                    selectedChoice?.let {
-                        quiz.choiceExplanations[it]
-                    },
+                selectedChoice?.let {
+                    quiz.choiceExplanations[it]
+                },
                 sourceSentence = quiz.sourceSentence
             )
+            Spacer(Modifier.height(12.dp))
+            // Prefer the per-concept (before, after) pair from the TAP engine;
+            // fall back to the document-level average if it is not ready yet.
+            val (gaugeBefore, gaugeAfter) =
+                conceptMastery ?: (masteryBefore to mastery)
+            MasteryGauge(
+                mastery = gaugeAfter,
+                before = gaugeBefore,
+                conceptName = quiz.targetConcept
+            )
         }
+    }
+}
+
+/** Mastery fraction (0..1) formatted as a percentage with one decimal. */
+private fun masteryPct(fraction: Float): String = String.format(Locale.US, "%.1f", fraction * 100f)
+
+/**
+ * Mastery gauge shown under a graded quiz. Labels the concept (KC), shows the
+ * post-answer mastery with the change since before the answer beside it (green
+ * ▲ up / red ▼ down), plus a bar of the current mastery.
+ */
+@Composable
+private fun MasteryGauge(mastery: Float, before: Float, conceptName: String) {
+    val target = mastery.coerceIn(0f, 1f)
+    val from = before.coerceIn(0f, 1f)
+    val deltaPoints = (target - from) * 100f
+    val accent =
+        when {
+            deltaPoints > 0.05f -> Color(0xFF10B981)
+            deltaPoints < -0.05f -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val deltaLabel =
+        when {
+            deltaPoints > 0.05f -> "▲${masteryPct(target - from)}%"
+            deltaPoints < -0.05f -> "▼${masteryPct(from - target)}%"
+            else -> "±0.0%"
+        }
+    val animated by animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(durationMillis = 600),
+        label = "masteryGauge"
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "지식 상태: $conceptName",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Changed (post-answer) mastery, then the delta beside it.
+                Text(
+                    "${masteryPct(target)}%",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    deltaLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = accent
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { animated },
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = accent,
+            trackColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 
@@ -1787,19 +2543,22 @@ private fun QuizChoiceRow(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val bg = when {
-        correct -> Color(0xFFE7F8EF)
-        wrong -> Color(0xFFFFEDEA)
-        selected -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surface
-    }
-    val fg = when {
-        correct -> Color(0xFF047857)
-        wrong -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val bg =
+        when {
+            correct -> Color(0xFFE7F8EF)
+            wrong -> Color(0xFFFFEDEA)
+            selected -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.surface
+        }
+    val fg =
+        when {
+            correct -> Color(0xFF047857)
+            wrong -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurface
+        }
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
@@ -1808,7 +2567,8 @@ private fun QuizChoiceRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .size(28.dp)
                 .clip(CircleShape)
                 .background(
@@ -1856,7 +2616,8 @@ private fun QuizExplanation(
     sourceSentence: String
 ) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surface)
@@ -1870,7 +2631,8 @@ private fun QuizExplanation(
             },
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = if (correct) {
+            color =
+            if (correct) {
                 Color(0xFF047857)
             } else {
                 MaterialTheme.colorScheme.error
@@ -1935,7 +2697,8 @@ private fun QuizActionButton(
     onClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(
@@ -1962,7 +2725,8 @@ private fun QuizActionButton(
                 Icons.Default.Refresh,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = if (enabled) {
+                tint =
+                if (enabled) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1974,7 +2738,8 @@ private fun QuizActionButton(
             if (hasQuestion) "새 문제 생성" else "문제 생성",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = if (enabled) {
+            color =
+            if (enabled) {
                 MaterialTheme.colorScheme.onPrimary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -1984,36 +2749,70 @@ private fun QuizActionButton(
 }
 
 @Composable
-private fun QuizLoadingCard() {
-    Row(
-        modifier = Modifier
+private fun QuizLoadingCard(progress: QuizProgress?) {
+    val fraction = (progress?.fraction ?: 0f).coerceIn(0f, 1f)
+    val percent = (fraction * 100).toInt()
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction,
+        label = "quizProgress"
+    )
+    val phaseLabel =
+        when (progress?.phase) {
+            QuizPhase.REQUESTING -> "요청 보내는 중…"
+            QuizPhase.GENERATING -> "퀴즈 생성 중…"
+            QuizPhase.VALIDATING -> "검증 중…"
+            QuizPhase.DONE -> "완료"
+            null -> "퀴즈 생성 준비 중…"
+        }
+    Column(
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(20.dp),
-            strokeWidth = 2.dp
-        )
-        Text(
-            "학습 자료 기반 퀴즈를 생성하는 중입니다",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                phaseLabel,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "$percent%",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (progress == null) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        } else {
+            LinearProgressIndicator(
+                progress = { animatedFraction },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (progress != null && progress.attempt > 1) {
+            Text(
+                "재시도 ${progress.attempt}/${progress.totalAttempts}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 @Composable
-private fun QuizMessage(
-    title: String,
-    body: String,
-    isError: Boolean = false
-) {
+private fun QuizMessage(title: String, body: String, isError: Boolean = false) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -2023,7 +2822,8 @@ private fun QuizMessage(
             title,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isError) {
+            color =
+            if (isError) {
                 MaterialTheme.colorScheme.error
             } else {
                 MaterialTheme.colorScheme.onSurface
@@ -2055,29 +2855,45 @@ private fun stableConceptId(documentId: String, conceptName: String): String {
     EngineeringMechanicsConceptCatalog.concepts
         .find { it.name == conceptName }
         ?.let { return it.id }
-    val slug = conceptName.lowercase()
-        .replace(Regex("[^a-z0-9가-힣]+"), "_")
-        .trim('_')
-        .take(40)
-        .ifBlank { "concept" }
+    val slug =
+        conceptName.lowercase()
+            .replace(Regex("[^a-z0-9가-힣]+"), "_")
+            .trim('_')
+            .take(40)
+            .ifBlank { "concept" }
     return "${documentId.take(8)}_$slug"
 }
 
 private fun mapQuizError(error: Exception): String {
     val msg = error.message.orEmpty()
     return when {
+        msg.contains("좋은 퀴즈를 만들지", true) ->
+            msg
         msg.contains("API 키", true) ->
             msg
         msg.contains("Unable to resolve host", true) ||
             msg.contains("No address associated", true) ->
             "LLM 서버 주소를 찾을 수 없습니다. 네트워크/DNS 상태를 확인해주세요."
+        msg.contains("connection abort", true) ||
+            msg.contains("Connection reset", true) ||
+            msg.contains("Software caused connection", true) ||
+            msg.contains("SocketException", true) ||
+            msg.contains("SocketTimeout", true) ||
+            msg.contains("failed to connect", true) ->
+            "네트워크 연결이 끊겼어요. 연결 상태를 확인하고 다시 시도해주세요."
         msg.contains("JSON", true) ||
             msg.contains("파싱", true) ->
             "LLM 응답을 퀴즈 JSON으로 해석하지 못했습니다. 새 문제 생성을 다시 눌러주세요."
+        msg.contains("핵심 개념", true) ||
+            msg.contains("KC", true) ->
+            "선택한 범위에서 KC를 테스트할 수 있는 근거 문단을 찾지 못했습니다. 다른 페이지나 영역을 선택해 주세요."
         msg.contains("API error 429", true) ->
             "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
         msg.contains("API error 400", true) ->
             "LLM 요청 형식이나 선택한 모델이 맞지 않습니다. OpenRouter 모델을 다시 불러오거나 provider를 확인해주세요."
+        msg.contains("Timed out", true) ||
+            msg.contains("timeout", true) ->
+            "퀴즈 생성 시간이 초과되었습니다. 문서 전체 대신 현재 페이지나 선택 영역으로 다시 시도해주세요."
         else ->
             "퀴즈를 생성할 수 없습니다: $msg"
     }
@@ -2091,15 +2907,18 @@ private fun LlmConnectionStatusBanner(
     onRetryConnection: () -> Unit
 ) {
     Surface(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        color = MaterialTheme.colorScheme
+        color =
+        MaterialTheme.colorScheme
             .primaryContainer.copy(alpha = 0.55f),
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(
-            modifier = Modifier.padding(
+            modifier =
+            Modifier.padding(
                 horizontal = 12.dp,
                 vertical = 10.dp
             ),
@@ -2124,7 +2943,8 @@ private fun LlmConnectionStatusBanner(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = when (connectionState) {
+                    text =
+                    when (connectionState) {
                         LlmConnectionState.CONNECTING ->
                             if (hasQueuedRequest) {
                                 "LLM 서버와 연결 중입니다. 요청을 보관했고 연결되면 자동으로 전송합니다."
@@ -2141,7 +2961,8 @@ private fun LlmConnectionStatusBanner(
                             "LLM 서버 연결이 준비되었습니다."
                     },
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme
+                    color =
+                    MaterialTheme.colorScheme
                         .onPrimaryContainer,
                     lineHeight = 16.sp
                 )
@@ -2164,7 +2985,8 @@ private fun LlmConnectionStatusBanner(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .clickable { onRetryConnection() }
                         .padding(
@@ -2211,9 +3033,10 @@ private suspend fun streamAssistantResponse(
     fun updateAssistant(content: String) {
         val idx = ensureAssistantMessage(content)
         if (idx in messages.indices) {
-            messages[idx] = messages[idx].copy(
-                content = content
-            )
+            messages[idx] =
+                messages[idx].copy(
+                    content = content
+                )
         }
     }
 
@@ -2222,7 +3045,8 @@ private suspend fun streamAssistantResponse(
         var thinking = false
         llmService.stream(
             messages = messages.toList(),
-            systemPrompt = buildSystemPrompt(
+            systemPrompt =
+            buildSystemPrompt(
                 documentContent,
                 pageIndex,
                 userPrompt,
@@ -2240,7 +3064,8 @@ private suspend fun streamAssistantResponse(
                     sb.clear()
                 }
                 ClaudeClient.GENERATING_TOKEN,
-                LlmClient.GENERATING_TOKEN -> {
+                LlmClient.GENERATING_TOKEN
+                -> {
                     updateAssistant("응답 생성 중...")
                 }
                 LlmClient.RETRY_TOKEN -> {
@@ -2332,14 +3157,16 @@ private fun SidebarTopBar(
     var showProviderMenu by remember {
         mutableStateOf(false)
     }
-    val providerLabel = when (currentProvider) {
-        LlmProvider.OPENAI.name -> "ChatGPT"
-        LlmProvider.CLAUDE.name -> "Claude"
-        LlmProvider.OPENROUTER.name -> "OpenRouter"
-        else -> "Gemini"
-    }
+    val providerLabel =
+        when (currentProvider) {
+            LlmProvider.OPENAI.name -> "ChatGPT"
+            LlmProvider.CLAUDE.name -> "Claude"
+            LlmProvider.OPENROUTER.name -> "OpenRouter"
+            else -> "Gemini"
+        }
     Row(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .height(48.dp)
             .padding(horizontal = 8.dp),
@@ -2351,9 +3178,11 @@ private fun SidebarTopBar(
                 text = providerLabel,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(
                         MaterialTheme.colorScheme
@@ -2419,11 +3248,14 @@ private fun SidebarTopBar(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text
+                overflow =
+                androidx.compose.ui.text
                     .style.TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .primary,
-                modifier = Modifier
+                modifier =
+                Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable {
                         onModelMenuOpened()
@@ -2442,13 +3274,15 @@ private fun SidebarTopBar(
             ) {
                 if (modelsLoading) {
                     Box(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .padding(16.dp),
                         contentAlignment =
                         Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .size(20.dp),
                             strokeWidth = 2.dp
                         )
@@ -2458,10 +3292,12 @@ private fun SidebarTopBar(
                 ) {
                     Text(
                         "모델 목록을 불러올 수 없습니다",
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .padding(16.dp),
                         fontSize = 13.sp,
-                        color = MaterialTheme
+                        color =
+                        MaterialTheme
                             .colorScheme
                             .onSurfaceVariant
                     )
@@ -2506,7 +3342,8 @@ private fun SidebarTopBar(
         }
         IconButton(
             onClick = onToggleHistory,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(
@@ -2521,7 +3358,8 @@ private fun SidebarTopBar(
             Icon(
                 imageVector = Icons.Default.History,
                 contentDescription = "대화 기록",
-                tint = if (showHistory) {
+                tint =
+                if (showHistory) {
                     MaterialTheme.colorScheme
                         .onPrimaryContainer
                 } else {
@@ -2537,7 +3375,8 @@ private fun SidebarTopBar(
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "새 대화",
-                tint = MaterialTheme.colorScheme
+                tint =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
         }
@@ -2548,7 +3387,8 @@ private fun SidebarTopBar(
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "닫기",
-                tint = MaterialTheme.colorScheme
+                tint =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
         }
@@ -2556,31 +3396,35 @@ private fun SidebarTopBar(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(message: ChatMessage, isStreaming: Boolean = false) {
     val isUser =
         message.role == ChatMessage.Role.USER
-    val bgColor = if (isUser) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val textColor = if (isUser) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val alignment = if (isUser) {
-        Alignment.End
-    } else {
-        Alignment.Start
-    }
+    val bgColor =
+        if (isUser) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    val textColor =
+        if (isUser) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+    val alignment =
+        if (isUser) {
+            Alignment.End
+        } else {
+            Alignment.Start
+        }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = alignment
     ) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .widthIn(max = 280.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(bgColor)
@@ -2589,15 +3433,80 @@ private fun MessageBubble(message: ChatMessage) {
                     vertical = 8.dp
                 )
         ) {
-            Text(
-                text = message.content,
-                color = textColor,
-                fontSize = 14.sp,
-                lineHeight = 20.sp
-            )
+            // User text is plain; assistant output is Markdown + LaTeX. While a
+            // response is still streaming, render plain text to avoid re-parsing
+            // (and re-rendering LaTeX) on every token — switch to rich rendering
+            // once the message is complete.
+            if (isUser || isStreaming) {
+                Text(
+                    text = message.content,
+                    color = textColor,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            } else {
+                MarkdownLatexText(
+                    markdown = message.content,
+                    color = textColor,
+                    fontSizeSp = 14f
+                )
+            }
         }
     }
 }
+
+/**
+ * Renders Markdown (bold/italic/headings/lists/code/tables/links) and LaTeX math
+ * via Markwon + jlatexmath, so the LLM's `**bold**`, `$x^2$`, `$$...$$`, etc. are
+ * shown as formatted output rather than raw syntax.
+ */
+@Composable
+private fun MarkdownLatexText(markdown: String, color: Color, fontSizeSp: Float) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val argb = color.toArgb()
+    val markwon =
+        remember(context, fontSizeSp) {
+            val textSizePx = with(density) { fontSizeSp.sp.toPx() }
+            Markwon.builder(context)
+                // Required by JLatexMathPlugin when inline LaTeX is enabled.
+                .usePlugin(MarkwonInlineParserPlugin.create())
+                .usePlugin(StrikethroughPlugin.create())
+                .usePlugin(TablePlugin.create(context))
+                .usePlugin(LinkifyPlugin.create())
+                .usePlugin(
+                    JLatexMathPlugin.create(textSizePx) { builder ->
+                        builder.inlinesEnabled(true)
+                    }
+                )
+                .build()
+        }
+    val rendered = remember(markdown) { normalizeLatexDelimiters(markdown) }
+    AndroidView(
+        factory = { ctx ->
+            TextView(ctx).apply {
+                setTextColor(argb)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSizeSp)
+                setTextIsSelectable(true)
+                setLineSpacing(0f, 1.25f)
+            }
+        },
+        update = { tv ->
+            tv.setTextColor(argb)
+            markwon.setMarkdown(tv, rendered)
+        }
+    )
+}
+
+/**
+ * Maps the LaTeX delimiters LLMs commonly emit (`\(...\)`, `\[...\]`) to the
+ * `$...$` / `$$...$$` form Markwon's jlatexmath plugin recognizes.
+ */
+private fun normalizeLatexDelimiters(text: String): String = text
+    .replace("\\[", "$$")
+    .replace("\\]", "$$")
+    .replace("\\(", "$")
+    .replace("\\)", "$")
 
 @Composable
 private fun SidebarInput(
@@ -2610,28 +3519,32 @@ private fun SidebarInput(
     onSend: () -> Unit
 ) {
     val context = LocalContext.current
-    val clipboardManager = context.getSystemService(
-        android.content.Context.CLIPBOARD_SERVICE
-    ) as android.content.ClipboardManager
+    val clipboardManager =
+        context.getSystemService(
+            android.content.Context.CLIPBOARD_SERVICE
+        ) as android.content.ClipboardManager
 
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        try {
-            context.contentResolver
-                .openInputStream(uri)?.use {
-                    onAddImage(it.readBytes())
-                }
-        } catch (_: Throwable) {}
-    }
+    val imagePicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            try {
+                context.contentResolver
+                    .openInputStream(uri)?.use {
+                        onAddImage(it.readBytes())
+                    }
+            } catch (_: Throwable) {
+            }
+        }
 
     val canSend =
         value.isNotBlank() ||
             pendingImages.isNotEmpty()
 
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .padding(8.dp)
     ) {
@@ -2639,7 +3552,8 @@ private fun SidebarInput(
             LazyRow(
                 horizontalArrangement =
                 Arrangement.spacedBy(6.dp),
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
             ) {
@@ -2666,7 +3580,8 @@ private fun SidebarInput(
                 Icon(
                     Icons.Default.Image,
                     contentDescription = "이미지 첨부",
-                    tint = if (!isLoading) {
+                    tint =
+                    if (!isLoading) {
                         MaterialTheme.colorScheme
                             .onSurfaceVariant
                     } else {
@@ -2679,8 +3594,9 @@ private fun SidebarInput(
             IconButton(
                 onClick = {
                     try {
-                        val clip = clipboardManager
-                            .primaryClip
+                        val clip =
+                            clipboardManager
+                                .primaryClip
                         val item =
                             clip?.getItemAt(0)
                         val uri = item?.uri
@@ -2694,7 +3610,8 @@ private fun SidebarInput(
                                     )
                                 }
                         }
-                    } catch (_: Throwable) {}
+                    } catch (_: Throwable) {
+                    }
                 },
                 enabled = !isLoading,
                 modifier = Modifier.size(36.dp)
@@ -2703,7 +3620,8 @@ private fun SidebarInput(
                     Icons.Default.ContentPaste,
                     contentDescription =
                     "클립보드에서 붙여넣기",
-                    tint = if (!isLoading) {
+                    tint =
+                    if (!isLoading) {
                         MaterialTheme.colorScheme
                             .onSurfaceVariant
                     } else {
@@ -2724,7 +3642,8 @@ private fun SidebarInput(
                     )
                 },
                 maxLines = 5,
-                colors = TextFieldDefaults.colors(
+                colors =
+                TextFieldDefaults.colors(
                     focusedContainerColor =
                     MaterialTheme.colorScheme
                         .surfaceVariant,
@@ -2744,10 +3663,12 @@ private fun SidebarInput(
                 enabled = canSend
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored
+                    imageVector =
+                    Icons.AutoMirrored
                         .Filled.Send,
                     contentDescription = "전송",
-                    tint = if (canSend) {
+                    tint =
+                    if (canSend) {
                         MaterialTheme.colorScheme
                             .primary
                     } else {
@@ -2762,26 +3683,29 @@ private fun SidebarInput(
 
 @Composable
 private fun ImageThumbnail(bytes: ByteArray, onRemove: () -> Unit) {
-    val bitmap = remember(bytes) {
-        BitmapFactory.decodeByteArray(
-            bytes,
-            0,
-            bytes.size
-        )
-    }
+    val bitmap =
+        remember(bytes) {
+            BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.size
+            )
+        }
     Box(modifier = Modifier.size(56.dp)) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "첨부 이미지",
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
             )
         } else {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(8.dp))
                     .background(
@@ -2794,13 +3718,15 @@ private fun ImageThumbnail(bytes: ByteArray, onRemove: () -> Unit) {
                     Icons.Default.Image,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme
+                    tint =
+                    MaterialTheme.colorScheme
                         .outline
                 )
             }
         }
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .align(Alignment.TopEnd)
                 .size(18.dp)
                 .clip(CircleShape)
@@ -2814,7 +3740,8 @@ private fun ImageThumbnail(bytes: ByteArray, onRemove: () -> Unit) {
                 Icons.Default.Close,
                 contentDescription = "제거",
                 modifier = Modifier.size(12.dp),
-                tint = MaterialTheme.colorScheme
+                tint =
+                MaterialTheme.colorScheme
                     .onError
             )
         }
@@ -2873,7 +3800,8 @@ private fun QuizHistoryPanel(
     }
     if (records.isEmpty()) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
                 .padding(24.dp),
@@ -2882,44 +3810,52 @@ private fun QuizHistoryPanel(
             Text(
                 "이 문서에서 푼 퀴즈 기록이 없습니다",
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
         }
         return
     }
-    val dayFormat = remember {
-        SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
-    }
-    val timeFormat = remember {
-        SimpleDateFormat("HH:mm", Locale.getDefault())
-    }
-    val grouped = remember(records) {
-        records.groupBy {
-            dayFormat.format(Date(it.answeredAt))
-        }.toSortedMap(compareByDescending { it })
-    }
+    val dayFormat =
+        remember {
+            SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
+        }
+    val timeFormat =
+        remember {
+            SimpleDateFormat("HH:mm", Locale.getDefault())
+        }
+    val grouped =
+        remember(records) {
+            records.groupBy {
+                dayFormat.format(Date(it.answeredAt))
+            }.toSortedMap(compareByDescending { it })
+        }
     var selectedDay by remember(records) {
         mutableStateOf(grouped.keys.first())
     }
-    val selectedRecords = grouped[selectedDay].orEmpty()
-        .sortedByDescending { it.answeredAt }
+    val selectedRecords =
+        grouped[selectedDay].orEmpty()
+            .sortedByDescending { it.answeredAt }
 
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxSize()
             .padding(horizontal = 8.dp)
     ) {
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
         ) {
             items(grouped.keys.toList()) { day ->
                 Text(
                     day,
-                    modifier = Modifier
+                    modifier =
+                    Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(
                             if (day == selectedDay) {
@@ -2930,7 +3866,8 @@ private fun QuizHistoryPanel(
                         )
                         .clickable { selectedDay = day }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
-                    color = if (day == selectedDay) {
+                    color =
+                    if (day == selectedDay) {
                         MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -2952,7 +3889,8 @@ private fun QuizHistoryPanel(
                 ) {
                     QuizHistoryCard(
                         record = record,
-                        timeText = timeFormat.format(
+                        timeText =
+                        timeFormat.format(
                             Date(record.answeredAt)
                         )
                     )
@@ -2964,12 +3902,10 @@ private fun QuizHistoryPanel(
 }
 
 @Composable
-private fun QuizHistoryCard(
-    record: QuizResponseRecord,
-    timeText: String
-) {
+private fun QuizHistoryCard(record: QuizResponseRecord, timeText: String) {
     Column(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -2993,7 +3929,8 @@ private fun QuizHistoryCard(
                 if (record.isCorrect) "정답" else "오답",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (record.isCorrect) {
+                color =
+                if (record.isCorrect) {
                     Color(0xFF047857)
                 } else {
                     MaterialTheme.colorScheme.error
@@ -3016,13 +3953,15 @@ private fun QuizHistoryCard(
                 "$key. $value",
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
-                color = when {
+                color =
+                when {
                     isAnswer -> Color(0xFF047857)
                     isSelected && !record.isCorrect ->
                         MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                fontWeight = if (isSelected || isAnswer) {
+                fontWeight =
+                if (isSelected || isAnswer) {
                     FontWeight.Bold
                 } else {
                     FontWeight.Normal
@@ -3038,7 +3977,8 @@ private fun QuizHistoryCard(
             },
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = if (record.isCorrect) {
+            color =
+            if (record.isCorrect) {
                 Color(0xFF047857)
             } else {
                 MaterialTheme.colorScheme.error
@@ -3093,10 +4033,7 @@ private fun QuizHistoryCard(
 }
 
 @Composable
-private fun SwipeRevealDeleteContainer(
-    onDelete: () -> Unit,
-    content: @Composable () -> Unit
-) {
+private fun SwipeRevealDeleteContainer(onDelete: () -> Unit, content: @Composable () -> Unit) {
     val density = LocalDensity.current
     val revealWidth = 86.dp
     val revealWidthPx = with(density) { revealWidth.toPx() }
@@ -3105,7 +4042,8 @@ private fun SwipeRevealDeleteContainer(
     }
 
     Box(
-        modifier = Modifier
+        modifier =
+        Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
     ) {
@@ -3114,7 +4052,8 @@ private fun SwipeRevealDeleteContainer(
             horizontalArrangement = Arrangement.End
         ) {
             Box(
-                modifier = Modifier
+                modifier =
+                Modifier
                     .width(revealWidth)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.error)
@@ -3142,7 +4081,8 @@ private fun SwipeRevealDeleteContainer(
             }
         }
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .offset {
                     IntOffset(offsetPx.roundToInt(), 0)
@@ -3151,21 +4091,23 @@ private fun SwipeRevealDeleteContainer(
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
-                            offsetPx = if (
-                                offsetPx <= -revealWidthPx / 2f
-                            ) {
-                                -revealWidthPx
-                            } else {
-                                0f
-                            }
+                            offsetPx =
+                                if (
+                                    offsetPx <= -revealWidthPx / 2f
+                                ) {
+                                    -revealWidthPx
+                                } else {
+                                    0f
+                                }
                         },
                         onHorizontalDrag = { _, dragAmount ->
-                            offsetPx = (
-                                offsetPx + dragAmount
-                            ).coerceIn(
-                                -revealWidthPx,
-                                0f
-                            )
+                            offsetPx =
+                                (
+                                    offsetPx + dragAmount
+                                    ).coerceIn(
+                                    -revealWidthPx,
+                                    0f
+                                )
                         }
                     )
                 }
@@ -3234,7 +4176,8 @@ private fun ConversationHistoryPanel(
     }
     if (conversations.isEmpty()) {
         Box(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
                 .padding(24.dp),
@@ -3243,13 +4186,15 @@ private fun ConversationHistoryPanel(
             Text(
                 "저장된 대화가 없습니다",
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme
+                color =
+                MaterialTheme.colorScheme
                     .onSurfaceVariant
             )
         }
     } else {
         LazyColumn(
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
                 .padding(horizontal = 8.dp),
             verticalArrangement =
@@ -3268,7 +4213,8 @@ private fun ConversationHistoryPanel(
                     }
                 ) {
                     Row(
-                        modifier = Modifier
+                        modifier =
+                        Modifier
                             .fillMaxWidth()
                             .clip(
                                 RoundedCornerShape(8.dp)
@@ -3293,7 +4239,8 @@ private fun ConversationHistoryPanel(
                         Alignment.CenterVertically
                     ) {
                         Column(
-                            modifier = Modifier
+                            modifier =
+                            Modifier
                                 .weight(1f)
                         ) {
                             Text(
@@ -3302,7 +4249,8 @@ private fun ConversationHistoryPanel(
                                 fontWeight =
                                 FontWeight.Medium,
                                 maxLines = 1,
-                                color = MaterialTheme
+                                color =
+                                MaterialTheme
                                     .colorScheme
                                     .onSurface
                             )
@@ -3319,7 +4267,8 @@ private fun ConversationHistoryPanel(
                             Text(
                                 dateStr,
                                 fontSize = 11.sp,
-                                color = MaterialTheme
+                                color =
+                                MaterialTheme
                                     .colorScheme
                                     .onSurfaceVariant
                             )

@@ -17,7 +17,6 @@ class SettingsViewModel(
     private val llmService: LlmService,
     private val serverApi: MaestroServerApi
 ) : ViewModel() {
-
     private val _geminiKeySet = MutableStateFlow(false)
     val geminiKeySet: StateFlow<Boolean> =
         _geminiKeySet.asStateFlow()
@@ -45,6 +44,10 @@ class SettingsViewModel(
     private val _serverUsername = MutableStateFlow<String?>(null)
     val serverUsername: StateFlow<String?> =
         _serverUsername.asStateFlow()
+
+    private val _qeServerUrl = MutableStateFlow("")
+    val qeServerUrl: StateFlow<String> =
+        _qeServerUrl.asStateFlow()
 
     private val _serverAuthInProgress =
         MutableStateFlow(false)
@@ -107,9 +110,9 @@ class SettingsViewModel(
                 .collect {
                     _serverTokenSet.value =
                         !it.isNullOrBlank() ||
-                            BuildConfig
-                                .MAESTRO_SERVER_BEARER_TOKEN
-                                .isNotBlank()
+                        BuildConfig
+                            .MAESTRO_SERVER_BEARER_TOKEN
+                            .isNotBlank()
                 }
         }
         viewModelScope.launch {
@@ -120,6 +123,26 @@ class SettingsViewModel(
                             name.isNotBlank()
                         }
                 }
+        }
+        viewModelScope.launch {
+            settingsRepository.getQeServerUrl()
+                .collect {
+                    _qeServerUrl.value = it.orEmpty()
+                }
+        }
+    }
+
+    fun saveQeServerUrl(url: String) {
+        viewModelScope.launch {
+            val trimmed = url.trim()
+            if (trimmed.isBlank()) {
+                _validationResult.value =
+                    "QE 서버 주소를 입력해 주세요"
+                return@launch
+            }
+            settingsRepository.setQeServerUrl(trimmed)
+            _validationResult.value =
+                "OK - QE 서버 주소가 저장되었습니다"
         }
     }
 
@@ -138,12 +161,13 @@ class SettingsViewModel(
                 )
                 val valid =
                     llmService.validateApiKey(trimmed)
-                _validationResult.value = if (valid) {
-                    settingsRepository.setGeminiApiKey(trimmed)
-                    "OK - Gemini API 키가 유효합니다"
-                } else {
-                    "Gemini API 키가 유효하지 않습니다"
-                }
+                _validationResult.value =
+                    if (valid) {
+                        settingsRepository.setGeminiApiKey(trimmed)
+                        "OK - Gemini API 키가 유효합니다"
+                    } else {
+                        "Gemini API 키가 유효하지 않습니다"
+                    }
             } catch (_: Exception) {
                 _validationResult.value =
                     "서버에 연결할 수 없습니다"
@@ -164,12 +188,13 @@ class SettingsViewModel(
                 )
                 val valid =
                     llmService.validateApiKey(trimmed)
-                _validationResult.value = if (valid) {
-                    settingsRepository.setOpenAiApiKey(trimmed)
-                    "OK - OpenAI API 키가 유효합니다"
-                } else {
-                    "OpenAI API 키가 유효하지 않습니다"
-                }
+                _validationResult.value =
+                    if (valid) {
+                        settingsRepository.setOpenAiApiKey(trimmed)
+                        "OK - OpenAI API 키가 유효합니다"
+                    } else {
+                        "OpenAI API 키가 유효하지 않습니다"
+                    }
             } catch (_: Exception) {
                 _validationResult.value =
                     "서버에 연결할 수 없습니다"
@@ -190,12 +215,13 @@ class SettingsViewModel(
                 )
                 val valid =
                     llmService.validateApiKey(trimmed)
-                _validationResult.value = if (valid) {
-                    settingsRepository.setClaudeApiKey(trimmed)
-                    "OK - Claude API 키가 유효합니다"
-                } else {
-                    "Claude API 키가 유효하지 않습니다"
-                }
+                _validationResult.value =
+                    if (valid) {
+                        settingsRepository.setClaudeApiKey(trimmed)
+                        "OK - Claude API 키가 유효합니다"
+                    } else {
+                        "Claude API 키가 유효하지 않습니다"
+                    }
             } catch (_: Exception) {
                 _validationResult.value =
                     "서버에 연결할 수 없습니다"
@@ -219,12 +245,13 @@ class SettingsViewModel(
                 )
                 val valid =
                     llmService.validateApiKey(trimmed)
-                _validationResult.value = if (valid) {
-                    settingsRepository.setOpenRouterApiKey(trimmed)
-                    "OK - OpenRouter API 키가 유효합니다"
-                } else {
-                    "OpenRouter API 키가 유효하지 않습니다"
-                }
+                _validationResult.value =
+                    if (valid) {
+                        settingsRepository.setOpenRouterApiKey(trimmed)
+                        "OK - OpenRouter API 키가 유효합니다"
+                    } else {
+                        "OpenRouter API 키가 유효하지 않습니다"
+                    }
             } catch (_: Exception) {
                 _validationResult.value =
                     "서버에 연결할 수 없습니다"
@@ -252,13 +279,14 @@ class SettingsViewModel(
     fun saveServerBearerToken(token: String) {
         viewModelScope.launch {
             val raw = token.trim()
-            val normalized = if (
-                raw.startsWith("Bearer ", ignoreCase = true)
-            ) {
-                raw.drop("Bearer ".length).trim()
-            } else {
-                raw
-            }
+            val normalized =
+                if (
+                    raw.startsWith("Bearer ", ignoreCase = true)
+                ) {
+                    raw.drop("Bearer ".length).trim()
+                } else {
+                    raw
+                }
             if (normalized.isBlank()) {
                 _validationResult.value =
                     "MinerU 서버 토큰을 입력해 주세요"
@@ -273,10 +301,7 @@ class SettingsViewModel(
         }
     }
 
-    fun authenticateMineruServer(
-        username: String,
-        password: String
-    ) {
+    fun authenticateMineruServer(username: String, password: String) {
         viewModelScope.launch {
             val trimmedUsername = username.trim()
             if (trimmedUsername.isBlank() ||
@@ -290,12 +315,13 @@ class SettingsViewModel(
             _serverAuthInProgress.value = true
             _validationResult.value = null
             try {
-                val response = serverApi.login(
-                    LoginRequest(
-                        username = trimmedUsername,
-                        password = password
+                val response =
+                    serverApi.login(
+                        LoginRequest(
+                            username = trimmedUsername,
+                            password = password
+                        )
                     )
-                )
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body == null) {
@@ -313,10 +339,11 @@ class SettingsViewModel(
                             "OK - MinerU 서버 인증이 완료되었습니다"
                     }
                 } else {
-                    val error = response.errorBody()
-                        ?.string()
-                        ?.take(160)
-                        .orEmpty()
+                    val error =
+                        response.errorBody()
+                            ?.string()
+                            ?.take(160)
+                            .orEmpty()
                     _validationResult.value =
                         "MinerU 서버 인증 실패: HTTP ${response.code()} $error"
                 }
@@ -374,5 +401,4 @@ class SettingsViewModel(
             _validationResult.value = null
         }
     }
-
 }

@@ -6,27 +6,32 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-val Typography = Typography(
-    headlineLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Black,
-        fontSize = 20.sp,
-        letterSpacing = (-0.5).sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 10.sp,
-        letterSpacing = 1.5.sp
+val Typography =
+    Typography(
+        headlineLarge =
+        TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Black,
+            fontSize = 20.sp,
+            letterSpacing = (-0.5).sp
+        ),
+        titleMedium =
+        TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp
+        ),
+        bodySmall =
+        TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp
+        ),
+        labelSmall =
+        TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 1.5.sp
+        )
     )
-)

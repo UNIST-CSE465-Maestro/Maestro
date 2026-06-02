@@ -12,49 +12,52 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 object ParsedContentNormalizer {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            prettyPrint = true
+        }
 
     fun normalizeMineruJson(documentId: String, rawJson: String): String {
-        val root = runCatching {
-            json.parseToJsonElement(rawJson)
-        }.getOrNull() ?: return rawJson
+        val root =
+            runCatching {
+                json.parseToJsonElement(rawJson)
+            }.getOrNull() ?: return rawJson
         if (root is JsonObject && root["pdf_info"] is JsonArray) {
             return json.encodeToString(JsonElement.serializer(), root)
         }
         val pages = root as? JsonArray ?: return rawJson
-        val normalizedPages = buildJsonArray {
-            pages.forEachIndexed { pageIndex, page ->
-                val blocks = page as? JsonArray
-                    ?: return@forEachIndexed
-                add(normalizePage(pageIndex, blocks))
+        val normalizedPages =
+            buildJsonArray {
+                pages.forEachIndexed { pageIndex, page ->
+                    val blocks =
+                        page as? JsonArray
+                            ?: return@forEachIndexed
+                    add(normalizePage(pageIndex, blocks))
+                }
             }
-        }
-        val normalizedRoot = buildJsonObject {
-            put("schema_version", 1)
-            put("source", "mineru")
-            put("documentId", documentId)
-            put("generatedAt", System.currentTimeMillis())
-            put("pdf_info", normalizedPages)
-        }
+        val normalizedRoot =
+            buildJsonObject {
+                put("schema_version", 1)
+                put("source", "mineru")
+                put("documentId", documentId)
+                put("generatedAt", System.currentTimeMillis())
+                put("pdf_info", normalizedPages)
+            }
         return json.encodeToString(
             JsonElement.serializer(),
             normalizedRoot
         )
     }
 
-    private fun normalizePage(
-        pageIndex: Int,
-        blocks: JsonArray
-    ): JsonObject {
-        val normalizedBlocks = blocks
-            .mapNotNull { it as? JsonObject }
-            .mapIndexed { index, block ->
-                normalizeBlock(index, block)
-            }
+    private fun normalizePage(pageIndex: Int, blocks: JsonArray): JsonObject {
+        val normalizedBlocks =
+            blocks
+                .mapNotNull { it as? JsonObject }
+                .mapIndexed { index, block ->
+                    normalizeBlock(index, block)
+                }
         val pageSize = pageSize(normalizedBlocks)
         return buildJsonObject {
             put("page_idx", pageIndex)
@@ -71,15 +74,13 @@ object ParsedContentNormalizer {
         }
     }
 
-    private fun normalizeBlock(
-        index: Int,
-        block: JsonObject
-    ): JsonObject {
+    private fun normalizeBlock(index: Int, block: JsonObject): JsonObject {
         val bbox = block.bbox()
         val text = extractText(block["content"])
         val imagePath = findImagePath(block["content"])
-        val type = block["type"]?.stringValue().orEmpty()
-            .ifBlank { "text" }
+        val type =
+            block["type"]?.stringValue().orEmpty()
+                .ifBlank { "text" }
         return buildJsonObject {
             put("id", "b$index")
             put("type", type)
@@ -117,24 +118,26 @@ object ParsedContentNormalizer {
 
     private fun extractText(element: JsonElement?): String {
         val parts = mutableListOf<String>()
+
         fun walk(value: JsonElement?) {
             when (value) {
-                is JsonObject -> value.forEach { (key, child) ->
-                    if ((key == "content" || key == "item_content") &&
-                        child.stringValue() != null
-                    ) {
-                        parts += child.stringValue().orEmpty()
-                    } else if (
-                        key.endsWith("_content") ||
-                        key == "paragraph_content" ||
-                        key == "title_content" ||
-                        key == "list_items" ||
-                        child is JsonArray ||
-                        child is JsonObject
-                    ) {
-                        walk(child)
+                is JsonObject ->
+                    value.forEach { (key, child) ->
+                        if ((key == "content" || key == "item_content") &&
+                            child.stringValue() != null
+                        ) {
+                            parts += child.stringValue().orEmpty()
+                        } else if (
+                            key.endsWith("_content") ||
+                            key == "paragraph_content" ||
+                            key == "title_content" ||
+                            key == "list_items" ||
+                            child is JsonArray ||
+                            child is JsonObject
+                        ) {
+                            walk(child)
+                        }
                     }
-                }
                 is JsonArray -> value.forEach(::walk)
                 else -> Unit
             }
@@ -162,12 +165,14 @@ object ParsedContentNormalizer {
 
     private fun pageSize(blocks: List<JsonObject>): Pair<Float, Float> {
         val rects = blocks.mapNotNull { it["bbox"] as? JsonArray }
-        val width = rects.maxOfOrNull {
-            it.getOrNull(2)?.numberValue() ?: 0f
-        } ?: 0f
-        val height = rects.maxOfOrNull {
-            it.getOrNull(3)?.numberValue() ?: 0f
-        } ?: 0f
+        val width =
+            rects.maxOfOrNull {
+                it.getOrNull(2)?.numberValue() ?: 0f
+            } ?: 0f
+        val height =
+            rects.maxOfOrNull {
+                it.getOrNull(3)?.numberValue() ?: 0f
+            } ?: 0f
         return width.coerceAtLeast(1f) to height.coerceAtLeast(1f)
     }
 
@@ -184,17 +189,15 @@ object ParsedContentNormalizer {
         )
     }
 
-    private fun List<Float>.toJsonArray(): JsonArray =
-        buildJsonArray {
-            forEach { value ->
-                add(JsonPrimitive(value))
-            }
+    private fun List<Float>.toJsonArray(): JsonArray = buildJsonArray {
+        forEach { value ->
+            add(JsonPrimitive(value))
         }
+    }
 
-    private fun JsonElement.stringValue(): String? =
-        runCatching { jsonPrimitive.contentOrNull }.getOrNull()
+    private fun JsonElement.stringValue(): String? = runCatching {
+        jsonPrimitive.contentOrNull
+    }.getOrNull()
 
-    private fun JsonElement.numberValue(): Float? =
-        stringValue()?.toFloatOrNull()
-
+    private fun JsonElement.numberValue(): Float? = stringValue()?.toFloatOrNull()
 }

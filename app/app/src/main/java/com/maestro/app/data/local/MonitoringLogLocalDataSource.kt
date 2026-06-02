@@ -14,8 +14,7 @@ enum class MonitoringLogCategory {
     DEVICE_RESOURCE,
     KT_RUNTIME,
     LEARNING_BEHAVIOR,
-    DOMAIN_EVALUATION,
-    UX_RELIABILITY
+    DOMAIN_EVALUATION
 }
 
 @Serializable
@@ -31,10 +30,11 @@ data class MonitoringLogEntry(
 
 class MonitoringLogLocalDataSource {
     private val logFile: File
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+        }
     private val _logs =
         MutableStateFlow<List<MonitoringLogEntry>>(emptyList())
     val logs: StateFlow<List<MonitoringLogEntry>> =
@@ -59,18 +59,20 @@ class MonitoringLogLocalDataSource {
         metadata: Map<String, String> = emptyMap(),
         timestamp: Long = System.currentTimeMillis()
     ): MonitoringLogEntry {
-        val entry = MonitoringLogEntry(
-            id = UUID.randomUUID().toString(),
-            category = category,
-            eventType = eventType,
-            timestamp = timestamp,
-            documentId = documentId,
-            conceptId = conceptId,
-            metadata = metadata
-        )
-        val next = (readLogs() + entry)
-            .sortedByDescending { it.timestamp }
-            .take(MAX_LOGS)
+        val entry =
+            MonitoringLogEntry(
+                id = UUID.randomUUID().toString(),
+                category = category,
+                eventType = eventType,
+                timestamp = timestamp,
+                documentId = documentId,
+                conceptId = conceptId,
+                metadata = metadata
+            )
+        val next =
+            (readLogs() + entry)
+                .sortedByDescending { it.timestamp }
+                .take(MAX_LOGS)
         save(next)
         _logs.value = next
         return entry

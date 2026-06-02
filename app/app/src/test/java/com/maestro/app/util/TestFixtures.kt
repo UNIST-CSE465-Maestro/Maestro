@@ -14,7 +14,6 @@ import java.util.UUID
  * Provides sensible defaults — override only what matters for the test.
  */
 object TestFixtures {
-
     fun pdfDocument(
         id: String = UUID.randomUUID().toString(),
         uriString: String = "file:///test/pdfs/$id.pdf",
@@ -61,8 +60,10 @@ object TestFixtures {
         timestamp = timestamp
     )
 
-    fun userMessage(content: String = "Hello") =
-        chatMessage(role = ChatMessage.Role.USER, content = content)
+    fun userMessage(content: String = "Hello") = chatMessage(
+        role = ChatMessage.Role.USER,
+        content = content
+    )
 
     fun assistantMessage(content: String = "Hi there!") = chatMessage(
         role = ChatMessage.Role.ASSISTANT,
@@ -82,11 +83,12 @@ object TestFixtures {
     )
 
     fun inkStroke(
-        points: List<StrokePoint> = listOf(
-            strokePoint(0f, 0f),
-            strokePoint(10f, 10f),
-            strokePoint(20f, 20f)
-        ),
+        points: List<StrokePoint> =
+            listOf(
+                strokePoint(0f, 0f),
+                strokePoint(10f, 10f),
+                strokePoint(20f, 20f)
+            ),
         color: Color = Color.Black,
         baseWidth: Float = 3f
     ) = InkStroke(
@@ -97,7 +99,8 @@ object TestFixtures {
 
     fun strokeList(count: Int = 3): List<InkStroke> = (0 until count).map { i ->
         inkStroke(
-            points = listOf(
+            points =
+            listOf(
                 strokePoint(i * 10f, i * 10f),
                 strokePoint(i * 10f + 5f, i * 10f + 5f),
                 strokePoint(i * 10f + 10f, i * 10f + 10f)

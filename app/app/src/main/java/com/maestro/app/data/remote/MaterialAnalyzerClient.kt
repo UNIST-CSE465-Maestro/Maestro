@@ -19,7 +19,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * Formula: SHA256(SHA256_hex(file_bytes) + mode)
  */
 object MaterialAnalyzerHash {
-
     /**
      * Compute SHA256(fileHash + mode) in chunks.
      * Safe for large files (500MB+).
@@ -69,7 +68,6 @@ class MaterialAnalyzerClient(
     private val api: MaestroServerApi,
     private val context: Context
 ) {
-
     suspend fun upload(uri: Uri, mode: String, sha256: String): AnalysisTaskResponse =
         withContext(Dispatchers.IO) {
             val inputStream =
@@ -79,27 +77,32 @@ class MaterialAnalyzerClient(
                     )
             val bytes = inputStream.use { it.readBytes() }
             val fileName = getFileName(uri)
-            val filePart = MultipartBody.Part.createFormData(
-                "file",
-                fileName,
-                bytes.toRequestBody(
-                    "application/pdf".toMediaType()
+            val filePart =
+                MultipartBody.Part.createFormData(
+                    "file",
+                    fileName,
+                    bytes.toRequestBody(
+                        "application/pdf".toMediaType()
+                    )
                 )
-            )
-            val sha256Body = sha256.toRequestBody(
-                "text/plain".toMediaType()
-            )
-            val modeBody = mode.toRequestBody(
-                "text/plain".toMediaType()
-            )
-            val resp = api.uploadPdf(
-                filePart,
-                sha256Body,
-                modeBody
-            )
+            val sha256Body =
+                sha256.toRequestBody(
+                    "text/plain".toMediaType()
+                )
+            val modeBody =
+                mode.toRequestBody(
+                    "text/plain".toMediaType()
+                )
+            val resp =
+                api.uploadPdf(
+                    filePart,
+                    sha256Body,
+                    modeBody
+                )
             if (!resp.isSuccessful) {
-                val errorBody = resp.errorBody()?.string()
-                    ?: ""
+                val errorBody =
+                    resp.errorBody()?.string()
+                        ?: ""
                 Log.e(
                     TAG,
                     "upload failed HTTP ${resp.code()} mode=$mode body=${errorBody.take(500)}"
@@ -132,8 +135,9 @@ class MaterialAnalyzerClient(
     suspend fun pollOnce(taskId: String): AnalysisTaskResponse {
         val resp = api.getTaskStatus(taskId)
         if (!resp.isSuccessful) {
-            val errorBody = resp.errorBody()?.string()
-                ?: ""
+            val errorBody =
+                resp.errorBody()?.string()
+                    ?: ""
             Log.e(
                 TAG,
                 "poll failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
@@ -153,8 +157,9 @@ class MaterialAnalyzerClient(
     suspend fun getResultMd(taskId: String): String = withContext(Dispatchers.IO) {
         val resp = api.getResultMd(taskId)
         if (!resp.isSuccessful) {
-            val errorBody = resp.errorBody()?.string()
-                ?: ""
+            val errorBody =
+                resp.errorBody()?.string()
+                    ?: ""
             Log.e(
                 TAG,
                 "result md failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
@@ -170,11 +175,14 @@ class MaterialAnalyzerClient(
     suspend fun getResultJson(taskId: String): String = withContext(Dispatchers.IO) {
         val resp = api.getResultJson(taskId)
         if (!resp.isSuccessful) {
-            val errorBody = resp.errorBody()?.string()
-                ?: ""
+            val errorBody =
+                resp.errorBody()?.string()
+                    ?: ""
             Log.e(
                 TAG,
-                "result json failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(500)}"
+                "result json failed HTTP ${resp.code()} task=$taskId body=${errorBody.take(
+                    500
+                )}"
             )
             throw ServerException(
                 resp.code(),
@@ -185,15 +193,16 @@ class MaterialAnalyzerClient(
     }
 
     private fun getFileName(uri: Uri): String {
-        val cursor = context.contentResolver.query(
-            uri,
-            arrayOf(
-                android.provider.OpenableColumns.DISPLAY_NAME
-            ),
-            null,
-            null,
-            null
-        )
+        val cursor =
+            context.contentResolver.query(
+                uri,
+                arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ),
+                null,
+                null,
+                null
+            )
         return cursor?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: "document.pdf"

@@ -4,10 +4,10 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 data class LocalProfile(
     val displayName: String? = null,
@@ -17,10 +17,11 @@ data class LocalProfile(
 class ProfileLocalDataSource(
     private val context: Context
 ) {
-    private val prefs = context.getSharedPreferences(
-        "maestro_profile",
-        Context.MODE_PRIVATE
-    )
+    private val prefs =
+        context.getSharedPreferences(
+            "maestro_profile",
+            Context.MODE_PRIVATE
+        )
     private val profileDir =
         File(context.filesDir, "profile").also { it.mkdirs() }
     private val avatarFile = File(profileDir, "avatar.jpg")

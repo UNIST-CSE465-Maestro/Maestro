@@ -38,14 +38,16 @@ class PdfExtractionWorker(
     appContext: Context,
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
-
     override suspend fun doWork(): Result {
-        val documentId = inputData.getString(KEY_DOCUMENT_ID)
-            ?: return Result.failure()
-        val uriString = inputData.getString(KEY_URI_STRING)
-            ?: return Result.failure()
-        val mode = inputData.getString(KEY_MODE)
-            ?: return Result.failure()
+        val documentId =
+            inputData.getString(KEY_DOCUMENT_ID)
+                ?: return Result.failure()
+        val uriString =
+            inputData.getString(KEY_URI_STRING)
+                ?: return Result.failure()
+        val mode =
+            inputData.getString(KEY_MODE)
+                ?: return Result.failure()
 
         val koin = GlobalContext.get()
         val repository = koin.get<DocumentRepository>()
@@ -54,8 +56,9 @@ class PdfExtractionWorker(
 
         return try {
             progressStore.update(documentId, 1)
-            val doc = latestDocument(repository, documentId)
-                ?: return Result.failure()
+            val doc =
+                latestDocument(repository, documentId)
+                    ?: return Result.failure()
             repository.updateDocument(
                 doc.copy(
                     extractionStatus = ExtractionStatus.EXTRACTING,
@@ -95,14 +98,15 @@ class PdfExtractionWorker(
                 mode == MODE_COMPARE_MLKIT_MINERU
             var localError: Throwable? = null
             if (compareMode) {
-                localError = runCatching {
-                    runLocalMlKitExtraction(
-                        documentId = documentId,
-                        uriString = uriString,
-                        progressStore = progressStore,
-                        updateProgress = false
-                    )
-                }.exceptionOrNull()
+                localError =
+                    runCatching {
+                        runLocalMlKitExtraction(
+                            documentId = documentId,
+                            uriString = uriString,
+                            progressStore = progressStore,
+                            updateProgress = false
+                        )
+                    }.exceptionOrNull()
                 if (localError != null) {
                     Log.e(
                         TAG,
@@ -130,118 +134,123 @@ class PdfExtractionWorker(
                 return Result.success()
             }
             mineruMutex.withLock {
-            ensureMineruTokenIfNeeded(
-                documentId = documentId,
-                mode = mode,
-                progressStore = progressStore
-            )
-            val analyzerClient = koin.get<MaterialAnalyzerClient>()
-            progressStore.updateSource(
-                documentId = documentId,
-                sourceId = SOURCE_MINERU,
-                label = LABEL_MINERU,
-                progress = 8
-            )
-            val serverMode = if (compareMode || mode == MODE_AUTO) {
-                MODE_AI
-            } else {
-                mode
-            }
-            val hash = MaterialAnalyzerHash.compute(
-                applicationContext,
-                uri,
-                serverMode
-            )
-            val savedTask = loadStoredTask(documentId)
-            if (savedTask != null &&
-                savedTask.sha256 == hash &&
-                savedTask.serverMode == serverMode
-            ) {
-                Log.i(
-                    TAG,
-                    "Resuming stored task document=$documentId task=${savedTask.taskId}"
+                ensureMineruTokenIfNeeded(
+                    documentId = documentId,
+                    mode = mode,
+                    progressStore = progressStore
                 )
-                val resumeProgress = savedTask.progress
-                    .coerceIn(32, 88)
-                progressStore.update(documentId, resumeProgress)
+                val analyzerClient = koin.get<MaterialAnalyzerClient>()
                 progressStore.updateSource(
                     documentId = documentId,
                     sourceId = SOURCE_MINERU,
                     label = LABEL_MINERU,
-                    progress = resumeProgress
+                    progress = 8
                 )
-                try {
-                    completeMineruTask(
-                        analyzerClient = analyzerClient,
-                        progressStore = progressStore,
-                        repository = repository,
+                val serverMode =
+                    if (compareMode || mode == MODE_AUTO) {
+                        MODE_AI
+                    } else {
+                        mode
+                    }
+                val hash =
+                    MaterialAnalyzerHash.compute(
+                        applicationContext,
+                        uri,
+                        serverMode
+                    )
+                val savedTask = loadStoredTask(documentId)
+                if (savedTask != null &&
+                    savedTask.sha256 == hash &&
+                    savedTask.serverMode == serverMode
+                ) {
+                    Log.i(
+                        TAG,
+                        "Resuming stored task document=$documentId task=${savedTask.taskId}"
+                    )
+                    val resumeProgress =
+                        savedTask.progress
+                            .coerceIn(32, 88)
+                    progressStore.update(documentId, resumeProgress)
+                    progressStore.updateSource(
                         documentId = documentId,
-                        mode = mode,
+                        sourceId = SOURCE_MINERU,
+                        label = LABEL_MINERU,
+                        progress = resumeProgress
+                    )
+                    try {
+                        completeMineruTask(
+                            analyzerClient = analyzerClient,
+                            progressStore = progressStore,
+                            repository = repository,
+                            documentId = documentId,
+                            mode = mode,
+                            serverMode = serverMode,
+                            sha256 = hash,
+                            taskId = savedTask.taskId,
+                            initialProgress = resumeProgress,
+                            createdAt = savedTask.createdAt
+                        )
+                        delay(700L)
+                        progressStore.clear(documentId)
+                        return Result.success()
+                    } catch (e: ServerException) {
+                        if (e.code == 404 || e.code == 410) {
+                            deleteStoredTask(documentId)
+                        } else {
+                            throw e
+                        }
+                    }
+                } else if (savedTask != null) {
+                    deleteStoredTask(documentId)
+                }
+                progressStore.update(documentId, 22)
+                progressStore.updateSource(
+                    documentId = documentId,
+                    sourceId = SOURCE_MINERU,
+                    label = LABEL_MINERU,
+                    progress = 22
+                )
+                val task =
+                    analyzerClient.upload(
+                        uri,
+                        serverMode,
+                        hash
+                    )
+                saveStoredTask(
+                    StoredExtractionTask(
+                        taskId = task.id,
+                        requestedMode = mode,
                         serverMode = serverMode,
                         sha256 = hash,
-                        taskId = savedTask.taskId,
-                        initialProgress = resumeProgress,
-                        createdAt = savedTask.createdAt
-                    )
-                    delay(700L)
-                    progressStore.clear(documentId)
-                    return Result.success()
-                } catch (e: ServerException) {
-                    if (e.code == 404 || e.code == 410) {
-                        deleteStoredTask(documentId)
-                    } else {
-                        throw e
-                    }
-                }
-            } else if (savedTask != null) {
-                deleteStoredTask(documentId)
-            }
-            progressStore.update(documentId, 22)
-            progressStore.updateSource(
-                documentId = documentId,
-                sourceId = SOURCE_MINERU,
-                label = LABEL_MINERU,
-                progress = 22
-            )
-            val task = analyzerClient.upload(
-                uri,
-                serverMode,
-                hash
-            )
-            saveStoredTask(
-                StoredExtractionTask(
-                    taskId = task.id,
-                    requestedMode = mode,
+                        status =
+                        task.status.ifBlank {
+                            "queued"
+                        },
+                        progress = 32,
+                        createdAt = System.currentTimeMillis(),
+                        lastPolledAt = System.currentTimeMillis()
+                    ),
+                    documentId
+                )
+                progressStore.update(documentId, 32)
+                progressStore.updateSource(
+                    documentId = documentId,
+                    sourceId = SOURCE_MINERU,
+                    label = LABEL_MINERU,
+                    progress = 32
+                )
+                completeMineruTask(
+                    analyzerClient = analyzerClient,
+                    progressStore = progressStore,
+                    repository = repository,
+                    documentId = documentId,
+                    mode = mode,
                     serverMode = serverMode,
                     sha256 = hash,
-                    status = task.status.ifBlank {
-                        "queued"
-                    },
-                    progress = 32,
-                    createdAt = System.currentTimeMillis(),
-                    lastPolledAt = System.currentTimeMillis()
-                ),
-                documentId
-            )
-            progressStore.update(documentId, 32)
-            progressStore.updateSource(
-                documentId = documentId,
-                sourceId = SOURCE_MINERU,
-                label = LABEL_MINERU,
-                progress = 32
-            )
-            completeMineruTask(
-                analyzerClient = analyzerClient,
-                progressStore = progressStore,
-                repository = repository,
-                documentId = documentId,
-                mode = mode,
-                serverMode = serverMode,
-                sha256 = hash,
-                taskId = task.id,
-                initialProgress = 32,
-                createdAt = System.currentTimeMillis()
-            )
+                    taskId = task.id,
+                    initialProgress = 32,
+                    createdAt = System.currentTimeMillis()
+                )
             }
             delay(700L)
             progressStore.clear(documentId)
@@ -294,10 +303,12 @@ class PdfExtractionWorker(
         progressStore: ExtractionProgressStore
     ) {
         if (!requiresMineru(mode)) return
-        val settings = GlobalContext.get()
-            .get<SettingsRepository>()
-        val accessToken = settings.getAccessToken()
-            .firstOrNull()
+        val settings =
+            GlobalContext.get()
+                .get<SettingsRepository>()
+        val accessToken =
+            settings.getAccessToken()
+                .firstOrNull()
         val bundledToken =
             BuildConfig.MAESTRO_SERVER_BEARER_TOKEN
         if (!accessToken.isNullOrBlank() ||
@@ -329,9 +340,10 @@ class PdfExtractionWorker(
         progressStore: ExtractionProgressStore,
         repository: DocumentRepository
     ): Boolean = withContext(Dispatchers.IO) {
-        val pdfFile = Uri.parse(uriString).path
-            ?.let(::File)
-            ?: return@withContext false
+        val pdfFile =
+            Uri.parse(uriString).path
+                ?.let(::File)
+                ?: return@withContext false
         if (!pdfFile.exists()) return@withContext false
         val koin = GlobalContext.get()
         val textIndex = koin.get<PdfTextIndexLocalDataSource>()
@@ -342,11 +354,12 @@ class PdfExtractionWorker(
             label = LABEL_TEXT_LAYER,
             progress = 20
         )
-        val index = textIndex.ensureIndex(
-            documentId = document.id,
-            pdfFile = pdfFile,
-            displayName = document.displayName
-        )
+        val index =
+            textIndex.ensureIndex(
+                documentId = document.id,
+                pdfFile = pdfFile,
+                displayName = document.displayName
+            )
         if (!builder.canUseTextLayer(index)) {
             progressStore.markSourceFailed(
                 document.id,
@@ -424,10 +437,11 @@ class PdfExtractionWorker(
             label = LABEL_MINERU,
             progress = 94
         )
-        val resultJson = ParsedContentNormalizer.normalizeMineruJson(
-            documentId = documentId,
-            rawJson = analyzerClient.getResultJson(taskId)
-        )
+        val resultJson =
+            ParsedContentNormalizer.normalizeMineruJson(
+                documentId = documentId,
+                rawJson = analyzerClient.getResultJson(taskId)
+            )
         progressStore.update(documentId, 97)
         progressStore.updateSource(
             documentId = documentId,
@@ -506,7 +520,8 @@ class PdfExtractionWorker(
                     requestedMode = mode,
                     serverMode = serverMode,
                     sha256 = sha256,
-                    status = task.status.ifBlank {
+                    status =
+                    task.status.ifBlank {
                         "processing"
                     },
                     progress = estimate,
@@ -529,23 +544,20 @@ class PdfExtractionWorker(
     private suspend fun latestDocument(
         repository: DocumentRepository,
         documentId: String
-    ): PdfDocument? =
-        repository.loadDocuments()
-            .find { it.id == documentId }
+    ): PdfDocument? = repository.loadDocuments()
+        .find { it.id == documentId }
 
-    private suspend fun saveContent(
-        documentId: String,
-        md: String,
-        json: String
-    ) = withContext(Dispatchers.IO) {
-        val dir = File(
-            applicationContext.filesDir,
-            "documents/$documentId"
-        )
-        dir.mkdirs()
-        File(dir, "content.md").writeText(md)
-        File(dir, "content.json").writeText(json)
-    }
+    private suspend fun saveContent(documentId: String, md: String, json: String) =
+        withContext(Dispatchers.IO) {
+            val dir =
+                File(
+                    applicationContext.filesDir,
+                    "documents/$documentId"
+                )
+            dir.mkdirs()
+            File(dir, "content.md").writeText(md)
+            File(dir, "content.json").writeText(json)
+        }
 
     private suspend fun runLocalMlKitExtraction(
         documentId: String,
@@ -553,22 +565,24 @@ class PdfExtractionWorker(
         progressStore: ExtractionProgressStore,
         updateProgress: Boolean
     ) {
-        val extractor = GlobalContext.get()
-            .get<LocalMlKitContentExtractor>()
-        val extraction = extractor.extract(
-            documentId = documentId,
-            uriString = uriString
-        ) { progress ->
-            progressStore.updateSource(
+        val extractor =
+            GlobalContext.get()
+                .get<LocalMlKitContentExtractor>()
+        val extraction =
+            extractor.extract(
                 documentId = documentId,
-                sourceId = SOURCE_MLKIT,
-                label = LABEL_MLKIT,
-                progress = progress
-            )
-            if (updateProgress) {
-                progressStore.update(documentId, progress)
+                uriString = uriString
+            ) { progress ->
+                progressStore.updateSource(
+                    documentId = documentId,
+                    sourceId = SOURCE_MLKIT,
+                    label = LABEL_MLKIT,
+                    progress = progress
+                )
+                if (updateProgress) {
+                    progressStore.update(documentId, progress)
+                }
             }
-        }
         if (updateProgress) {
             progressStore.update(documentId, 96)
         }
@@ -625,89 +639,78 @@ class PdfExtractionWorker(
         }
     }
 
-    private suspend fun saveLocalMlKitContent(
-        documentId: String,
-        md: String,
-        json: String
-    ) = withContext(Dispatchers.IO) {
-        val dir = File(
-            applicationContext.filesDir,
-            "documents/$documentId"
-        )
-        dir.mkdirs()
-        File(dir, "local_mlkit_content.md").writeText(md)
-        File(dir, "local_mlkit_content.json").writeText(json)
-    }
-
-    private suspend fun writeComparisonIfPossible(
-        documentId: String
-    ) = withContext(Dispatchers.IO) {
-        ExtractionComparisonWriter.writeIfPossible(
-            File(
-                applicationContext.filesDir,
-                "documents/$documentId"
-            )
-        )
-    }
-
-    private suspend fun saveExtractionError(
-        documentId: String,
-        mode: String,
-        error: Throwable
-    ) = withContext(Dispatchers.IO) {
-        val dir = File(
-            applicationContext.filesDir,
-            "documents/$documentId"
-        )
-        dir.mkdirs()
-        File(dir, "extraction_error.txt").writeText(
-            buildString {
-                appendLine("mode=$mode")
-                appendLine("time=${System.currentTimeMillis()}")
-                appendLine("type=${error::class.java.name}")
-                appendLine("message=${error.message.orEmpty()}")
-                appendLine("stacktrace=")
-                appendLine(error.stackTraceToString())
-            }
-        )
-    }
-
-    private suspend fun loadStoredTask(
-        documentId: String
-    ): StoredExtractionTask? = withContext(Dispatchers.IO) {
-        val file = storedTaskFile(documentId)
-        if (!file.exists() || file.length() == 0L) {
-            return@withContext null
+    private suspend fun saveLocalMlKitContent(documentId: String, md: String, json: String) =
+        withContext(Dispatchers.IO) {
+            val dir =
+                File(
+                    applicationContext.filesDir,
+                    "documents/$documentId"
+                )
+            dir.mkdirs()
+            File(dir, "local_mlkit_content.md").writeText(md)
+            File(dir, "local_mlkit_content.json").writeText(json)
         }
-        runCatching {
-            extractionTaskJson.decodeFromString<StoredExtractionTask>(
-                file.readText()
+
+    private suspend fun writeComparisonIfPossible(documentId: String) =
+        withContext(Dispatchers.IO) {
+            ExtractionComparisonWriter.writeIfPossible(
+                File(
+                    applicationContext.filesDir,
+                    "documents/$documentId"
+                )
             )
-        }.getOrNull()
-    }
+        }
 
-    private suspend fun saveStoredTask(
-        task: StoredExtractionTask,
-        documentId: String
-    ) = withContext(Dispatchers.IO) {
-        val file = storedTaskFile(documentId)
-        file.parentFile?.mkdirs()
-        file.writeText(
-            extractionTaskJson.encodeToString(task)
-        )
-    }
+    private suspend fun saveExtractionError(documentId: String, mode: String, error: Throwable) =
+        withContext(Dispatchers.IO) {
+            val dir =
+                File(
+                    applicationContext.filesDir,
+                    "documents/$documentId"
+                )
+            dir.mkdirs()
+            File(dir, "extraction_error.txt").writeText(
+                buildString {
+                    appendLine("mode=$mode")
+                    appendLine("time=${System.currentTimeMillis()}")
+                    appendLine("type=${error::class.java.name}")
+                    appendLine("message=${error.message.orEmpty()}")
+                    appendLine("stacktrace=")
+                    appendLine(error.stackTraceToString())
+                }
+            )
+        }
 
-    private suspend fun deleteStoredTask(
-        documentId: String
-    ) = withContext(Dispatchers.IO) {
+    private suspend fun loadStoredTask(documentId: String): StoredExtractionTask? =
+        withContext(Dispatchers.IO) {
+            val file = storedTaskFile(documentId)
+            if (!file.exists() || file.length() == 0L) {
+                return@withContext null
+            }
+            runCatching {
+                extractionTaskJson.decodeFromString<StoredExtractionTask>(
+                    file.readText()
+                )
+            }.getOrNull()
+        }
+
+    private suspend fun saveStoredTask(task: StoredExtractionTask, documentId: String) =
+        withContext(Dispatchers.IO) {
+            val file = storedTaskFile(documentId)
+            file.parentFile?.mkdirs()
+            file.writeText(
+                extractionTaskJson.encodeToString(task)
+            )
+        }
+
+    private suspend fun deleteStoredTask(documentId: String) = withContext(Dispatchers.IO) {
         storedTaskFile(documentId).delete()
     }
 
-    private fun storedTaskFile(documentId: String): File =
-        File(
-            applicationContext.filesDir,
-            "documents/$documentId/extraction_task.json"
-        )
+    private fun storedTaskFile(documentId: String): File = File(
+        applicationContext.filesDir,
+        "documents/$documentId/extraction_task.json"
+    )
 
     private fun isRetryable(error: Throwable): Boolean {
         if (isFailedServerTask(error)) {
@@ -749,13 +752,13 @@ class PdfExtractionWorker(
         private const val MINERU_TOKEN_REQUIRED_MESSAGE =
             "MinerU 서버 Bearer Token이 필요합니다. 설정에서 토큰을 저장한 뒤 다시 추출해 주세요."
         private val mineruMutex = Mutex()
-        private val extractionTaskJson = Json {
-            ignoreUnknownKeys = true
-            prettyPrint = true
-        }
+        private val extractionTaskJson =
+            Json {
+                ignoreUnknownKeys = true
+                prettyPrint = true
+            }
 
-        fun uniqueWorkName(documentId: String): String =
-            "pdf_extraction_$documentId"
+        fun uniqueWorkName(documentId: String): String = "pdf_extraction_$documentId"
 
         private const val TAG = "PdfExtractionWorker"
     }

@@ -19,7 +19,6 @@ class LlmServiceImpl(
     private val openRouterClient: OpenAiClient,
     private val settingsRepository: SettingsRepository
 ) : LlmService {
-
     private val modelCache =
         mutableMapOf<LlmProvider, List<String>>()
 
@@ -32,14 +31,17 @@ class LlmServiceImpl(
         when (provider) {
             LlmProvider.GEMINI -> {
                 val apiKey = requireGeminiKey()
-                val model = getModel(
-                    LlmRequestBuilder.DEFAULT_MODEL
-                )
-                val body = LlmRequestBuilder.build(
-                    messages = messages,
-                    systemPrompt = systemPrompt,
-                    images = images
-                )
+                val model =
+                    getModel(
+                        LlmRequestBuilder.DEFAULT_MODEL
+                    )
+                val body =
+                    LlmRequestBuilder.build(
+                        messages = messages,
+                        systemPrompt = systemPrompt,
+                        images = images,
+                        maxTokens = maxTokensFor(systemPrompt)
+                    )
                 geminiClient.stream(
                     apiKey,
                     body,
@@ -48,9 +50,10 @@ class LlmServiceImpl(
             }
             LlmProvider.OPENAI -> {
                 val apiKey = requireOpenAiKey()
-                val model = getModel(
-                    OpenAiClient.DEFAULT_MODEL
-                )
+                val model =
+                    getModel(
+                        OpenAiClient.DEFAULT_MODEL
+                    )
                 openAiClient.stream(
                     apiKey,
                     messages,
@@ -61,9 +64,10 @@ class LlmServiceImpl(
             }
             LlmProvider.CLAUDE -> {
                 val apiKey = requireClaudeKey()
-                val model = getModel(
-                    ClaudeClient.DEFAULT_MODEL
-                )
+                val model =
+                    getModel(
+                        ClaudeClient.DEFAULT_MODEL
+                    )
                 claudeClient.stream(
                     apiKey,
                     messages,
@@ -74,9 +78,10 @@ class LlmServiceImpl(
             }
             LlmProvider.OPENROUTER -> {
                 val apiKey = requireOpenRouterKey()
-                val model = getModel(
-                    OpenAiClient.OPENROUTER_DEFAULT_MODEL
-                )
+                val model =
+                    getModel(
+                        OpenAiClient.OPENROUTER_DEFAULT_MODEL
+                    )
                 openRouterClient.stream(
                     apiKey,
                     messages,
@@ -97,14 +102,17 @@ class LlmServiceImpl(
         return when (provider) {
             LlmProvider.GEMINI -> {
                 val apiKey = requireGeminiKey()
-                val model = getModel(
-                    LlmRequestBuilder.DEFAULT_MODEL
-                )
-                val body = LlmRequestBuilder.build(
-                    messages = messages,
-                    systemPrompt = systemPrompt,
-                    images = images
-                )
+                val model =
+                    getModel(
+                        LlmRequestBuilder.DEFAULT_MODEL
+                    )
+                val body =
+                    LlmRequestBuilder.build(
+                        messages = messages,
+                        systemPrompt = systemPrompt,
+                        images = images,
+                        maxTokens = maxTokensFor(systemPrompt)
+                    )
                 geminiClient.complete(
                     apiKey,
                     body,
@@ -113,9 +121,10 @@ class LlmServiceImpl(
             }
             LlmProvider.OPENAI -> {
                 val apiKey = requireOpenAiKey()
-                val model = getModel(
-                    OpenAiClient.DEFAULT_MODEL
-                )
+                val model =
+                    getModel(
+                        OpenAiClient.DEFAULT_MODEL
+                    )
                 openAiClient.complete(
                     apiKey,
                     messages,
@@ -131,9 +140,10 @@ class LlmServiceImpl(
             }
             LlmProvider.OPENROUTER -> {
                 val apiKey = requireOpenRouterKey()
-                val model = getModel(
-                    OpenAiClient.OPENROUTER_DEFAULT_MODEL
-                )
+                val model =
+                    getModel(
+                        OpenAiClient.OPENROUTER_DEFAULT_MODEL
+                    )
                 openRouterClient.complete(
                     apiKey,
                     messages,
@@ -162,22 +172,23 @@ class LlmServiceImpl(
     override suspend fun fetchModels(): List<String> {
         val provider = getProvider()
         modelCache[provider]?.let { return it }
-        val models = when (provider) {
-            LlmProvider.GEMINI -> {
-                val key = requireGeminiKey()
-                geminiClient.fetchModels(key)
+        val models =
+            when (provider) {
+                LlmProvider.GEMINI -> {
+                    val key = requireGeminiKey()
+                    geminiClient.fetchModels(key)
+                }
+                LlmProvider.OPENAI -> {
+                    val key = requireOpenAiKey()
+                    openAiClient.fetchModels(key)
+                }
+                LlmProvider.CLAUDE ->
+                    claudeClient.fetchModels()
+                LlmProvider.OPENROUTER -> {
+                    val key = requireOpenRouterKey()
+                    openRouterClient.fetchModels(key)
+                }
             }
-            LlmProvider.OPENAI -> {
-                val key = requireOpenAiKey()
-                openAiClient.fetchModels(key)
-            }
-            LlmProvider.CLAUDE ->
-                claudeClient.fetchModels()
-            LlmProvider.OPENROUTER -> {
-                val key = requireOpenRouterKey()
-                openRouterClient.fetchModels(key)
-            }
-        }
         if (models.isNotEmpty()) {
             modelCache[provider] = models
         }
@@ -203,8 +214,9 @@ class LlmServiceImpl(
     }
 
     private suspend fun getProvider(): LlmProvider {
-        val name = settingsRepository
-            .getLlmProvider().first()
+        val name =
+            settingsRepository
+                .getLlmProvider().first()
         return try {
             LlmProvider.valueOf(
                 name?.uppercase() ?: "OPENROUTER"
@@ -249,5 +261,20 @@ class LlmServiceImpl(
             ?: throw IllegalStateException(
                 "OpenRouter API 키가 설정되지 않았습니다"
             )
+    }
+
+    private fun maxTokensFor(systemPrompt: String?): Int {
+        return if (systemPrompt.isQuizPrompt()) {
+            QUIZ_MAX_TOKENS
+        } else {
+            LlmRequestBuilder.DEFAULT_MAX_TOKENS
+        }
+    }
+
+    private fun String?.isQuizPrompt(): Boolean =
+        this?.contains("production quiz generation engine") == true
+
+    private companion object {
+        const val QUIZ_MAX_TOKENS = 2048
     }
 }

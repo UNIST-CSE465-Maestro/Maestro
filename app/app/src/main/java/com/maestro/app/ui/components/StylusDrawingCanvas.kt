@@ -41,8 +41,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.CropCapturePayload
+import com.maestro.app.domain.model.CropCapturePhase
 import com.maestro.app.domain.model.DrawingTool
 import com.maestro.app.domain.model.InkStroke
 import com.maestro.app.domain.model.LassoPhase
@@ -134,12 +134,14 @@ fun StylusDrawingCanvas(
     var penDownX by remember { mutableFloatStateOf(0f) }
     var penDownY by remember { mutableFloatStateOf(0f) }
     val handler = remember { Handler(Looper.getMainLooper()) }
-    val longPressRunnable = remember {
-        mutableStateOf<Runnable?>(null)
-    }
+    val longPressRunnable =
+        remember {
+            mutableStateOf<Runnable?>(null)
+        }
 
     Canvas(
-        modifier = modifier
+        modifier =
+        modifier
             .onGloballyPositioned { coords ->
                 canvasWidth = coords.size.width.toFloat()
                 canvasHeight = coords.size.height.toFloat()
@@ -242,16 +244,17 @@ fun StylusDrawingCanvas(
                     if (state.selectedImage != null &&
                         state.selectedImagePage == pageIndex
                     ) {
-                        val consumed = handleSelectedImage(
-                            event,
-                            state,
-                            pageIndex,
-                            canvasWidth,
-                            isStylus,
-                            view,
-                            context,
-                            { buttonTapConsumed = true }
-                        )
+                        val consumed =
+                            handleSelectedImage(
+                                event,
+                                state,
+                                pageIndex,
+                                canvasWidth,
+                                isStylus,
+                                view,
+                                context,
+                                { buttonTapConsumed = true }
+                            )
                         if (consumed) {
                             return@pointerInteropFilter true
                         }
@@ -318,7 +321,8 @@ fun StylusDrawingCanvas(
                             }
                         }
                         MotionEvent.ACTION_UP,
-                        MotionEvent.ACTION_CANCEL -> {
+                        MotionEvent.ACTION_CANCEL
+                        -> {
                             longPressRunnable.value?.let {
                                 handler.removeCallbacks(it)
                             }
@@ -480,7 +484,8 @@ fun StylusDrawingCanvas(
                                 )
                         }
                     }
-                } catch (_: Throwable) { }
+                } catch (_: Throwable) {
+                }
                 true
             }
     ) {
@@ -512,18 +517,22 @@ fun StylusDrawingCanvas(
                 state.imagesForPage(pageIndex)
                     .forEach { img ->
                         drawImage(
-                            image = img.bitmap
+                            image =
+                            img.bitmap
                                 .asImageBitmap(),
                             srcOffset = IntOffset.Zero,
-                            srcSize = IntSize(
+                            srcSize =
+                            IntSize(
                                 img.bitmap.width,
                                 img.bitmap.height
                             ),
-                            dstOffset = IntOffset(
+                            dstOffset =
+                            IntOffset(
                                 img.x.toInt(),
                                 img.y.toInt()
                             ),
-                            dstSize = IntSize(
+                            dstSize =
+                            IntSize(
                                 img.width.toInt(),
                                 img.height.toInt()
                             )
@@ -598,14 +607,16 @@ fun StylusDrawingCanvas(
                 ) {
                     val pos = state.eraserIndicator!!
                     drawCircle(
-                        color = EraserCircleColor
+                        color =
+                        EraserCircleColor
                             .copy(alpha = UxConfig.Drawing.ERASER_FILL_ALPHA),
                         radius = state.eraserWidth,
                         center = pos,
                         style = Fill
                     )
                     drawCircle(
-                        color = EraserCircleColor
+                        color =
+                        EraserCircleColor
                             .copy(alpha = UxConfig.Drawing.ERASER_OUTLINE_ALPHA),
                         radius = state.eraserWidth,
                         center = pos,
@@ -634,7 +645,8 @@ fun StylusDrawingCanvas(
                 pageIndex,
                 renderScale
             )
-        } catch (_: Throwable) { }
+        } catch (_: Throwable) {
+        }
     }
 }
 
@@ -697,24 +709,27 @@ private fun handleCropInput(
             val tly = state.cropTopLeft.y * rs
             val brx = state.cropBottomRight.x * rs
             val bry = state.cropBottomRight.y * rs
-            val corners = listOf(
-                0 to Offset(tlx, tly),
-                1 to Offset(brx, tly),
-                2 to Offset(tlx, bry),
-                3 to Offset(brx, bry)
-            )
-            val nearest = corners.minByOrNull {
-                val dx = it.second.x - ex
-                val dy = it.second.y - ey
-                dx * dx + dy * dy
-            }
-            val dist = nearest?.let {
-                val dx = it.second.x - ex
-                val dy = it.second.y - ey
-                kotlin.math.sqrt(
-                    (dx * dx + dy * dy).toDouble()
-                ).toFloat()
-            } ?: 999f
+            val corners =
+                listOf(
+                    0 to Offset(tlx, tly),
+                    1 to Offset(brx, tly),
+                    2 to Offset(tlx, bry),
+                    3 to Offset(brx, bry)
+                )
+            val nearest =
+                corners.minByOrNull {
+                    val dx = it.second.x - ex
+                    val dy = it.second.y - ey
+                    dx * dx + dy * dy
+                }
+            val dist =
+                nearest?.let {
+                    val dx = it.second.x - ex
+                    val dy = it.second.y - ey
+                    kotlin.math.sqrt(
+                        (dx * dx + dy * dy).toDouble()
+                    ).toFloat()
+                } ?: 999f
             // reuse activePageIndex as corner index
             state.activePageIndex =
                 if (dist < UxConfig.Crop.CORNER_DRAG_DISTANCE) nearest!!.first else -1
@@ -749,7 +764,8 @@ private fun handleCropInput(
             }
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
+        MotionEvent.ACTION_CANCEL
+        -> {
             state.isStylusTouching = false
             disallowParentIntercept(view, false)
         }
@@ -766,58 +782,66 @@ private fun applyCropCornerMove(
     maxRefY: Float
 ) {
     when (cornerIdx) {
-        0 -> state.cropTopLeft = Offset(
-            rx.coerceIn(
-                0f,
-                state.cropBottomRight.x - minGap
-            ),
-            ry.coerceIn(
-                0f,
-                state.cropBottomRight.y - minGap
-            )
-        )
-        1 -> {
-            state.cropBottomRight = Offset(
-                rx.coerceIn(
-                    state.cropTopLeft.x + minGap,
-                    maxRefX
-                ),
-                state.cropBottomRight.y
-            )
-            state.cropTopLeft = Offset(
-                state.cropTopLeft.x,
-                ry.coerceIn(
-                    0f,
-                    state.cropBottomRight.y - minGap
+        0 ->
+            state.cropTopLeft =
+                Offset(
+                    rx.coerceIn(
+                        0f,
+                        state.cropBottomRight.x - minGap
+                    ),
+                    ry.coerceIn(
+                        0f,
+                        state.cropBottomRight.y - minGap
+                    )
                 )
-            )
+        1 -> {
+            state.cropBottomRight =
+                Offset(
+                    rx.coerceIn(
+                        state.cropTopLeft.x + minGap,
+                        maxRefX
+                    ),
+                    state.cropBottomRight.y
+                )
+            state.cropTopLeft =
+                Offset(
+                    state.cropTopLeft.x,
+                    ry.coerceIn(
+                        0f,
+                        state.cropBottomRight.y - minGap
+                    )
+                )
         }
         2 -> {
-            state.cropTopLeft = Offset(
-                rx.coerceIn(
-                    0f,
-                    state.cropBottomRight.x - minGap
-                ),
-                state.cropTopLeft.y
-            )
-            state.cropBottomRight = Offset(
-                state.cropBottomRight.x,
-                ry.coerceIn(
-                    state.cropTopLeft.y + minGap,
-                    maxRefY
+            state.cropTopLeft =
+                Offset(
+                    rx.coerceIn(
+                        0f,
+                        state.cropBottomRight.x - minGap
+                    ),
+                    state.cropTopLeft.y
                 )
-            )
+            state.cropBottomRight =
+                Offset(
+                    state.cropBottomRight.x,
+                    ry.coerceIn(
+                        state.cropTopLeft.y + minGap,
+                        maxRefY
+                    )
+                )
         }
-        3 -> state.cropBottomRight = Offset(
-            rx.coerceIn(
-                state.cropTopLeft.x + minGap,
-                maxRefX
-            ),
-            ry.coerceIn(
-                state.cropTopLeft.y + minGap,
-                maxRefY
-            )
-        )
+        3 ->
+            state.cropBottomRight =
+                Offset(
+                    rx.coerceIn(
+                        state.cropTopLeft.x + minGap,
+                        maxRefX
+                    ),
+                    ry.coerceIn(
+                        state.cropTopLeft.y + minGap,
+                        maxRefY
+                    )
+                )
     }
 }
 
@@ -911,7 +935,8 @@ private fun handleSelectedImage(
             )
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
+        MotionEvent.ACTION_CANCEL
+        -> {
             imgDragMode = 0
             imgOriginal = null
             state.isStylusTouching = false
@@ -927,10 +952,11 @@ private fun handleImageDrag(event: MotionEvent, state: DrawingState, pageIndex: 
     if (imgDragMode == 1 && imgOriginal != null) {
         val dx = (ex2 - imgDragStartX) / rs2
         val dy = (ey2 - imgDragStartY) / rs2
-        val moved = imgOriginal!!.copy(
-            x = imgOriginal!!.x + dx,
-            y = imgOriginal!!.y + dy
-        )
+        val moved =
+            imgOriginal!!.copy(
+                x = imgOriginal!!.x + dx,
+                y = imgOriginal!!.y + dy
+            )
         state.replaceImage(
             pageIndex,
             state.selectedImage!!,
@@ -944,16 +970,18 @@ private fun handleImageDrag(event: MotionEvent, state: DrawingState, pageIndex: 
         imgOriginal != null
     ) {
         val dx = (ex2 - imgDragStartX) / rs2
-        val newW = (imgOriginal!!.width + dx)
-            .coerceAtLeast(UxConfig.ImageOverlay.MIN_SIZE)
+        val newW =
+            (imgOriginal!!.width + dx)
+                .coerceAtLeast(UxConfig.ImageOverlay.MIN_SIZE)
         val ratio =
             imgOriginal!!.bitmap.height.toFloat() /
                 imgOriginal!!.bitmap.width
         val newH = newW * ratio
-        val resized = imgOriginal!!.copy(
-            width = newW,
-            height = newH
-        )
+        val resized =
+            imgOriginal!!.copy(
+                width = newW,
+                height = newH
+            )
         state.replaceImage(
             pageIndex,
             state.selectedImage!!,
@@ -986,45 +1014,49 @@ private fun startLongPress(
     longPressRunnable.value?.let {
         handler.removeCallbacks(it)
     }
-    val r = Runnable {
-        if (!isHandled()) {
-            markHandled()
-            state.currentPoints.clear()
-            if (state.lassoPhase != LassoPhase.IDLE) {
-                state.clearLasso()
-            }
-            // Check if long-press is on an image
-            val rw = state.getPageRefWidth(pageIndex)
-            val rs =
-                if (rw > 0f &&
-                    capturedCanvasWidth > 0f
-                ) {
-                    capturedCanvasWidth / rw
+    val r =
+        Runnable {
+            if (!isHandled()) {
+                markHandled()
+                state.currentPoints.clear()
+                if (state.lassoPhase != LassoPhase.IDLE) {
+                    state.clearLasso()
+                }
+                // Check if long-press is on an image
+                val rw = state.getPageRefWidth(pageIndex)
+                val rs =
+                    if (rw > 0f &&
+                        capturedCanvasWidth > 0f
+                    ) {
+                        capturedCanvasWidth / rw
+                    } else {
+                        1f
+                    }
+                val refX = penDownX / rs
+                val refY = penDownY / rs
+                val hitImg =
+                    state.imagesForPage(pageIndex)
+                        .lastOrNull { img ->
+                            refX in img.x..(img.x + img.width) &&
+                                refY in img.y..(img.y + img.height)
+                        }
+                if (hitImg != null) {
+                    state.selectedImage = hitImg
+                    state.selectedImagePage = pageIndex
                 } else {
-                    1f
+                    state.penPasteRequest =
+                        Offset(
+                            penDownX * capturedIz,
+                            penDownY * capturedIz
+                        )
+                    state.penPasteScreenPos =
+                        Offset(
+                            penDownX, penDownY
+                        )
+                    state.penPastePageIndex = pageIndex
                 }
-            val refX = penDownX / rs
-            val refY = penDownY / rs
-            val hitImg = state.imagesForPage(pageIndex)
-                .lastOrNull { img ->
-                    refX in img.x..(img.x + img.width) &&
-                        refY in img.y..(img.y + img.height)
-                }
-            if (hitImg != null) {
-                state.selectedImage = hitImg
-                state.selectedImagePage = pageIndex
-            } else {
-                state.penPasteRequest = Offset(
-                    penDownX * capturedIz,
-                    penDownY * capturedIz
-                )
-                state.penPasteScreenPos = Offset(
-                    penDownX, penDownY
-                )
-                state.penPastePageIndex = pageIndex
             }
         }
-    }
     longPressRunnable.value = r
     handler.postDelayed(r, UxConfig.Gesture.LONG_PRESS_CANVAS_MS)
 }
@@ -1046,7 +1078,8 @@ private fun handlePen(event: MotionEvent, state: DrawingState, iz: Float) {
             state.currentPoints += pt(event, iz)
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
+        MotionEvent.ACTION_CANCEL
+        -> {
             state.currentPoints += pt(event, iz)
             state.commitStroke()
         }
@@ -1075,7 +1108,8 @@ private fun handleEraser(event: MotionEvent, state: DrawingState, pageIndex: Int
             state.eraseAt(pageIndex, x, y)
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
+        MotionEvent.ACTION_CANCEL
+        -> {
             state.eraserIndicator = null
         }
     }
@@ -1104,7 +1138,8 @@ private fun handleLasso(event: MotionEvent, state: DrawingState, pageIndex: Int,
                         pt(event, iz)
                 }
                 MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_CANCEL
+                -> {
                     state.lassoPoints +=
                         pt(event, iz)
                     state.completeLasso(pageIndex)
@@ -1138,15 +1173,17 @@ private fun handleLasso(event: MotionEvent, state: DrawingState, pageIndex: Int,
         LassoPhase.DRAGGING -> {
             when (event.actionMasked) {
                 MotionEvent.ACTION_MOVE -> {
-                    state.dragOffset = Offset(
-                        event.x * iz -
-                            state.dragStart.x,
-                        event.y * iz -
-                            state.dragStart.y
-                    )
+                    state.dragOffset =
+                        Offset(
+                            event.x * iz -
+                                state.dragStart.x,
+                            event.y * iz -
+                                state.dragStart.y
+                        )
                 }
                 MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL ->
+                MotionEvent.ACTION_CANCEL
+                ->
                     state.commitDrag()
             }
         }
@@ -1173,37 +1210,40 @@ private fun DrawScope.drawInkStroke(stroke: InkStroke, offset: Offset) {
     for (i in 1 until pts.size) {
         val prev = pts[i - 1]
         val curr = pts[i]
-        val w = stroke.baseWidth *
-            (
-                UxConfig.Drawing.PRESSURE_BASE + (
-                    prev.pressure +
-                        curr.pressure
-                    ) / 2f * UxConfig.Drawing.PRESSURE_MULT
+        val w =
+            stroke.baseWidth *
+                (
+                    UxConfig.Drawing.PRESSURE_BASE + (
+                        prev.pressure +
+                            curr.pressure
+                        ) / 2f * UxConfig.Drawing.PRESSURE_MULT
+                    )
+        val path =
+            Path().apply {
+                moveTo(
+                    prev.x + offset.x,
+                    prev.y + offset.y
                 )
-        val path = Path().apply {
-            moveTo(
-                prev.x + offset.x,
-                prev.y + offset.y
-            )
-            if (i + 1 < pts.size) {
-                val n = pts[i + 1]
-                quadraticBezierTo(
-                    curr.x + offset.x,
-                    curr.y + offset.y,
-                    (curr.x + n.x) / 2f + offset.x,
-                    (curr.y + n.y) / 2f + offset.y
-                )
-            } else {
-                lineTo(
-                    curr.x + offset.x,
-                    curr.y + offset.y
-                )
+                if (i + 1 < pts.size) {
+                    val n = pts[i + 1]
+                    quadraticBezierTo(
+                        curr.x + offset.x,
+                        curr.y + offset.y,
+                        (curr.x + n.x) / 2f + offset.x,
+                        (curr.y + n.y) / 2f + offset.y
+                    )
+                } else {
+                    lineTo(
+                        curr.x + offset.x,
+                        curr.y + offset.y
+                    )
+                }
             }
-        }
         drawPath(
             path,
             stroke.color,
-            style = Stroke(
+            style =
+            Stroke(
                 w,
                 cap = StrokeCap.Round,
                 join = StrokeJoin.Round
@@ -1214,19 +1254,22 @@ private fun DrawScope.drawInkStroke(stroke: InkStroke, offset: Offset) {
 
 private fun DrawScope.drawLassoPath(points: List<StrokePoint>) {
     if (points.size < 2) return
-    val path = Path().apply {
-        moveTo(points[0].x, points[0].y)
-        for (i in 1 until points.size) {
-            lineTo(points[i].x, points[i].y)
+    val path =
+        Path().apply {
+            moveTo(points[0].x, points[0].y)
+            for (i in 1 until points.size) {
+                lineTo(points[i].x, points[i].y)
+            }
         }
-    }
     drawPath(
         path,
         LassoColor,
-        style = Stroke(
+        style =
+        Stroke(
             UxConfig.Drawing.LASSO_STROKE_WIDTH,
             cap = StrokeCap.Round,
-            pathEffect = PathEffect.dashPathEffect(
+            pathEffect =
+            PathEffect.dashPathEffect(
                 floatArrayOf(UxConfig.Drawing.LASSO_DASH, UxConfig.Drawing.LASSO_GAP)
             )
         )
@@ -1236,7 +1279,8 @@ private fun DrawScope.drawLassoPath(points: List<StrokePoint>) {
         Offset(points.last().x, points.last().y),
         Offset(points[0].x, points[0].y),
         strokeWidth = UxConfig.Drawing.LASSO_CLOSE_STROKE_WIDTH,
-        pathEffect = PathEffect.dashPathEffect(
+        pathEffect =
+        PathEffect.dashPathEffect(
             floatArrayOf(UxConfig.Drawing.LASSO_CLOSE_DASH, UxConfig.Drawing.LASSO_CLOSE_GAP)
         )
     )
@@ -1249,10 +1293,15 @@ private fun DrawScope.drawSelectionBox(bounds: Rect) {
         topLeft = Offset(bounds.left, bounds.top),
         size = Size(bounds.width, bounds.height),
         cornerRadius = CornerRadius(4f, 4f),
-        style = Stroke(
+        style =
+        Stroke(
             UxConfig.Drawing.SELECTION_STROKE_WIDTH,
-            pathEffect = PathEffect.dashPathEffect(
-                floatArrayOf(UxConfig.Drawing.SELECTION_DASH, UxConfig.Drawing.SELECTION_GAP)
+            pathEffect =
+            PathEffect.dashPathEffect(
+                floatArrayOf(
+                    UxConfig.Drawing.SELECTION_DASH,
+                    UxConfig.Drawing.SELECTION_GAP
+                )
             )
         )
     )
@@ -1275,12 +1324,13 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
     val btnY = bounds.top - btnSize - UxConfig.Selection.BUTTON_OFFSET_Y
 
     // Delete button (red) - rightmost
-    val delRect = Rect(
-        bounds.right - btnSize,
-        btnY,
-        bounds.right,
-        btnY + btnSize
-    )
+    val delRect =
+        Rect(
+            bounds.right - btnSize,
+            btnY,
+            bounds.right,
+            btnY + btnSize
+        )
     deleteButtonRect = delRect
     drawRoundRect(
         BtnDelete,
@@ -1308,12 +1358,13 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
     )
 
     // Copy button (blue) - middle
-    val copyRect = Rect(
-        delRect.left - btnSize - gap,
-        btnY,
-        delRect.left - gap,
-        btnY + btnSize
-    )
+    val copyRect =
+        Rect(
+            delRect.left - btnSize - gap,
+            btnY,
+            delRect.left - gap,
+            btnY + btnSize
+        )
     copyButtonRect = copyRect
     drawRoundRect(
         BtnCopy,
@@ -1341,12 +1392,13 @@ private fun DrawScope.drawSelectionButtons(bounds: Rect) {
     )
 
     // Cut button (amber) - leftmost (scissors icon)
-    val cutRect = Rect(
-        copyRect.left - btnSize - gap,
-        btnY,
-        copyRect.left - gap,
-        btnY + btnSize
-    )
+    val cutRect =
+        Rect(
+            copyRect.left - btnSize - gap,
+            btnY,
+            copyRect.left - gap,
+            btnY + btnSize
+        )
     cutButtonRect = cutRect
     drawRoundRect(
         BtnCut,
@@ -1395,37 +1447,43 @@ private fun captureSelectionBitmap(
     canvasWidth: Float,
     callback: (ByteArray) -> Unit
 ) {
-    val bounds = state.getSelectionBounds(
-        state.dragOffset
-    ) ?: return
+    val bounds =
+        state.getSelectionBounds(
+            state.dragOffset
+        ) ?: return
     val refW = state.getPageRefWidth(pageIndex)
-    val scale = if (refW > 0f && canvasWidth > 0f) {
-        canvasWidth / refW
-    } else {
-        1f
-    }
-    val w = (bounds.width * scale).toInt()
-        .coerceAtLeast(1)
-    val h = (bounds.height * scale).toInt()
-        .coerceAtLeast(1)
-    val bmp = android.graphics.Bitmap.createBitmap(
-        w,
-        h,
-        android.graphics.Bitmap.Config.ARGB_8888
-    )
+    val scale =
+        if (refW > 0f && canvasWidth > 0f) {
+            canvasWidth / refW
+        } else {
+            1f
+        }
+    val w =
+        (bounds.width * scale).toInt()
+            .coerceAtLeast(1)
+    val h =
+        (bounds.height * scale).toInt()
+            .coerceAtLeast(1)
+    val bmp =
+        android.graphics.Bitmap.createBitmap(
+            w,
+            h,
+            android.graphics.Bitmap.Config.ARGB_8888
+        )
     val canvas = android.graphics.Canvas(bmp)
     canvas.drawColor(
         android.graphics.Color.WHITE
     )
-    val paint = android.graphics.Paint().apply {
-        isAntiAlias = true
-        strokeCap =
-            android.graphics.Paint.Cap.ROUND
-        strokeJoin =
-            android.graphics.Paint.Join.ROUND
-        style =
-            android.graphics.Paint.Style.STROKE
-    }
+    val paint =
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            strokeCap =
+                android.graphics.Paint.Cap.ROUND
+            strokeJoin =
+                android.graphics.Paint.Join.ROUND
+            style =
+                android.graphics.Paint.Style.STROKE
+        }
     for (stroke in state.selectedStrokes) {
         paint.color = stroke.color.toArgb()
         paint.strokeWidth =
@@ -1477,9 +1535,11 @@ private fun DrawScope.drawSelectedImageOverlay(
         MaestroPrimary,
         Offset(il, it2),
         Size(ir - il, ib - it2),
-        style = Stroke(
+        style =
+        Stroke(
             3f,
-            pathEffect = PathEffect.dashPathEffect(
+            pathEffect =
+            PathEffect.dashPathEffect(
                 floatArrayOf(10f, 6f)
             )
         )
@@ -1528,12 +1588,13 @@ private fun DrawScope.drawSelectedImageOverlay(
         StrokeCap.Round
     )
 
-    val cpR = Rect(
-        delR.left - bs - gap,
-        by,
-        delR.left - gap,
-        by + bs
-    )
+    val cpR =
+        Rect(
+            delR.left - bs - gap,
+            by,
+            delR.left - gap,
+            by + bs
+        )
     imgCopyRect = cpR
     drawRoundRect(
         BtnCopy,
@@ -1560,12 +1621,13 @@ private fun DrawScope.drawSelectedImageOverlay(
         style = Stroke(UxConfig.ImageOverlay.COPY_ICON_STROKE)
     )
 
-    val ctR = Rect(
-        cpR.left - bs - gap,
-        by,
-        cpR.left - gap,
-        by + bs
-    )
+    val ctR =
+        Rect(
+            cpR.left - bs - gap,
+            by,
+            cpR.left - gap,
+            by + bs
+        )
     imgCutRect = ctR
     drawRoundRect(
         BtnCut,
@@ -1612,14 +1674,16 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
     ) {
         return
     }
-    val tl = Offset(
-        state.cropTopLeft.x * renderScale,
-        state.cropTopLeft.y * renderScale
-    )
-    val br = Offset(
-        state.cropBottomRight.x * renderScale,
-        state.cropBottomRight.y * renderScale
-    )
+    val tl =
+        Offset(
+            state.cropTopLeft.x * renderScale,
+            state.cropTopLeft.y * renderScale
+        )
+    val br =
+        Offset(
+            state.cropBottomRight.x * renderScale,
+            state.cropBottomRight.y * renderScale
+        )
     // Dim outside crop area
     drawRect(
         Color.Black.copy(alpha = UxConfig.Crop.OVERLAY_DIM_ALPHA),
@@ -1673,9 +1737,10 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
     val btnSize = UxConfig.Crop.BUTTON_SIZE
     val btnX = br.x - btnSize
     val btnY = tl.y - btnSize - UxConfig.Crop.BUTTON_OFFSET_Y
-    cropCopyButtonRect = Rect(
-        btnX, btnY, btnX + btnSize, btnY + btnSize
-    )
+    cropCopyButtonRect =
+        Rect(
+            btnX, btnY, btnX + btnSize, btnY + btnSize
+        )
     drawRoundRect(
         MaestroPrimary,
         Offset(btnX, btnY),
@@ -1702,10 +1767,11 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
     )
     // Cancel button
     val cancelX = btnX - btnSize - UxConfig.Crop.CANCEL_OFFSET_X
-    cropCancelButtonRect = Rect(
-        cancelX, btnY,
-        cancelX + btnSize, btnY + btnSize
-    )
+    cropCancelButtonRect =
+        Rect(
+            cancelX, btnY,
+            cancelX + btnSize, btnY + btnSize
+        )
     drawRoundRect(
         Slate500.copy(alpha = UxConfig.Crop.CANCEL_BG_ALPHA),
         Offset(cancelX, btnY),
@@ -1734,33 +1800,38 @@ private fun DrawScope.drawCropOverlay(state: DrawingState, pageIndex: Int, rende
 
 // ── Clipboard (kotlinx.serialization) ────────────
 
-private val clipJson = Json {
-    ignoreUnknownKeys = true
-}
+private val clipJson =
+    Json {
+        ignoreUnknownKeys = true
+    }
 
 private fun copySelectionToClipboard(context: Context, state: DrawingState) {
     if (state.selectedStrokes.isEmpty()) return
-    val clipStrokes = state.selectedStrokes.map { stroke ->
-        ClipStroke(
-            color = stroke.color.toArgb(),
-            width = stroke.baseWidth.toDouble(),
-            pts = stroke.points.map { pt ->
-                ClipStrokePoint(
-                    x = pt.x.toDouble(),
-                    y = pt.y.toDouble(),
-                    p = pt.pressure.toDouble()
-                )
-            }
-        )
-    }
+    val clipStrokes =
+        state.selectedStrokes.map { stroke ->
+            ClipStroke(
+                color = stroke.color.toArgb(),
+                width = stroke.baseWidth.toDouble(),
+                pts =
+                stroke.points.map { pt ->
+                    ClipStrokePoint(
+                        x = pt.x.toDouble(),
+                        y = pt.y.toDouble(),
+                        p = pt.pressure.toDouble()
+                    )
+                }
+            )
+        }
     val jsonStr = clipJson.encodeToString(clipStrokes)
-    val clip = ClipData.newPlainText(
-        "maestro_strokes",
-        jsonStr
-    )
-    val cm = context.getSystemService(
-        Context.CLIPBOARD_SERVICE
-    ) as ClipboardManager
+    val clip =
+        ClipData.newPlainText(
+            "maestro_strokes",
+            jsonStr
+        )
+    val cm =
+        context.getSystemService(
+            Context.CLIPBOARD_SERVICE
+        ) as ClipboardManager
     cm.setPrimaryClip(clip)
 }
 
@@ -1768,10 +1839,11 @@ private fun copySelectionToClipboard(context: Context, state: DrawingState) {
 
 private fun copyImageToClipboard(context: Context, img: DrawingState.ImageOverlay) {
     try {
-        val file = java.io.File(
-            context.cacheDir,
-            "img_copy.png"
-        )
+        val file =
+            java.io.File(
+                context.cacheDir,
+                "img_copy.png"
+            )
         file.outputStream().use {
             img.bitmap.compress(
                 android.graphics.Bitmap
@@ -1787,16 +1859,19 @@ private fun copyImageToClipboard(context: Context, img: DrawingState.ImageOverla
                     "${context.packageName}.provider",
                     file
                 )
-        val clipData = android.content.ClipData.newUri(
-            context.contentResolver,
-            "image",
-            uri
-        )
-        val cm = context.getSystemService(
-            Context.CLIPBOARD_SERVICE
-        ) as android.content.ClipboardManager
+        val clipData =
+            android.content.ClipData.newUri(
+                context.contentResolver,
+                "image",
+                uri
+            )
+        val cm =
+            context.getSystemService(
+                Context.CLIPBOARD_SERVICE
+            ) as android.content.ClipboardManager
         cm.setPrimaryClip(clipData)
-    } catch (_: Throwable) { }
+    } catch (_: Throwable) {
+    }
 }
 
 // ── Screen capture ───────────────────────────────
@@ -1828,9 +1903,10 @@ private fun captureAndCopy(
         )
 
         // 3. Convert crop ref-coords to screen px
-        val refW = state.getPageRefWidth(
-            state.cropPageIndex
-        )
+        val refW =
+            state.getPageRefWidth(
+                state.cropPageIndex
+            )
         val rs =
             if (refW > 0f && cw > 0f) {
                 cw / refW
@@ -1838,26 +1914,30 @@ private fun captureAndCopy(
                 1f
             }
 
-        val left = (
-            cx +
-                state.cropTopLeft.x * rs
-            ).toInt()
-            .coerceIn(0, fullBitmap.width - 1)
-        val top = (
-            cy +
-                state.cropTopLeft.y * rs
-            ).toInt()
-            .coerceIn(0, fullBitmap.height - 1)
-        val right = (
-            cx +
-                state.cropBottomRight.x * rs
-            ).toInt()
-            .coerceIn(left + 1, fullBitmap.width)
-        val bottom = (
-            cy +
-                state.cropBottomRight.y * rs
-            ).toInt()
-            .coerceIn(top + 1, fullBitmap.height)
+        val left =
+            (
+                cx +
+                    state.cropTopLeft.x * rs
+                ).toInt()
+                .coerceIn(0, fullBitmap.width - 1)
+        val top =
+            (
+                cy +
+                    state.cropTopLeft.y * rs
+                ).toInt()
+                .coerceIn(0, fullBitmap.height - 1)
+        val right =
+            (
+                cx +
+                    state.cropBottomRight.x * rs
+                ).toInt()
+                .coerceIn(left + 1, fullBitmap.width)
+        val bottom =
+            (
+                cy +
+                    state.cropBottomRight.y * rs
+                ).toInt()
+                .coerceIn(top + 1, fullBitmap.height)
 
         val cropped =
             android.graphics.Bitmap.createBitmap(
@@ -1869,10 +1949,11 @@ private fun captureAndCopy(
             )
 
         // 4. Save and copy
-        val file = java.io.File(
-            context.cacheDir,
-            "crop_capture.png"
-        )
+        val file =
+            java.io.File(
+                context.cacheDir,
+                "crop_capture.png"
+            )
         file.outputStream().use {
             cropped.compress(
                 android.graphics.Bitmap
@@ -1888,9 +1969,10 @@ private fun captureAndCopy(
                     "${context.packageName}.provider",
                     file
                 )
-        val cm = context.getSystemService(
-            Context.CLIPBOARD_SERVICE
-        ) as android.content.ClipboardManager
+        val cm =
+            context.getSystemService(
+                Context.CLIPBOARD_SERVICE
+            ) as android.content.ClipboardManager
         cm.setPrimaryClip(
             android.content.ClipData.newUri(
                 context.contentResolver,
@@ -1919,7 +2001,8 @@ private fun disallowParentIntercept(view: View, disallow: Boolean) {
                 )
             parent = parent.parent
         }
-    } catch (_: Throwable) { }
+    } catch (_: Throwable) {
+    }
 }
 
 /** Convert MotionEvent to StrokePoint. */
@@ -1934,13 +2017,14 @@ private fun pt(event: MotionEvent, iz: Float): StrokePoint {
 
 private fun addHistorical(event: MotionEvent, target: MutableList<StrokePoint>, iz: Float) {
     for (h in 0 until event.historySize) {
-        target += StrokePoint(
-            event.getHistoricalX(h) * iz,
-            event.getHistoricalY(h) * iz,
-            event.getHistoricalPressure(h)
-                .coerceIn(UxConfig.Drawing.PRESSURE_MIN, UxConfig.Drawing.PRESSURE_MAX),
-            true
-        )
+        target +=
+            StrokePoint(
+                event.getHistoricalX(h) * iz,
+                event.getHistoricalY(h) * iz,
+                event.getHistoricalPressure(h)
+                    .coerceIn(UxConfig.Drawing.PRESSURE_MIN, UxConfig.Drawing.PRESSURE_MAX),
+                true
+            )
     }
 }
 
@@ -1972,22 +2056,27 @@ private fun handleCropCaptureDraw(
             if (state.cropCapturePhase ==
                 CropCapturePhase.DRAWING
             ) {
-                state.cropCaptureTopLeft = Offset(
-                    minOf(cropCaptureStartX, rx),
-                    minOf(cropCaptureStartY, ry)
-                )
-                state.cropCaptureBottomRight = Offset(
-                    maxOf(cropCaptureStartX, rx),
-                    maxOf(cropCaptureStartY, ry)
-                )
+                state.cropCaptureTopLeft =
+                    Offset(
+                        minOf(cropCaptureStartX, rx),
+                        minOf(cropCaptureStartY, ry)
+                    )
+                state.cropCaptureBottomRight =
+                    Offset(
+                        maxOf(cropCaptureStartX, rx),
+                        maxOf(cropCaptureStartY, ry)
+                    )
             }
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
-            val w = state.cropCaptureBottomRight.x -
-                state.cropCaptureTopLeft.x
-            val h = state.cropCaptureBottomRight.y -
-                state.cropCaptureTopLeft.y
+        MotionEvent.ACTION_CANCEL
+        -> {
+            val w =
+                state.cropCaptureBottomRight.x -
+                    state.cropCaptureTopLeft.x
+            val h =
+                state.cropCaptureBottomRight.y -
+                    state.cropCaptureTopLeft.y
             if (w > UxConfig.Crop.MIN_CORNER_GAP &&
                 h > UxConfig.Crop.MIN_CORNER_GAP
             ) {
@@ -2019,11 +2108,12 @@ private fun handleCropCaptureAdjust(
     onButtonTap: () -> Unit
 ) {
     val refW = state.getPageRefWidth(pageIndex)
-    val rs = if (refW > 0f && cw > 0f) {
-        cw / refW
-    } else {
-        1f
-    }
+    val rs =
+        if (refW > 0f && cw > 0f) {
+            cw / refW
+        } else {
+            1f
+        }
     val ex = event.x
     val ey = event.y
 
@@ -2083,24 +2173,27 @@ private fun handleCropCaptureAdjust(
             val tly = tl.y * rs
             val brx = br.x * rs
             val bry = br.y * rs
-            val corners = listOf(
-                0 to Offset(tlx, tly),
-                1 to Offset(brx, tly),
-                2 to Offset(tlx, bry),
-                3 to Offset(brx, bry)
-            )
-            val nearest = corners.minByOrNull {
-                val dx = it.second.x - ex
-                val dy = it.second.y - ey
-                dx * dx + dy * dy
-            }
-            val dist = nearest?.let {
-                val dx = it.second.x - ex
-                val dy = it.second.y - ey
-                kotlin.math.sqrt(
-                    (dx * dx + dy * dy).toDouble()
-                ).toFloat()
-            } ?: 999f
+            val corners =
+                listOf(
+                    0 to Offset(tlx, tly),
+                    1 to Offset(brx, tly),
+                    2 to Offset(tlx, bry),
+                    3 to Offset(brx, bry)
+                )
+            val nearest =
+                corners.minByOrNull {
+                    val dx = it.second.x - ex
+                    val dy = it.second.y - ey
+                    dx * dx + dy * dy
+                }
+            val dist =
+                nearest?.let {
+                    val dx = it.second.x - ex
+                    val dy = it.second.y - ey
+                    kotlin.math.sqrt(
+                        (dx * dx + dy * dy).toDouble()
+                    ).toFloat()
+                } ?: 999f
             cropCaptureDragCorner =
                 if (dist < UxConfig.Crop.CORNER_DRAG_DISTANCE) {
                     nearest!!.first
@@ -2168,7 +2261,8 @@ private fun handleCropCaptureAdjust(
             }
         }
         MotionEvent.ACTION_UP,
-        MotionEvent.ACTION_CANCEL -> {
+        MotionEvent.ACTION_CANCEL
+        -> {
             state.isStylusTouching = false
             cropCaptureDragCorner = -1
             disallowParentIntercept(view, false)
@@ -2210,26 +2304,31 @@ private fun captureCropCaptureAndSend(
         state.cropCapturePhase = savedPhase
 
         val refW = state.getPageRefWidth(pageIndex)
-        val rs = if (refW > 0f && cw > 0f) {
-            cw / refW
-        } else {
-            1f
-        }
+        val rs =
+            if (refW > 0f && cw > 0f) {
+                cw / refW
+            } else {
+                1f
+            }
         val refH = if (rs > 0f) ch / rs else ch
 
-        val left = (
-            cx + cropTopLeft.x * rs
-            ).toInt().coerceIn(0, fullBitmap.width - 1)
-        val top = (
-            cy + cropTopLeft.y * rs
-            ).toInt().coerceIn(0, fullBitmap.height - 1)
-        val right = (
-            cx + cropBottomRight.x * rs
-            ).toInt().coerceIn(left + 1, fullBitmap.width)
-        val bottom = (
-            cy + cropBottomRight.y * rs
-            ).toInt()
-            .coerceIn(top + 1, fullBitmap.height)
+        val left =
+            (
+                cx + cropTopLeft.x * rs
+                ).toInt().coerceIn(0, fullBitmap.width - 1)
+        val top =
+            (
+                cy + cropTopLeft.y * rs
+                ).toInt().coerceIn(0, fullBitmap.height - 1)
+        val right =
+            (
+                cx + cropBottomRight.x * rs
+                ).toInt().coerceIn(left + 1, fullBitmap.width)
+        val bottom =
+            (
+                cy + cropBottomRight.y * rs
+                ).toInt()
+                .coerceIn(top + 1, fullBitmap.height)
 
         val cropped =
             android.graphics.Bitmap.createBitmap(
@@ -2358,12 +2457,13 @@ private fun DrawScope.drawCropCaptureOverlay(
         val btnSize =
             UxConfig.Selection.LLM_BUTTON_SIZE
         val gap = 6f
-        val aiRect = Rect(
-            right - btnSize,
-            top - btnSize - gap,
-            right,
-            top - gap
-        )
+        val aiRect =
+            Rect(
+                right - btnSize,
+                top - btnSize - gap,
+                right,
+                top - gap
+            )
         cropLlmButtonRect = aiRect
         drawRoundRect(
             MaestroPrimary,
@@ -2408,12 +2508,13 @@ private fun DrawScope.drawCropCaptureOverlay(
         drawCircle(Color.White, 1.5f, Offset(acx, acy - 10f))
 
         // Quiz button (left of AI button)
-        val quizRect = Rect(
-            aiRect.left - btnSize - gap,
-            aiRect.top,
-            aiRect.left - gap,
-            aiRect.bottom
-        )
+        val quizRect =
+            Rect(
+                aiRect.left - btnSize - gap,
+                aiRect.top,
+                aiRect.left - gap,
+                aiRect.bottom
+            )
         cropQuizButtonRect = quizRect
         drawRoundRect(
             Color(0xFF10B981),
@@ -2433,20 +2534,22 @@ private fun DrawScope.drawCropCaptureOverlay(
                 color = android.graphics.Color.WHITE
                 textAlign = Paint.Align.CENTER
                 textSize = 20f
-                typeface = Typeface.create(
-                    Typeface.DEFAULT,
-                    Typeface.BOLD
-                )
+                typeface =
+                    Typeface.create(
+                        Typeface.DEFAULT,
+                        Typeface.BOLD
+                    )
             }
         )
 
         // Cancel button (left of Quiz button)
-        val cancelRect = Rect(
-            quizRect.left - btnSize - gap,
-            quizRect.top,
-            quizRect.left - gap,
-            quizRect.bottom
-        )
+        val cancelRect =
+            Rect(
+                quizRect.left - btnSize - gap,
+                quizRect.top,
+                quizRect.left - gap,
+                quizRect.bottom
+            )
         cropCaptureCancelRect = cancelRect
         drawRoundRect(
             MaestroError,

@@ -11,7 +11,6 @@ import java.util.UUID
  * Maintains real state so "save then load" flows work naturally.
  */
 class FakeDocumentRepository : DocumentRepository {
-
     val docs = mutableListOf<PdfDocument>()
     val folders = mutableListOf<Folder>()
 
@@ -20,12 +19,13 @@ class FakeDocumentRepository : DocumentRepository {
     override suspend fun loadFolders(): List<Folder> = folders.toList()
 
     override suspend fun importPdf(uri: Uri, displayName: String): PdfDocument {
-        val doc = PdfDocument(
-            id = UUID.randomUUID().toString(),
-            uriString = uri.toString(),
-            displayName = displayName,
-            pageCount = 1
-        )
+        val doc =
+            PdfDocument(
+                id = UUID.randomUUID().toString(),
+                uriString = uri.toString(),
+                displayName = displayName,
+                pageCount = 1
+            )
         docs += doc
         return doc
     }
@@ -49,11 +49,12 @@ class FakeDocumentRepository : DocumentRepository {
     }
 
     override suspend fun createFolder(name: String, parentId: String?): Folder {
-        val folder = Folder(
-            id = UUID.randomUUID().toString(),
-            name = name,
-            parentId = parentId
-        )
+        val folder =
+            Folder(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                parentId = parentId
+            )
         folders += folder
         return folder
     }
@@ -79,18 +80,20 @@ class FakeDocumentRepository : DocumentRepository {
     override suspend fun moveFolder(folderId: String, newParentId: String?) {
         val idx = folders.indexOfFirst { it.id == folderId }
         if (idx >= 0) {
-            folders[idx] = folders[idx].copy(
-                parentId = newParentId
-            )
+            folders[idx] =
+                folders[idx].copy(
+                    parentId = newParentId
+                )
         }
     }
 
     override suspend fun duplicateDocument(documentId: String): PdfDocument? {
         val src = docs.find { it.id == documentId } ?: return null
-        val copy = src.copy(
-            id = UUID.randomUUID().toString(),
-            displayName = src.displayName.removeSuffix(".pdf") + " 사본.pdf"
-        )
+        val copy =
+            src.copy(
+                id = UUID.randomUUID().toString(),
+                displayName = src.displayName.removeSuffix(".pdf") + " 사본.pdf"
+            )
         docs += copy
         return copy
     }

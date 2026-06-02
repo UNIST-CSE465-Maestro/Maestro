@@ -3,17 +3,15 @@ package com.maestro.app.data.local
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 object ExtractionComparisonWriter {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     fun writeIfPossible(documentDir: File) {
         val mineruMd = File(documentDir, "content.md")
@@ -25,57 +23,61 @@ object ExtractionComparisonWriter {
         ) {
             return
         }
-        val mineruStats = statsFor(
-            sourceName = "MinerU",
-            md = mineruMd,
-            rawJson = mineruJson.readText()
-        )
-        val mlkitStats = statsFor(
-            sourceName = "ML Kit",
-            md = mlkitMd,
-            rawJson = mlkitJson.readText()
-        )
+        val mineruStats =
+            statsFor(
+                sourceName = "MinerU",
+                md = mineruMd,
+                rawJson = mineruJson.readText()
+            )
+        val mlkitStats =
+            statsFor(
+                sourceName = "ML Kit",
+                md = mlkitMd,
+                rawJson = mlkitJson.readText()
+            )
         File(documentDir, "mineru_mlkit_comparison.md")
             .writeText(buildMarkdown(mineruStats, mlkitStats))
     }
 
-    private fun statsFor(
-        sourceName: String,
-        md: File,
-        rawJson: String
-    ): ExtractionStats {
-        val root = runCatching {
-            json.parseToJsonElement(rawJson)
-        }.getOrNull()
-        val pages = when (root) {
-            is JsonObject -> root["pdf_info"] as? JsonArray
-            is JsonArray -> root
-            else -> null
-        }.orEmpty()
-        val blocks = pages.flatMap { page ->
-            (page as? JsonObject)
-                ?.get("para_blocks") as? JsonArray
-                ?: JsonArray(emptyList())
-        }
-        val lines = blocks.flatMap { block ->
-            (block as? JsonObject)
-                ?.get("lines") as? JsonArray
-                ?: JsonArray(emptyList())
-        }
-        val spans = lines.flatMap { line ->
-            (line as? JsonObject)
-                ?.get("spans") as? JsonArray
-                ?: JsonArray(emptyList())
-        }
-        val types = blocks
-            .mapNotNull { block ->
-                (block as? JsonObject)
-                    ?.get("type")
-                    ?.jsonPrimitive
-                    ?.content
+    private fun statsFor(sourceName: String, md: File, rawJson: String): ExtractionStats {
+        val root =
+            runCatching {
+                json.parseToJsonElement(rawJson)
+            }.getOrNull()
+        val pages =
+            when (root) {
+                is JsonObject -> root["pdf_info"] as? JsonArray
+                is JsonArray -> root
+                else -> null
+            }.orEmpty()
+        val blocks =
+            pages.flatMap { page ->
+                (page as? JsonObject)
+                    ?.get("para_blocks") as? JsonArray
+                    ?: JsonArray(emptyList())
             }
-            .groupingBy { it }
-            .eachCount()
+        val lines =
+            blocks.flatMap { block ->
+                (block as? JsonObject)
+                    ?.get("lines") as? JsonArray
+                    ?: JsonArray(emptyList())
+            }
+        val spans =
+            lines.flatMap { line ->
+                (line as? JsonObject)
+                    ?.get("spans") as? JsonArray
+                    ?: JsonArray(emptyList())
+            }
+        val types =
+            blocks
+                .mapNotNull { block ->
+                    (block as? JsonObject)
+                        ?.get("type")
+                        ?.jsonPrimitive
+                        ?.content
+                }
+                .groupingBy { it }
+                .eachCount()
         val text = md.readText()
         return ExtractionStats(
             sourceName = sourceName,
@@ -86,20 +88,19 @@ object ExtractionComparisonWriter {
             lineCount = lines.size,
             spanCount = spans.size,
             markdownChars = text.length,
-            tableCount = Regex("<table", RegexOption.IGNORE_CASE)
+            tableCount =
+            Regex("<table", RegexOption.IGNORE_CASE)
                 .findAll(text)
                 .count(),
-            headingCount = Regex("^# ", RegexOption.MULTILINE)
+            headingCount =
+            Regex("^# ", RegexOption.MULTILINE)
                 .findAll(text)
                 .count(),
             typeCounts = types
         )
     }
 
-    private fun buildMarkdown(
-        mineru: ExtractionStats,
-        mlkit: ExtractionStats
-    ): String = """
+    private fun buildMarkdown(mineru: ExtractionStats, mlkit: ExtractionStats): String = """
         # Same-PDF MinerU vs ML Kit Extraction Comparison
 
         Generated at: ${System.currentTimeMillis()}

@@ -21,13 +21,14 @@ import com.maestro.app.ui.config.UxConfig
 import com.maestro.app.ui.theme.MaestroError
 import com.maestro.app.ui.theme.MaestroPrimary
 
-val InkColors = listOf(
-    MaestroPrimary,
-    MaestroError,
-    Color(0xFF1B5E20),
-    Color(0xFF1A1C1F),
-    Color(0xFFE65100)
-)
+val InkColors =
+    listOf(
+        MaestroPrimary,
+        MaestroError,
+        Color(0xFF1B5E20),
+        Color(0xFF1A1C1F),
+        Color(0xFFE65100)
+    )
 val PenWidths = UxConfig.Drawing.PEN_WIDTHS
 val EraserWidths = UxConfig.Drawing.ERASER_WIDTHS
 
@@ -157,8 +158,11 @@ class DrawingState {
     var dragStart by mutableStateOf(Offset.Zero)
     var dragOffset by mutableStateOf(Offset.Zero)
 
-    fun strokesForPage(pageIndex: Int): SnapshotStateList<InkStroke> =
-        pageStrokesMap.getOrPut(pageIndex) { mutableStateListOf() }
+    fun strokesForPage(pageIndex: Int): SnapshotStateList<InkStroke> = pageStrokesMap.getOrPut(
+        pageIndex
+    ) {
+        mutableStateListOf()
+    }
 
     fun getAllPageIndices(): Set<Int> = pageStrokesMap.keys
 
@@ -171,11 +175,12 @@ class DrawingState {
 
     fun commitStroke() {
         if (currentPoints.isEmpty() || activePageIndex < 0) return
-        val stroke = InkStroke(
-            currentPoints.toList(),
-            activeColor,
-            activeWidth
-        )
+        val stroke =
+            InkStroke(
+                currentPoints.toList(),
+                activeColor,
+                activeWidth
+            )
         strokesForPage(activePageIndex) += stroke
         undoStack += Pair(activePageIndex, stroke)
         currentPoints.clear()
@@ -204,22 +209,24 @@ class DrawingState {
         val radius = eraserWidth
         when (eraserMode) {
             EraserMode.STROKE -> {
-                val toRemove = strokes.filter { s ->
-                    s.points.any { p ->
-                        distSq(p.x, p.y, x, y) < radius * radius
+                val toRemove =
+                    strokes.filter { s ->
+                        s.points.any { p ->
+                            distSq(p.x, p.y, x, y) < radius * radius
+                        }
                     }
-                }
                 if (toRemove.isEmpty()) return
                 strokes.removeAll(toRemove)
                 annotationVersion++
             }
             EraserMode.PARTIAL -> {
                 val radiusSq = radius * radius
-                val toProcess = strokes.filter { s ->
-                    s.points.any { p ->
-                        distSq(p.x, p.y, x, y) < radiusSq
+                val toProcess =
+                    strokes.filter { s ->
+                        s.points.any { p ->
+                            distSq(p.x, p.y, x, y) < radiusSq
+                        }
                     }
-                }
                 if (toProcess.isEmpty()) return
                 val newStrokes = mutableListOf<InkStroke>()
                 toProcess.forEach { stroke ->
@@ -227,9 +234,10 @@ class DrawingState {
                     for (pt in stroke.points) {
                         if (distSq(pt.x, pt.y, x, y) < radiusSq) {
                             if (seg.size >= 2) {
-                                newStrokes += stroke.copy(
-                                    points = seg.toList()
-                                )
+                                newStrokes +=
+                                    stroke.copy(
+                                        points = seg.toList()
+                                    )
                             }
                             seg = mutableListOf()
                         } else {
@@ -237,9 +245,10 @@ class DrawingState {
                         }
                     }
                     if (seg.size >= 2) {
-                        newStrokes += stroke.copy(
-                            points = seg.toList()
-                        )
+                        newStrokes +=
+                            stroke.copy(
+                                points = seg.toList()
+                            )
                     }
                 }
                 strokes.removeAll(toProcess)
@@ -258,12 +267,14 @@ class DrawingState {
         }
         val polygon = lassoPoints.map { Offset(it.x, it.y) }
         val strokes = strokesForPage(pageIndex)
-        val inside = strokes.filter { stroke ->
-            val insideCount = stroke.points.count { pt ->
-                isPointInPolygon(Offset(pt.x, pt.y), polygon)
+        val inside =
+            strokes.filter { stroke ->
+                val insideCount =
+                    stroke.points.count { pt ->
+                        isPointInPolygon(Offset(pt.x, pt.y), polygon)
+                    }
+                insideCount > stroke.points.size / 2
             }
-            insideCount > stroke.points.size / 2
-        }
         if (inside.isEmpty()) {
             clearLasso()
             return
@@ -283,13 +294,15 @@ class DrawingState {
         val strokes = strokesForPage(selectionPageIndex)
         val dx = dragOffset.x
         val dy = dragOffset.y
-        val moved = selectedStrokes.map { stroke ->
-            stroke.copy(
-                points = stroke.points.map { pt ->
-                    pt.copy(x = pt.x + dx, y = pt.y + dy)
-                }
-            )
-        }
+        val moved =
+            selectedStrokes.map { stroke ->
+                stroke.copy(
+                    points =
+                    stroke.points.map { pt ->
+                        pt.copy(x = pt.x + dx, y = pt.y + dy)
+                    }
+                )
+            }
         strokes.removeAll(selectedStrokes.toSet())
         strokes.addAll(moved)
         selectedStrokes.clear()

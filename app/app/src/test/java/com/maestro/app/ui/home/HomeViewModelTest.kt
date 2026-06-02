@@ -26,7 +26,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
-
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
@@ -38,10 +37,11 @@ class HomeViewModelTest {
         repo = FakeDocumentRepository()
         every {
             appContext.filesDir
-        } returns File(
-            System.getProperty("java.io.tmpdir"),
-            "maestro-home-test-${System.nanoTime()}"
-        )
+        } returns
+            File(
+                System.getProperty("java.io.tmpdir"),
+                "maestro-home-test-${System.nanoTime()}"
+            )
     }
 
     @After
@@ -118,10 +118,11 @@ class HomeViewModelTest {
 
     @Test
     fun `renameDocument updates name`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            displayName = "old.pdf"
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                displayName = "old.pdf"
+            )
         repo.docs += doc
 
         createViewModel()
@@ -151,10 +152,11 @@ class HomeViewModelTest {
     @Test
     fun `deleteFolder deletes non-empty folder with contents`() = runTest {
         val folder = TestFixtures.folder(id = "f1")
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            folderId = "f1"
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                folderId = "f1"
+            )
         repo.folders += folder
         repo.docs += doc
 
@@ -200,10 +202,11 @@ class HomeViewModelTest {
 
     @Test
     fun `togglePin unpins pinned document`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            isPinned = true
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                isPinned = true
+            )
         repo.docs += doc
 
         createViewModel()
@@ -219,17 +222,19 @@ class HomeViewModelTest {
 
     @Test
     fun `pinned documents appear before unpinned`() = runTest {
-        val unpinned = TestFixtures.pdfDocument(
-            id = "d1",
-            displayName = "unpinned.pdf",
-            addedTimestamp = 2000L
-        )
-        val pinned = TestFixtures.pdfDocument(
-            id = "d2",
-            displayName = "pinned.pdf",
-            isPinned = true,
-            addedTimestamp = 1000L
-        )
+        val unpinned =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                displayName = "unpinned.pdf",
+                addedTimestamp = 2000L
+            )
+        val pinned =
+            TestFixtures.pdfDocument(
+                id = "d2",
+                displayName = "pinned.pdf",
+                isPinned = true,
+                addedTimestamp = 1000L
+            )
         repo.docs += unpinned
         repo.docs += pinned
 
@@ -265,11 +270,12 @@ class HomeViewModelTest {
 
     @Test
     fun `init resumes EXTRACTING documents`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            extractionStatus = ExtractionStatus.EXTRACTING,
-            extractionMode = "standard"
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                extractionStatus = ExtractionStatus.EXTRACTING,
+                extractionMode = "standard"
+            )
         repo.docs += doc
 
         createViewModel()
@@ -287,12 +293,13 @@ class HomeViewModelTest {
 
     @Test
     fun `init ignores EXTRACTING without mode`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            extractionStatus =
-            ExtractionStatus.EXTRACTING,
-            extractionMode = null
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                extractionStatus =
+                ExtractionStatus.EXTRACTING,
+                extractionMode = null
+            )
         repo.docs += doc
 
         createViewModel()
@@ -303,12 +310,13 @@ class HomeViewModelTest {
 
     @Test
     fun `retry extraction schedules replacement work`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            extractionStatus =
-            ExtractionStatus.FAILED,
-            extractionMode = "ai"
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                extractionStatus =
+                ExtractionStatus.FAILED,
+                extractionMode = "ai"
+            )
         repo.docs += doc
 
         createViewModel()
@@ -323,35 +331,40 @@ class HomeViewModelTest {
         assertEquals(
             true,
             extractionScheduler.requests.any {
-                it == FakeExtractionRequest(
-                    documentId = "d1",
-                    mode = "ai",
-                    replaceExisting = true
-                )
+                it ==
+                    FakeExtractionRequest(
+                        documentId = "d1",
+                        mode = "ai",
+                        replaceExisting = true
+                    )
             }
         )
     }
 
     @Test
     fun `init recovers FAILED documents without extracted content`() = runTest {
-        val doc = TestFixtures.pdfDocument(
-            id = "d1",
-            extractionStatus = ExtractionStatus.FAILED,
-            extractionMode = null
-        )
+        val doc =
+            TestFixtures.pdfDocument(
+                id = "d1",
+                extractionStatus = ExtractionStatus.FAILED,
+                extractionMode = null
+            )
         repo.docs += doc
 
         createViewModel()
         advanceUntilIdle()
 
+        // extractionMode is null, so recovery falls back to
+        // DEFAULT_RECOVERY_MODE (PdfExtractionWorker.MODE_AUTO = "auto").
         assertEquals(
             true,
             extractionScheduler.requests.any {
-                it == FakeExtractionRequest(
-                    documentId = "d1",
-                    mode = "ai",
-                    replaceExisting = false
-                )
+                it ==
+                    FakeExtractionRequest(
+                        documentId = "d1",
+                        mode = "auto",
+                        replaceExisting = false
+                    )
             }
         )
     }
@@ -371,11 +384,12 @@ class HomeViewModelTest {
             mode: String,
             replaceExisting: Boolean
         ) {
-            requests += FakeExtractionRequest(
-                documentId = documentId,
-                mode = mode,
-                replaceExisting = replaceExisting
-            )
+            requests +=
+                FakeExtractionRequest(
+                    documentId = documentId,
+                    mode = mode,
+                    replaceExisting = replaceExisting
+                )
         }
     }
 }
